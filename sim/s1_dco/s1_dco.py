@@ -9,6 +9,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 import spice
 import plotstyle as ps
+import voice
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
@@ -16,7 +17,7 @@ OUT = os.path.join(HERE, "out")
 # --- design values -----------------------------------------------------------
 C_INT = 10e-9      # integrator cap
 RE = 33e3          # V->I emitter resistor
-K_DIV = 15 / 25    # CV divider 10k / 15k
+K_DIV = voice.LIN_RATIO   # load-aware LIN CV network DC ratio
 A_TGT = 2.0        # target saw amplitude [Vpp]
 TP = 3e-6          # reset pulse width (MCU low)
 VREF = 4.5
@@ -38,8 +39,7 @@ NET = """* S1 DCO f={f:.3f}Hz V+={vp}
 VPLUS vp 0 {vp}
 VREF vref 0 {vref}
 VCV cv 0 {cv:.6f}
-R1 cv cvd 10k
-R2 cvd 0 15k
+{cvnet}
 XU1 cvd ve vp 0 u1o LM324
 RB1 u1o b1 1k
 Q1 n b1 ve MMBT3904
@@ -65,7 +65,7 @@ def simulate(midi, vp):
     T = 1 / f
     cv, code = cv_for(f)
     name = f"dco_m{midi}_v{vp}".replace(".", "p")
-    net = NET.format(rgs=RGS, f=f, vp=vp, vref=VREF, cv=cv, re=RE, cint=C_INT, td=T * 0.5, tp=TP, T=T,
+    net = NET.format(cvnet=voice.CVNET_LIN.format(n='A', src='cv', x='cvd'), rgs=RGS, f=f, vp=vp, vref=VREF, cv=cv, re=RE, cint=C_INT, td=T * 0.5, tp=TP, T=T,
                      tstep=T / 4000, tstop=T * 3.5, tmax=min(T / 4000, 0.2e-6 * 50),
                      name=name, PRE=spice.PREAMBLE, CTRL=spice.CTRL_HEAD)
     spice.run(net, OUT, name)
@@ -111,6 +111,7 @@ def main():
     with open(os.path.join(OUT, "s1_results.md"), "w") as f:
         f.write(table + "\n")
 
+    ps.save_csv("s1_cal", ["dco_gain"], [[mean / A_TGT]])
     # data for the report
     ps.save_csv("s1_dco", ["midi", "f_hz", "cv_amp_v", "pwm_code", "amp_8v6", "amp_11v6", "ramp_start_v", "glitch_mv"],
                 [[a["midi"], a["f"], a["cv"], a["code"], a["amp"], b["amp"], a["vmin"], a["glitch"] * 1e3]

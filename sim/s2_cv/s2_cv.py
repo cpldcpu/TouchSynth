@@ -1,8 +1,8 @@
 """S2 - PWM -> CV filters (TIM1, 10 bit @ 48 MHz / 1024 = 46.9 kHz + 2-bit sigma-delta dither = 12 bit).
 
 Two variants of the same 3-pole RC chain:
-  LIN : PWM -30R- 1k5 -[100n]- 15k -[10n]- 10k -+- 15k||22n -> LM324 +in (DCO amp, RES, VCA)
-  EXP : PWM -30R- 1k5 -[100n]- 15k -[10n]- 33k -+- 1k2||100n to VBIAS -> expo base (cutoff)
+  LIN : PWM -30R- 1k -[100n]- 4k7 -[33n]- 4k7 -+- 15k||22n -> LM324 +in (DCO amp, RES, VCA)
+  EXP : PWM -30R- 1k -[100n]- 4k7 -[33n]- 33k -+- 1k5||100n to VBIAS -> expo base (cutoff)
 Checks: ripple at worst-case duty 50 %, 10->90 % step settling (to 0.1 % of step), small-step settling.
 """
 import os, sys
@@ -11,6 +11,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 import spice
 import plotstyle as ps
+import voice
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
@@ -29,10 +30,6 @@ VD duty 0 PWL(0 {d1} {tstep} {d1} {tstep2} {d2})
 VDI dith 0 PULSE(0 1 0 1n 1n {tpwm1} {tpwm2})
 BPWM pwmi 0 V = (v(duty) + {lsb}*v(dith)) > v(car) ? 5 : 0
 RSRC pwmi pwm 30
-R1 pwm a 1.5k
-C1 a 0 100n
-R2 a b 15k
-C2 b 0 10n
 {last}
 {CTRL}
 tran 0.1u {tstop} 0 0.1u
@@ -41,10 +38,10 @@ wrdata {{OUT}}/{name}.dat v(x) v(duty)
 .end
 """
 LAST = {
-    "LIN": "R3 b x 10k\nR4 x 0 15k\nC3 x 0 22n\nXU x x 0 0 0 LM324",   # op-amp input load only (+in = x)
-    "EXP": "R3 b x 33k\nR4 x vb 1.2k\nC3 x vb 100n",
+    "LIN": voice.CVNET_LIN.format(n="", src="pwm", x="x") + "XU x x 0 0 0 LM324",   # op-amp input load only
+    "EXP": voice.CVNET_EXP.format(n="", src="pwm") + "R3 b x 33k\nR4 x vb 1.5k\nC3 x vb 100n",
 }
-GAIN = {"LIN": 15 / 25, "EXP": 1.2 / 34.2}
+GAIN = {"LIN": voice.LIN_RATIO, "EXP": voice.EXP_RATIO}
 
 
 def run(kind, d1, d2, name, tstop=6e-3, tstep=2e-3):

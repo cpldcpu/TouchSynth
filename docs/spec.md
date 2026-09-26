@@ -28,7 +28,7 @@ Parts outside the JLCPCB lists:
   ├─ GPIO     ─► SUB (−1 oct, toggled in TIM2 update ISR) ───────────┤ resistor mixer
   ├─ GPIO     ─► NOISE (LFSR) ───────────────────────────────────────┤ (150 k / 470 k → 10 k)
   │                                                    SAW ──────────┘   │ 1 µF
-  ├─ TIM1 CH1..4 PWM (10 bit, 46.9 kHz, 2-bit Σ-Δ dither) ─► 3-pole RC ─►
+  ├─ TIM1 CH1..4 PWM (10 bit, 46.9 kHz, 2-bit Σ-Δ dither) ─► 3-pole RC (load-aware) ─►
   │     CV_AMP → LM324 V→I → DCO charge current
   │     CV_CUT → expo converter (LM324 + BC847BS) → ladder tail current
   │     CV_RES → LM324 V→I → resonance diff pair → TL072 diff amp → feedback
@@ -39,7 +39,7 @@ Parts outside the JLCPCB lists:
   │             VCA: BC847BS diff pair + TL072 diff amp, offset trim from R-2R DAC ─► line out
   ├─ ADC A0/A1 + S0..S2 ◄─ 2× CD4051 ◄─ 16 touch pads (13 keys + SHIFT, −, +)
   ├─ S0/S1 (shared) + LATCH ─► 3× 74HC595 ─► 16 LEDs + 8-bit R-2R trim DAC
-  ├─ ADC A5 (PD5) ◄─ audio loopback (VCA out, divider 0.75)
+  ├─ ADC A5 (PD5) ◄─ audio loopback (VCA out, divider 0.6)
   └─ USART RX ◄─ LTV-817 ◄─ MIDI in
 ```
 
@@ -50,7 +50,7 @@ Parts outside the JLCPCB lists:
 |---|---|
 | DCO | Pitch from timer, range ≥ C1 (32.7 Hz) … C7 (2093 Hz); saw amplitude constant within ±5 % across range via CV_AMP (charging current ∝ f) |
 | Waveforms | saw, pulse with firmware PWM, sub-oscillator (−1 oct square), noise; firmware enables/disables each |
-| VCF | 24 dB/oct transistor ladder; cutoff ≈ 30 Hz … 15 kHz from CV_CUT via hardware expo converter (≈ 1.9 oct/V); resonance 0 … self-oscillation from CV_RES; temperature drift ≈ −13 cent/K accepted (optional firmware re-tune from self-oscillation via the audio loopback) |
+| VCF | 24 dB/oct transistor ladder; cutoff ≈ 30 Hz … 15 kHz from CV_CUT via hardware expo converter (≈ 2 oct/V); resonance 0 … self-oscillation from CV_RES; temperature drift ≈ −13 cent/K accepted (optional firmware re-tune from self-oscillation via the audio loopback) |
 | VCA | ≥ 70 dB attenuation when closed; envelope in firmware via CV_VCA; CV feedthrough nulled by firmware-calibrated trim DAC |
 | Output | line level ≈ 1 V pp into ≥ 10 kΩ, AC-coupled, referenced to GND |
 | Control voltages | 4 × PWM from TIM1, 10 bit @ 46.9 kHz + 2-bit Σ-Δ dither (DMA burst) = 12 bit; residual ripple on CV < −70 dB of full scale; settling < 2 ms (fast envelope attack) |
@@ -61,6 +61,8 @@ Parts outside the JLCPCB lists:
 - Parameters (firmware): waveform mix, pulse width, cutoff, resonance, filter env amount,
   A/D/S/R (amp), A/D (filter), LFO rate/depth/target, glide, octave, arpeggiator, presets.
 - MIDI in: note on/off, pitch bend, CC for all parameters.
+- Demo tunes stored in flash (step format: note, length, slide/accent flags, 3 bytes per step) with their own
+  presets, playable from the pads (e.g. SHIFT + top key); rendered previews in `docs/audio/features/tune_*`.
 
 ### 3.3 Touch sensing
 - ADC charge-slope method from ch32fun `extralibs/ch32v00x_touch.h`, one routine for both MCUs.

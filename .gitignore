@@ -24,3 +24,6 @@ docs/datasheets/*.txt
 
 # Python
 __pycache__/
+
+# Rendered example WAVs (mp3 copies are kept; regenerate with sim/behav/examples.py)
+docs/audio/features/*.wav

@@ -18,8 +18,8 @@ has been characterised.
 
 ### 2.1 Hardware provisions (must be in the schematic/layout)
 
-- **Audio loopback** VCA output → 10 k / 30 k divider + 1 nF → **PD5 (ADC A5)**. Range 0.5…4.5 V for the full
-  output swing (S6 checks this node stays inside 0…5 V).
+- **Audio loopback** VCA output → 10 k / 15 k divider + 1 nF → **PD5 (ADC A5)**: 2.7 V ± 0.6 V per volt of
+  output swing, 1.8…3.6 V for the largest expected signals (S6 checks this node stays inside 0…5 V).
 - **Trim DAC** 3rd 74HC595 in the LED chain → 8-bit R-2R (100 k / 200 k) → VCA offset injection.
 - **Test pads** (1 mm, bottom side, labelled): GND, V+, +5V, VREF, VBIAS, V25, VB0…VB4, TAIL, SAW, LPF,
   VCAOUT, RESOUT, XAMP, XCUT (bC), XRES, XVCA, VTRIM.
@@ -77,13 +77,13 @@ Default conditions: 9 V in, room temperature, CV codes from the calibration defa
 | T2 | Touch | 256 readings per pad, untouched: mean, σ; user touches each pad in turn | σ < 2 LSB (V003) / 6 LSB (V002); touch Δ > 10 σ | S5: Δ(5 pF) ≥ 14.8 / 57 LSB |
 | T3 | Touch scan rate | time a full 16-pad scan | ≥ 200 Hz | S5: 1.4 kHz |
 | T4 | DCO frequency | filter open, VCA open, `cap` + zero-crossing / FFT at C2, C4, C6 | error < 1 cent | S1 (timer exact) |
-| T5 | DCO amplitude flatness | loopback amplitude C1…C8 with default CV law | spread ±5 % after `cal dco` | S1: −3.4 / +0.9 % |
-| T6 | VCF self-oscillation threshold | DCO off, CV_RES ramp, detect sustained oscillation | 2.7…3.5 V | S3: 3.05 V |
-| T7 | VCF tracking | self-oscillation frequency at CV_CUT = 1…4.5 V | slope 1.94 ± 0.2 oct/V, monotonic | S3: 1.94 oct/V |
+| T5 | DCO amplitude flatness | loopback amplitude C1…C8 with default CV law | spread ±5 % after `cal dco` | S1: −2.2 / +0.8 % |
+| T6 | VCF self-oscillation threshold | DCO off, CV_RES ramp, detect sustained oscillation | 2.7…3.5 V | S3: 3.1 V |
+| T7 | VCF tracking | self-oscillation frequency at CV_CUT = 1…4.5 V | slope 2.05 ± 0.2 oct/V, monotonic | S3: 2.05 oct/V |
 | T8 | VCF lowpass | 110 Hz saw, CV_CUT at 1 kHz: harmonic 10 vs harmonic 1 | within ±3 dB of sim | S3 |
-| T9 | VCA gain law | 1 kHz filtered saw, CV_VCA sweep | monotonic, max gain within ±2 dB of sim | S4: +7 dB |
-| T10 | VCA thump | CV_VCA 0→full steps without signal, before/after `cal vca` | after cal < 3 mV step at line out | S4: 90 → 0.6 mV |
-| T11 | CV settling | VCA step response seen at loopback | 1 % in < 2.5 ms | S2: 1.5 ms |
+| T9 | VCA gain law | 1 kHz filtered saw, CV_VCA sweep | monotonic, max gain within ±2 dB of sim | S4: +7.4 dB |
+| T10 | VCA thump | CV_VCA 0→full steps without signal, before/after `cal vca` | after cal < 3 mV step at line out | S4: ≈ 100 → 0.6 mV |
+| T11 | CV settling | VCA step response seen at loopback | 1 % in < 2.5 ms | S2: 1.3 ms |
 | T12 | Hum / noise | VCA open, DCO off, 1 s capture, spectrum | 100 Hz < sim + 6 dB; broadband < −60 dB re 1.33 Vpp | S7 |
 | T14 | MIDI in | external MIDI keyboard: note on/off, pitch bend, CC | all received | — |
 
@@ -91,8 +91,8 @@ Default conditions: 9 V in, room temperature, CV codes from the calibration defa
 
 | Constant | Method | Expected |
 |---|---|---|
-| `dco_gain` | measure saw amplitude at C4, scale CV_AMP law | 0.95…1.05 (sim 1/0.978) |
-| `vcf_oct_per_v`, `vcf_offset` | self-oscillation frequency at two CV_CUT codes | 1.94 oct/V |
+| `dco_gain` | measure saw amplitude at C4, scale CV_AMP law | 0.95…1.05 (sim 0.978) |
+| `vcf_oct_per_v`, `vcf_offset` | self-oscillation frequency at two CV_CUT codes | 2.05 oct/V |
 | `vca_trim` | 2-point null of the thump (S4 procedure) | code 30…230 |
 | `touch_base[16]`, `touch_thr[16]` | untouched mean + k·σ | — |
 
@@ -104,7 +104,8 @@ Default conditions: 9 V in, room temperature, CV codes from the calibration defa
 | V2 | Touch-to-sound latency feels immediate | < 10 ms (firmware timestamp from touch detect to gate) |
 | V3 | Tuning holds | play A4 against a tuner after 1 min and 30 min: DCO < 2 cent; filter self-oscillation drift after warm-up noted (≈ −13 cent/K expected, uncompensated) |
 | V4 | Parameters are reachable and understandable with SHIFT/−/+ and the LEDs | user walkthrough of all parameters |
-| V5 | Sound: bass, lead, resonant sweeps, self-oscillation usable | listening; compare with `docs/audio/s6_voice.wav` |
+| V5 | Sound: bass, lead, resonant sweeps, self-oscillation usable | listening; compare with `docs/audio/features/` (behavioural model) and `docs/audio/s6_voice.wav` |
+| V8 | Demo tunes play correctly from flash | play all tunes; compare with `docs/audio/features/tune_*` |
 | V6 | Works on 9 V battery and 12 V adapter; no audible hum with a typical adapter | listening + T12 |
 | V7 | MIDI playable from a keyboard / DAW | play |
 

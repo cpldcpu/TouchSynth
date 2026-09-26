@@ -25,9 +25,7 @@ VBIAS vbias 0 1.5
 V25 v25 0 2.5
 VCUT cvc 0 {cvcut}
 VRES cvr 0 {cvres}
-RRX1 cvr xres 10k
-RRX2 xres 0 15k
-""" + voice.BIAS + voice.EXPO.format(cvcut="cvc") + voice.LADDER.format(clad=CLAD) \
+""" + voice.CVNET_EXP.format(n="C", src="cvc") + voice.CVNET_LIN.format(n="R", src="cvr", x="xres")     + voice.BIAS + voice.EXPO.format(cvcut="bC") + voice.LADDER.format(clad=CLAD) \
     + voice.MIXER.format(saw="saw", pulse="pulse", sub="sub", noise="noise") \
     + voice.VI.format(n="R", x="xres", col="rtail", re=RE_RES) \
     + voice.RESVCA.format(fbneg=FBN, fbpos=FBP, rfb=RFB)
@@ -122,12 +120,15 @@ def main():
     print(f"slope one octave far above fc: {s:.1f} dB/oct")
 
     # --- resonance sweep at CV_CUT = 2.5 -------------------------------------------
-    res_curves = {}
+    res_curves, peaks = {}, []
     for r in [0.0, 1.0, 2.0, 2.5, 2.8, 3.0]:
         f, db, ph, log = ac(2.5, r)
         res_curves[r] = (f, db)
-        pk = db.max() - db[:5].mean()
+        pk = db.max() - db[(f > 20) & (f < 40)].mean()
         print(f"CV_RES {r}: peak {pk:.1f} dB at {f[np.argmax(db)]:.0f} Hz")
+        if r > 0:
+            peaks.append([r, pk])
+    ps.save_csv("s3_res_peaks", ["cv_res_v", "peak_db"], peaks)
 
     # --- temperature drift of cutoff -------------------------------------------------
     f25 = f3db(*ac(2.5, 0.0, temp=25)[:2])
@@ -164,7 +165,7 @@ def selfosc_and_waveforms():
     """Transient: kick the filter (noise pulse) at CV_CUT = 2.5 V, find the resonance threshold for
     sustained oscillation; then a 110 Hz saw through the filter at several settings."""
     osc = []
-    for r in [2.8, 3.0, 3.2, 3.4, 3.6, 4.0, 4.5, 5.0]:
+    for r in [2.8, 3.0, 3.1, 3.2, 3.4, 3.6, 4.0, 4.5, 5.0]:
         t, v, _ = tran(2.5, r, f=1e-3, tstop=0.08, tag="_kick")   # saw frozen (period 1000 s)
         a1 = np.ptp(v[(t > 0.010) & (t < 0.015)])
         a2 = np.ptp(v[(t > 0.070) & (t < 0.080)])
@@ -174,6 +175,8 @@ def selfosc_and_waveforms():
         osc.append((r, a1, a2, fo, t, v))
         print(f"CV_RES {r}: amplitude 10 ms {a1*1e3:.1f} mVpp, 70 ms {a2*1e3:.1f} mVpp, f {fo:.0f} Hz")
     ps.save_csv("s3_selfosc", ["cv_res_v", "vpp_10ms", "vpp_70ms", "f_hz"], [list(o[:4]) for o in osc])
+    on = [o for o in osc if o[2] > o[1] and o[2] > 0.005]   # amplitude still growing at 70 ms
+    ps.save_csv("s3_cal", ["res_threshold_v"], [[on[0][0] if on else float("nan")]])
 
     waves = []
     for c, r in [(5.0, 0.0), (3.0, 0.0), (2.0, 0.0), (3.0, 3.0)]:

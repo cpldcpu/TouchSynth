@@ -20,7 +20,7 @@ T_CV = 1e-3            # firmware control-rate tick
 TP_RESET = 3e-6
 
 # ---- calibrations from S1 / S3 / S4 ------------------------------------------------
-C_INT, RE_DCO, K_DIV, A_TGT, GAIN_CAL = 10e-9, 33e3, 0.6, 2.0, 1 / 0.978
+C_INT, RE_DCO, K_DIV, A_TGT = 10e-9, 33e3, voice.LIN_RATIO, 2.0
 
 
 def cv_amp(f):
@@ -33,6 +33,8 @@ def load_csv(name):
     return r[0], np.array([[float(x) for x in row] for row in r[1:]])
 
 
+GAIN_CAL = 1 / load_csv("s1_cal")[1][0, 0]
+RES_THR = load_csv("s3_cal")[1][0, 0]
 _, cut = load_csv("s3_cutoff")                     # cv_cut_v, f3db_hz
 CUT_CV, CUT_F = cut[:, 0], cut[:, 1]
 _, vg = load_csv("s4_vca_gain")                    # cv_vca_v, nominal dB, ...
@@ -101,12 +103,12 @@ def firmware():
         if t < 2.0:
             fenv = adsr(t, t0, t0 + dur, 0.002, 0.08, 0.0, 0.05)
             fc = 180 * 2 ** (5.0 * fenv)
-            res = 2.6
+            res = 0.85 * RES_THR
             aenv = adsr(t, t0, t0 + dur, 0.003, 0.15, 0.6, 0.04)
         else:
             x = (t - 2.05) / 1.85
             fc = 60 * 2 ** (7 * np.sin(np.pi * np.clip(x, 0, 1)))         # slow sweep up and down
-            res = 2.95
+            res = 0.97 * RES_THR
             aenv = adsr(t, t0, t0 + dur, 0.01, 0.3, 0.9, 0.08)
         cutv.append(cv_cut(fc)); resv.append(res); vcav.append(cv_vca(0.9 * aenv))
     return reset, pulse, sub, ts, amp, cutv, resv, vcav
@@ -170,7 +172,7 @@ VNOI noi 0 0
 VTR vdac 0 2.025
 RDAC vdac vtrim 100k
 RLB1 vcaout adca 10k
-RLB2 adca 0 30k
+RLB2 adca 0 15k
 CLB adca 0 1n
 * ---- MCU / firmware stimulus ----
 {pwl('VMCU', 'mcu', reset)}{pwl('VPLS', 'pls', pulse)}{pwl('VSUB', 'sub', sub)}

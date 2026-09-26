@@ -1,0 +1,190 @@
+[
+ {
+  "id": "01_saw",
+  "group": "Oscillator",
+  "title": "Sawtooth (DCO)",
+  "what": "The analog integrator saw, reset by the timer. Filter fully open. Pitch comes from a 48 MHz timer, so it is exactly in tune; the firmware scales the charging current with frequency to keep the amplitude constant.",
+  "seconds": 3.0,
+  "peak_v": 1.573
+ },
+ {
+  "id": "02_pulse",
+  "group": "Oscillator",
+  "title": "Square / pulse wave",
+  "what": "TIM2 CH2 output (0/5 V) mixed into the filter. 50 % duty = square: hollow, odd harmonics only.",
+  "seconds": 3.0,
+  "peak_v": 0.873
+ },
+ {
+  "id": "03_pw_sweep",
+  "group": "Oscillator",
+  "title": "Pulse-width sweep",
+  "what": "The firmware moves the pulse width from 50 % to 5 % and back: the tone gets thinner and nasal.",
+  "seconds": 3.5,
+  "peak_v": 1.123
+ },
+ {
+  "id": "04_pwm_lfo",
+  "group": "Oscillator",
+  "title": "PWM by LFO",
+  "what": "A slow triangle LFO modulates the pulse width: the classic moving, chorus-like string/pad sound.",
+  "seconds": 3.6,
+  "peak_v": 1.057
+ },
+ {
+  "id": "05_sub",
+  "group": "Oscillator",
+  "title": "Sub oscillator",
+  "what": "Saw alone, then the sub oscillator (square one octave lower, toggled in the timer interrupt) is switched on at 1.5 s: much more weight in the bass.",
+  "seconds": 3.2,
+  "peak_v": 1.397
+ },
+ {
+  "id": "06_noise",
+  "group": "Oscillator",
+  "title": "Noise through a resonant sweep",
+  "what": "16-bit LFSR noise (0/5 V from a GPIO) with the filter swept slowly at high resonance: wind.",
+  "seconds": 4.0,
+  "peak_v": 0.391
+ },
+ {
+  "id": "07_mix_drive",
+  "group": "Oscillator",
+  "title": "All waveforms mixed: ladder drive",
+  "what": "Saw, pulse and sub together push the transistor ladder into soft saturation (the input pair's tanh). Compare with the clean saw in example 1.",
+  "seconds": 3.3,
+  "peak_v": 0.892
+ },
+ {
+  "id": "08_cutoff",
+  "group": "Filter",
+  "title": "Cutoff sweep (24 dB/oct)",
+  "what": "Saw at 65 Hz, cutoff swept from 40 Hz to 16 kHz and back, no resonance.",
+  "seconds": 4.1,
+  "peak_v": 0.844
+ },
+ {
+  "id": "09_resonance",
+  "group": "Filter",
+  "title": "Resonance up to self-oscillation",
+  "what": "Fixed cutoff (600 Hz); resonance raised from 0 to just past the self-oscillation threshold. The peak grows, the bass thins out (classic ladder 'bass loss'), then a sine starts to sing.",
+  "seconds": 4.1,
+  "peak_v": 0.782
+ },
+ {
+  "id": "10_res_sweep",
+  "group": "Filter",
+  "title": "Resonant sweep",
+  "what": "High resonance (0.9) and a cutoff sweep: the squelchy, vocal classic.",
+  "seconds": 4.1,
+  "peak_v": 0.392
+ },
+ {
+  "id": "11_self_osc",
+  "group": "Filter",
+  "title": "Self-oscillating filter as a sine oscillator",
+  "what": "DCO silent, resonance above threshold: the filter itself is the oscillator. The firmware sets the cutoff per key; the pitch follows the expo converter (not temperature-compensated, so tuning is only approximate on real hardware).",
+  "seconds": 3.2,
+  "peak_v": 0.219
+ },
+ {
+  "id": "12_filter_env",
+  "group": "Filter",
+  "title": "Filter envelope amount",
+  "what": "The same pluck with filter-envelope depth 0, 2, 4 and 6 octaves: from dull to 'wow'.",
+  "seconds": 3.3,
+  "peak_v": 0.419
+ },
+ {
+  "id": "13_keytrack",
+  "group": "Filter",
+  "title": "Keyboard tracking off / on",
+  "what": "An upward scale with a fixed cutoff (high notes get dull), then with 100 % key tracking (the cutoff follows the note, constant brightness).",
+  "seconds": 4.2,
+  "peak_v": 0.53
+ },
+ {
+  "id": "14_amp_env",
+  "group": "Envelopes & VCA",
+  "title": "Amplitude envelope shapes",
+  "what": "Pluck (fast decay), organ (gate), pad (slow attack and release): only the VCA envelope changes, generated in firmware and sent as CV_VCA.",
+  "seconds": 4.5,
+  "peak_v": 0.584
+ },
+ {
+  "id": "15_vca_trim",
+  "group": "Envelopes & VCA",
+  "title": "VCA thump: untrimmed vs calibrated trim",
+  "what": "Short bass notes. First half: VCA offset untrimmed (≈150 mV CV feedthrough, heard as a thump on every note). Second half: after the firmware trim calibration (< 1 mV).",
+  "seconds": 3.7,
+  "peak_v": 0.775
+ },
+ {
+  "id": "16_glide",
+  "group": "Modulation",
+  "title": "Glide (portamento)",
+  "what": "Firmware pitch slew between notes (timer periods updated every millisecond).",
+  "seconds": 3.1,
+  "peak_v": 1.459
+ },
+ {
+  "id": "17_vibrato",
+  "group": "Modulation",
+  "title": "Vibrato (LFO → pitch)",
+  "what": "Triangle LFO at 5.5 Hz, ±25 cent on the DCO timer — digital, exact and drift-free.",
+  "seconds": 3.1,
+  "peak_v": 1.077
+ },
+ {
+  "id": "18_wah",
+  "group": "Modulation",
+  "title": "LFO → cutoff (wah)",
+  "what": "LFO at 3 Hz sweeping the cutoff by ±2 octaves with resonance 0.7.",
+  "seconds": 3.5,
+  "peak_v": 0.398
+ },
+ {
+  "id": "19_arp",
+  "group": "Modulation",
+  "title": "Arpeggiator",
+  "what": "Firmware arpeggiator: hold a chord (Am7 → Fmaj7), the notes are played up/down in 16ths at 140 bpm.",
+  "seconds": 4.1,
+  "peak_v": 0.404
+ },
+ {
+  "id": "tune_acid",
+  "group": "Demo tunes (stored in the MCU)",
+  "title": "Acid",
+  "what": "Original 16-step acid bass line: high resonance, filter-envelope accents and slides.",
+  "seconds": 8.15,
+  "peak_v": 0.438,
+  "bpm": 128,
+  "preset": "acid",
+  "steps": 64,
+  "flash_bytes": 192
+ },
+ {
+  "id": "tune_prelude",
+  "group": "Demo tunes (stored in the MCU)",
+  "title": "Prelude",
+  "what": "J. S. Bach, Prelude in C major BWV 846, bars 1–4 (public domain), as a 16th-note arpeggio with saw + pulse and a slow PWM.",
+  "seconds": 10.25,
+  "peak_v": 0.387,
+  "bpm": 100,
+  "preset": "arp",
+  "steps": 64,
+  "flash_bytes": 192
+ },
+ {
+  "id": "tune_ode",
+  "group": "Demo tunes (stored in the MCU)",
+  "title": "Ode",
+  "what": "L. v. Beethoven, 'Ode to Joy' (public domain) on a lead patch with sub oscillator, glide and vibrato.",
+  "seconds": 18.1,
+  "peak_v": 0.724,
+  "bpm": 110,
+  "preset": "lead",
+  "steps": 30,
+  "flash_bytes": 90
+ }
+]

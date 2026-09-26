@@ -22,9 +22,9 @@ CB0 vb0 0 10u
 
 # Exponential converter for cutoff. Input: filtered CV network node 'xcut' (see S2 EXP network).
 EXPO = """
-* S2 'EXP' network output node xcut (33k / 1k2 || 100n to vbias), driven from cvcut_f (PWM average)
+* expo divider on the EXP network output {cvcut}: 33k / 1k5 || 100n to vbias
 R33X {cvcut} xcut 33k
-R12X xcut vbias 1.2k
+R12X xcut vbias 1.5k
 C12X xcut vbias 100n
 QEA na vbias ee BC847B
 QEB tail xcut ee BC847B
@@ -102,7 +102,7 @@ CRF resout rfb 4.7u
 RRF rfb bin2 {rfb}
 """
 
-# Main VCA: diff pair biased from vref (supply-independent trim), input lpf AC-coupled and attenuated 1:34, tail = V->I (CV_VCA) with
+# Main VCA: diff pair biased from vref (supply-independent trim), V->I R_E 4.7k (max gain ~ +7 dB), input lpf AC-coupled and attenuated 1:34, tail = V->I (CV_VCA) with
 # 470k anti-offset pull-up on the emitter (guarantees I = 0 at CV = 0 despite LM324 offset),
 # collectors 4.7k to V+, TL072 difference amp (gain R2/R1) referenced to vref, then AC-coupled line out.
 VCA = """
@@ -121,7 +121,7 @@ RVC2 vp vc2 {rc2}
 XU{n} {x} ve{n} vp 0 uo{n} LM324
 RBV{n} uo{n} bq{n} 1k
 QV{n} vtail bq{n} ve{n} MMBT3904
-REV{n} ve{n} 0 3k
+REV{n} ve{n} 0 4.7k
 ROFF{n} v5 ve{n} 470k
 RD1 vc1 dm 10k
 RD2 dm vcaout {rg}
@@ -132,19 +132,24 @@ COUT vcaout lineout 10u
 RLOAD lineout 0 10k
 """
 
-# S2 filter networks driven by an ideal PWM-average source {src}; output node {x}
+# S2 filter networks driven by the MCU PWM (ideal PWM-average source {src}); output node {x}.
+# Load-aware: the DC ratio includes the series resistance of the first two stages.
+# LIN: 1k/100n -> 4k7/33n -> 4k7 / 15k||22n  (DC ratio 15/25.4 = 0.591)
 CVNET_LIN = """
-R1{n} {src} a{n} 1.5k
+R1{n} {src} a{n} 1k
 C1{n} a{n} 0 100n
-R2{n} a{n} b{n} 15k
-C2{n} b{n} 0 10n
-R3{n} b{n} {x} 10k
+R2{n} a{n} b{n} 4.7k
+C2{n} b{n} 0 33n
+R3{n} b{n} {x} 4.7k
 R4{n} {x} 0 15k
 C3{n} {x} 0 22n
 """
+# EXP: 1k/100n -> 4k7/33n -> node b{n}; the expo divider (33k / 1k5 || 100n to vbias) is in EXPO
 CVNET_EXP = """
-R1{n} {src} a{n} 1.5k
+R1{n} {src} a{n} 1k
 C1{n} a{n} 0 100n
-R2{n} a{n} b{n} 15k
-C2{n} b{n} 0 10n
+R2{n} a{n} b{n} 4.7k
+C2{n} b{n} 0 33n
 """
+LIN_RATIO = 15 / (1 + 4.7 + 4.7 + 15)
+EXP_RATIO = 1.5 / (1 + 4.7 + 33 + 1.5)
