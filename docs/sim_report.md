@@ -15,9 +15,9 @@ complete voice renders to audio in [`audio/s6_voice.wav`](audio/s6_voice.wav).
 | S4 | VCA | ≥ 70 dB off, low CV feedthrough | 121 dB off; thump 90–97 mV → < 0.6 mV after trim | pass |
 | S5 | Touch | Δ ≥ 5 × noise, scan ≥ 200 Hz | SNR 39 (V003) / 152 (V002) worst case; 1.4 kHz | pass |
 | S6 | Full voice | plausible sound, loopback in range | 1.16 Vpp line out; loopback node 2.9…3.6 V | pass |
-| S7 | Power | 9–12 V, ≤ 60 mA, low hum | 32 / 42 mA; hum −80 dB re 1.33 Vpp | pass (see power-on pop, §8) |
+| S7 | Power | 9–12 V, ≤ 60 mA, low hum | 32 / 42 mA; hum −80 dB re 1.33 Vpp | pass (power-on pop accepted, §8.3) |
 
-Open items: power-on pop at the line out (§8.3), cutoff temperature drift (compensated in firmware, §4.4),
+Accepted limitations: power-on pop at the line out (§8.3) and cutoff temperature drift (§4.4). See also the
 model limitations (§10).
 
 ## 1. Method
@@ -109,9 +109,9 @@ the filter at different cutoff / resonance settings.*
 
 ### 4.4 Temperature drift
 The drift is physical (V_T appears in both the expo converter and the ladder transconductance) and would be
-≈ 3 semitones over a 20 K warm-up. A diode-connected MMBT3904 next to the expo pair on **PD4 (ADC A7)** lets
-the firmware correct the cutoff CV; the correction constant is calibrated from the self-oscillation
-frequency during warm-up (verification plan T7, L3).
+≈ 3 semitones over a 20 K warm-up. For this demonstrator it is accepted, as in classic analog filters. A
+dedicated temperature sensor was considered and dropped; if needed, the firmware can re-tune the cutoff
+without extra parts by measuring the self-oscillation frequency through the audio loopback (T7).
 
 **Design changes.** (1) 47 nF → 33 nF to reach 15 kHz. (2) Mixer AC coupling re-designed (10 k from the mixer
 node to VB0, 1 µF) after the first version needed ≈ 0.4 s to settle. (3) The first resonance VCA fed one
@@ -196,12 +196,11 @@ gave 1.1 mVpp of 100 Hz on VREF (the difference amplifiers draw V+-dependent cur
 plain follower with an RC snubber has 0.005 Ω at 100 Hz, a single well-damped 9.6 Ω peak at 2.4 MHz, and a
 bare 100 nF (313 Ω peak at 190 kHz) is explicitly avoided.
 
-### 8.3 Power-on pop (open)
+### 8.3 Power-on pop (accepted)
 At power-up the line-out coupling capacitor charges from 0 to the 4.5 V output bias, giving a ≈ 3 V pop that
 decays over ≈ 0.3 s (Figure 9a). The firmware cannot prevent this (it happens before the MCU runs). Options
-for the schematic: (a) accept and document ("power the synth before the amplifier"); (b) add a power-on mute
-(back-to-back 2N7002 shunt driven by an RC from V+, ≈ 1 s); (c) slow VREF start-up. Recommendation: (b) if a
-line-level output into a mixer or amplifier is the main use case. The firmware should additionally keep the
+considered: (a) accept and document; (b) a power-on mute (back-to-back 2N7002 shunt driven by an RC from V+);
+(c) slow VREF start-up. **Decision: (a)** — switch the synth on before the amplifier. The firmware keeps the
 VCA closed for 0.5 s after boot while the internal coupling capacitors settle.
 
 ## 9. Design changes made during simulation
@@ -213,10 +212,9 @@ VCA closed for 0.5 s after boot while the internal coupling capacitors settle.
 | VCF | ladder caps 47 → 33 nF | top of range 11 → 17.6 kHz |
 | VCF | mixer: 10 k to VB0, 1 µF coupling, 150 k / 470 k sources | settling 0.44 s → ≈ 15 ms |
 | VCF | resonance VCA with difference amplifier, 1:13 input, 22 k feedback | removes volt-level DC steps into the ladder; threshold at 3.05 V |
-| VCF | temperature diode on PD4 | firmware compensation of −13 cent/K |
 | VCA | 470 k anti-offset on the V→I emitter | off attenuation 47 → 121 dB |
 | VCA | bases biased from VREF, 8-bit R-2R trim DAC (3rd 74HC595) | CV feedthrough 97 → < 0.6 mV after calibration |
-| System | audio loopback to PD5, 595 LATCH moved to PD7 | self-test and calibration without extra ICs |
+| System | audio loopback to PD5 (spare ADC pin) | self-test and calibration without extra ICs |
 | Power | VREF follower + 10 Ω / 1 µF snubber | hum −47 → −80 dB, stable |
 
 ## 10. Model limitations
@@ -244,7 +242,7 @@ VCA closed for 0.5 s after boot while the internal coupling capacitors settle.
 | Mixer | saw 150 k, pulse/sub/noise 470 k, 10 k to VB0, 1 µF coupling |
 | Resonance | 1 µF, 120 k/10 k from VB2; BC847BS; R_C 2 × 4.7 k; diff amp 4 × 10 k (ref VREF); 4.7 µF + 22 k; V→I R_E 6.2 k |
 | VCA | 1 µF, 33 k/1 k from VREF; BC847BS; R_C 2 × 4.7 k; V→I R_E 3 k + 470 k from +5 V; diff amp 10 k/22 k; 10 µF out; trim 1 M / 2 M, R-2R 100 k/200 k |
-| Loopback | 10 k / 30 k + 1 nF → PD5; temperature diode MMBT3904 → PD4 |
+| Loopback | 10 k / 30 k + 1 nF → PD5 |
 | Power | SS14; 10 µF + 100 nF; 78L05 + 1 µF + 100 nF; VREF 1 k/9.1 k + 10 µF, TL072 follower, 10 Ω + 1 µF snubber |
 
 ## 12. Reproducing

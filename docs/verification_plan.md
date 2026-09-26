@@ -20,12 +20,9 @@ has been characterised.
 
 - **Audio loopback** VCA output → 10 k / 30 k divider + 1 nF → **PD5 (ADC A5)**. Range 0.5…4.5 V for the full
   output swing (S6 checks this node stays inside 0…5 V).
-- **Temperature sensor** MMBT3904 (diode-connected) thermally coupled to the expo pair → **PD4 (ADC A7)**.
 - **Trim DAC** 3rd 74HC595 in the LED chain → 8-bit R-2R (100 k / 200 k) → VCA offset injection.
-- **74HC595 LATCH on PD7**: NRST disabled in option bytes by the firmware on first boot (flashing via
-  SWIO keeps working; recovery via minichlink power-cycle unlock if needed).
 - **Test pads** (1 mm, bottom side, labelled): GND, V+, +5V, VREF, VBIAS, V25, VB0…VB4, TAIL, SAW, LPF,
-  VCAOUT, RESOUT, XAMP, XCUT (bC), XRES, XVCA, VTRIM, TEMP.
+  VCAOUT, RESOUT, XAMP, XCUT (bC), XRES, XVCA, VTRIM.
 - **SWIO header** 3 pads (GND, SWIO, +5V) for WCH-LinkE.
 
 ### 2.2 Test firmware (`firmware/synthtest/`, ch32fun)
@@ -42,7 +39,6 @@ A text command interface over the SWIO debug channel (`printf` / `handle_debug_i
 | `trim <0..255>` | write the VCA trim DAC |
 | `leds <hex16>` | set the 16 LEDs |
 | `cap <n> <rate>` | capture n samples of the audio loopback (PD5) at a given rate, dump as hex |
-| `temp` | read PD4 (oversampled), print mV and °C estimate |
 | `touch [n]` | dump raw touch readings of all 16 pads (n samples each) |
 | `selftest` | run T1…T12 below, print PASS/FAIL table |
 | `cal <dco\|vcf\|vca\|touch>` / `calsave` | run a calibration and store constants in flash |
@@ -89,7 +85,6 @@ Default conditions: 9 V in, room temperature, CV codes from the calibration defa
 | T10 | VCA thump | CV_VCA 0→full steps without signal, before/after `cal vca` | after cal < 3 mV step at line out | S4: 90 → 0.6 mV |
 | T11 | CV settling | VCA step response seen at loopback | 1 % in < 2.5 ms | S2: 1.5 ms |
 | T12 | Hum / noise | VCA open, DCO off, 1 s capture, spectrum | 100 Hz < sim + 6 dB; broadband < −60 dB re 1.33 Vpp | S7 |
-| T13 | Temperature sensor | reading vs room temperature | ±5 K after 1-point cal | — |
 | T14 | MIDI in | external MIDI keyboard: note on/off, pitch bend, CC | all received | — |
 
 ## 5. L3 — Calibration constants (stored in the 256 B user flash area)
@@ -98,7 +93,6 @@ Default conditions: 9 V in, room temperature, CV codes from the calibration defa
 |---|---|---|
 | `dco_gain` | measure saw amplitude at C4, scale CV_AMP law | 0.95…1.05 (sim 1/0.978) |
 | `vcf_oct_per_v`, `vcf_offset` | self-oscillation frequency at two CV_CUT codes | 1.94 oct/V |
-| `vcf_tc` | log frequency and temperature during warm-up | ≈ −13 cent/K |
 | `vca_trim` | 2-point null of the thump (S4 procedure) | code 30…230 |
 | `touch_base[16]`, `touch_thr[16]` | untouched mean + k·σ | — |
 
@@ -108,7 +102,7 @@ Default conditions: 9 V in, room temperature, CV codes from the calibration defa
 |---|---|---|
 | V1 | Every key triggers reliably, no ghost notes, no double triggers | play chromatic runs, glissandi, fast repeats for 5 min |
 | V2 | Touch-to-sound latency feels immediate | < 10 ms (firmware timestamp from touch detect to gate) |
-| V3 | Tuning holds | play A4 against a tuner after 1 min and 30 min: DCO < 2 cent; filter self-osc drift compensated < 20 cent |
+| V3 | Tuning holds | play A4 against a tuner after 1 min and 30 min: DCO < 2 cent; filter self-oscillation drift after warm-up noted (≈ −13 cent/K expected, uncompensated) |
 | V4 | Parameters are reachable and understandable with SHIFT/−/+ and the LEDs | user walkthrough of all parameters |
 | V5 | Sound: bass, lead, resonant sweeps, self-oscillation usable | listening; compare with `docs/audio/s6_voice.wav` |
 | V6 | Works on 9 V battery and 12 V adapter; no audible hum with a typical adapter | listening + T12 |

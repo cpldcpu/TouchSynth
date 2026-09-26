@@ -40,7 +40,6 @@ Parts outside the JLCPCB lists:
   ├─ ADC A0/A1 + S0..S2 ◄─ 2× CD4051 ◄─ 16 touch pads (13 keys + SHIFT, −, +)
   ├─ S0/S1 (shared) + LATCH ─► 3× 74HC595 ─► 16 LEDs + 8-bit R-2R trim DAC
   ├─ ADC A5 (PD5) ◄─ audio loopback (VCA out, divider 0.75)
-  ├─ ADC A7 (PD4) ◄─ temperature diode (MMBT3904 at the expo pair)
   └─ USART RX ◄─ LTV-817 ◄─ MIDI in
 ```
 
@@ -51,7 +50,7 @@ Parts outside the JLCPCB lists:
 |---|---|
 | DCO | Pitch from timer, range ≥ C1 (32.7 Hz) … C7 (2093 Hz); saw amplitude constant within ±5 % across range via CV_AMP (charging current ∝ f) |
 | Waveforms | saw, pulse with firmware PWM, sub-oscillator (−1 oct square), noise; firmware enables/disables each |
-| VCF | 24 dB/oct transistor ladder; cutoff ≈ 30 Hz … 15 kHz from CV_CUT via hardware expo converter (≈ 1.9 oct/V); resonance 0 … self-oscillation from CV_RES; firmware temperature compensation from the PD4 sensor |
+| VCF | 24 dB/oct transistor ladder; cutoff ≈ 30 Hz … 15 kHz from CV_CUT via hardware expo converter (≈ 1.9 oct/V); resonance 0 … self-oscillation from CV_RES; temperature drift ≈ −13 cent/K accepted (optional firmware re-tune from self-oscillation via the audio loopback) |
 | VCA | ≥ 70 dB attenuation when closed; envelope in firmware via CV_VCA; CV feedthrough nulled by firmware-calibrated trim DAC |
 | Output | line level ≈ 1 V pp into ≥ 10 kΩ, AC-coupled, referenced to GND |
 | Control voltages | 4 × PWM from TIM1, 10 bit @ 46.9 kHz + 2-bit Σ-Δ dither (DMA burst) = 12 bit; residual ripple on CV < −70 dB of full scale; settling < 2 ms (fast envelope attack) |
@@ -71,6 +70,7 @@ Parts outside the JLCPCB lists:
 
 ### 3.4 Power
 - Input 9–12 V DC on 2 pads, reverse-polarity protected, ≤ 60 mA typical.
+- Power-on pop at the line out (≈ 3 V, ≈ 0.3 s) accepted: switch the synth on before the amplifier.
 - Analog rail = protected V+; audio referenced to buffered VREF = 4.5 V (derived from +5 V, independent of V+).
 - +5 V from 78L05 for all logic (CH32V runs at 5 V; CD4051 and 74HC595 at 5 V).
 
@@ -78,10 +78,10 @@ Parts outside the JLCPCB lists:
 
 | Pin | Port | Function | Pin | Port | Function |
 |---|---|---|---|---|---|
-| 1 | PD4 | ADC A7 ← temperature diode | 11 | PC1 | SUB osc (GPIO) |
+| 1 | PD4 | 74HC595 LATCH | 11 | PC1 | SUB osc (GPIO) |
 | 2 | PD5 | ADC A5 ← audio loopback | 12 | PC2 | TIM2 CH2 (remap 1) → PULSE |
 | 3 | PD6 | USART RX ← MIDI | 13 | PC3 | mux S0 / 595 DATA |
-| 4 | PD7 | 74HC595 LATCH (NRST disabled) | 14 | PC4 | mux S1 / 595 CLK |
+| 4 | PD7 | NRST | 14 | PC4 | mux S1 / 595 CLK |
 | 5 | PA1 | touch mux B → ADC A1 | 15 | PC5 | TIM2 CH1 (remap 1) → DCO reset |
 | 6 | PA2 | touch mux A → ADC A0 | 16 | PC6 | TIM1 CH1 (remap 1) → CV_AMP |
 | 7 | VSS | GND | 17 | PC7 | TIM1 CH2 (remap 1) → CV_CUT |
@@ -89,7 +89,7 @@ Parts outside the JLCPCB lists:
 | 9 | VDD | +5 V | 19 | PD2 | mux S2 |
 | 10 | PC0 | TIM1 CH3 (remap 1) → CV_RES | 20 | PD3 | TIM1 CH4 (remap 1) → CV_VCA |
 
-Open: confirm TIM1/TIM2 remap-1 pin assignments and the NRST-disable option bit are identical on CH32V002.
+Open: confirm TIM1/TIM2 remap-1 pin assignments are identical on CH32V002.
 
 ## 5. Preliminary BOM (LCSC)
 
@@ -98,7 +98,7 @@ Open: confirm TIM1/TIM2 remap-1 pin assignments and the NRST-disable option bit 
 | Op-amps: DCO + VCA diff amp / ladder INA / VREF + res. diff amp | TL072CDT | 3 | C6961 | basic |
 | V→I (DCO, RES, VCA), expo reference | LM324DT | 1 | C71035 | basic |
 | Ladder (5), expo (1), resonance (1), VCA (1) | BC847BS (dual NPN) | 8 | C41375126 | promo |
-| V→I transistors, level shift, temperature diode | MMBT3904 | 5 | C20526 | basic |
+| V→I transistors, level shift | MMBT3904 | 4 | C20526 | basic |
 | DCO reset switch | 2N7002 | 1 | C8545 | basic |
 | Touch mux | CD4051BM96 | 2 | C21379 | promo |
 | LED driver + trim DAC | 74HC595D | 3 | C5947 | basic |
