@@ -1,0 +1,23 @@
+# KiCad
+*-backups/
+*.kicad_prl
+*.lck
+fp-info-cache
+_autosave-*
+*.bak
+production/
+
+# Firmware build output
+firmware/**/*.elf
+firmware/**/*.bin
+firmware/**/*.hex
+firmware/**/*.lst
+firmware/**/*.map
+
+# Simulation output (regenerable)
+sim/**/out/
+sim/**/*.raw
+sim/**/*.wav
+
+# Datasheet text extracts
+docs/datasheets/*.txt
