@@ -21,3 +21,6 @@ sim/**/*.wav
 
 # Datasheet text extracts
 docs/datasheets/*.txt
+
+# Python
+__pycache__/
