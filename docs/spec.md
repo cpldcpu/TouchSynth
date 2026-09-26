@@ -1,6 +1,6 @@
 # TouchSynth — MCU-controlled analog mono synth
 
-Status: draft v0.1 (2026-09-26)
+Status: draft v0.2 (2026-09-26) — updated after simulations S1–S7, see [sim_report.md](sim_report.md)
 
 ## 1. Goal
 
@@ -19,24 +19,28 @@ Parts outside the JLCPCB lists:
 ## 2. Block diagram
 
 ```
- 9–12 V pads ─► reverse protection ─► V+ (analog) ─► mid-rail ref VMID (buffered)
-                                   └► 78L05 ─► +5 V (MCU, CD4051, 74HC595, LEDs)
+ 9–12 V pads ─► SS14 ─► V+ (analog) ─► bias chain VB0..VB4 (ladder)
+                     └► 78L05 ─► +5 V (MCU, CD4051, 74HC595, LEDs) ─► VREF 4.5 V (TL072 buffer), VBIAS, V25
 
  CH32V00x
-  ├─ TIM2 CH1 ─► reset pulse ──► DCO core: TL072 integrator + 2N7002 reset ──► SAW
-  ├─ TIM2 CH2 ─► PULSE (variable width) ──────────────────────────────┐
-  ├─ GPIO     ─► SUB (−1 oct, toggled in TIM2 update ISR) ────────────┤ resistor
-  ├─ GPIO     ─► NOISE (LFSR) ────────────────────────────────────────┤ mixer
-  │                                                    SAW ───────────┘   │
-  ├─ TIM1 CH1..4 PWM ─► RC + LM324 filters ─► CV_AMP, CV_CUT, CV_RES, CV_VCA
-  │                                                                       ▼
-  │                        4-pole transistor ladder VCF (BC847BS) ◄─ CV_CUT, CV_RES
-  │                                                                       ▼
-  │                                     VCA (BJT differential pair) ◄─ CV_VCA
-  │                                                                       ▼
-  │                                        TL072 output buffer ─► pads / 3.5 mm jack
+  ├─ TIM2 CH1 ─► NPN level shift ─► 2N7002 reset ─► DCO: TL072 integrator (10 nF) ──► SAW 4.5…6.5 V
+  ├─ TIM2 CH2 ─► PULSE (variable width) ─────────────────────────────┐
+  ├─ GPIO     ─► SUB (−1 oct, toggled in TIM2 update ISR) ───────────┤ resistor mixer
+  ├─ GPIO     ─► NOISE (LFSR) ───────────────────────────────────────┤ (150 k / 470 k → 10 k)
+  │                                                    SAW ──────────┘   │ 1 µF
+  ├─ TIM1 CH1..4 PWM (10 bit, 46.9 kHz, 2-bit Σ-Δ dither) ─► 3-pole RC ─►
+  │     CV_AMP → LM324 V→I → DCO charge current
+  │     CV_CUT → expo converter (LM324 + BC847BS) → ladder tail current
+  │     CV_RES → LM324 V→I → resonance diff pair → TL072 diff amp → feedback
+  │     CV_VCA → LM324 V→I → VCA diff pair (+470 k anti-offset)
+  │                                                                      ▼
+  │                  4-pole transistor ladder (5 × BC847BS, 4 × 33 nF) → TL072 2-op-amp INA (G = 11)
+  │                                                                      ▼
+  │             VCA: BC847BS diff pair + TL072 diff amp, offset trim from R-2R DAC ─► line out
   ├─ ADC A0/A1 + S0..S2 ◄─ 2× CD4051 ◄─ 16 touch pads (13 keys + SHIFT, −, +)
-  ├─ S0/S1 (shared) + LATCH ─► 2× 74HC595 ─► 16 LEDs (one per pad)
+  ├─ S0/S1 (shared) + LATCH ─► 3× 74HC595 ─► 16 LEDs + 8-bit R-2R trim DAC
+  ├─ ADC A5 (PD5) ◄─ audio loopback (VCA out, divider 0.75)
+  ├─ ADC A7 (PD4) ◄─ temperature diode (MMBT3904 at the expo pair)
   └─ USART RX ◄─ LTV-817 ◄─ MIDI in
 ```
 
@@ -47,10 +51,10 @@ Parts outside the JLCPCB lists:
 |---|---|
 | DCO | Pitch from timer, range ≥ C1 (32.7 Hz) … C7 (2093 Hz); saw amplitude constant within ±5 % across range via CV_AMP (charging current ∝ f) |
 | Waveforms | saw, pulse with firmware PWM, sub-oscillator (−1 oct square), noise; firmware enables/disables each |
-| VCF | 24 dB/oct transistor ladder; cutoff ≈ 30 Hz … 15 kHz from CV_CUT (linear V→I, firmware applies exp curve); resonance 0 … self-oscillation from CV_RES |
-| VCA | ≥ 70 dB attenuation when closed; envelope in firmware via CV_VCA |
+| VCF | 24 dB/oct transistor ladder; cutoff ≈ 30 Hz … 15 kHz from CV_CUT via hardware expo converter (≈ 1.9 oct/V); resonance 0 … self-oscillation from CV_RES; firmware temperature compensation from the PD4 sensor |
+| VCA | ≥ 70 dB attenuation when closed; envelope in firmware via CV_VCA; CV feedthrough nulled by firmware-calibrated trim DAC |
 | Output | line level ≈ 1 V pp into ≥ 10 kΩ, AC-coupled, referenced to GND |
-| Control voltages | 4 × PWM from TIM1, 12 bit @ 11.7 kHz; residual ripple on CV < −70 dB of full scale; settling < 2 ms (fast envelope attack) |
+| Control voltages | 4 × PWM from TIM1, 10 bit @ 46.9 kHz + 2-bit Σ-Δ dither (DMA burst) = 12 bit; residual ripple on CV < −70 dB of full scale; settling < 2 ms (fast envelope attack) |
 
 ### 3.2 User interface
 - 13 touch keys C…C in piano layout + 3 touch pads SHIFT, −, +.
@@ -67,17 +71,17 @@ Parts outside the JLCPCB lists:
 
 ### 3.4 Power
 - Input 9–12 V DC on 2 pads, reverse-polarity protected, ≤ 60 mA typical.
-- Analog rail = protected V+; audio referenced to buffered VMID.
+- Analog rail = protected V+; audio referenced to buffered VREF = 4.5 V (derived from +5 V, independent of V+).
 - +5 V from 78L05 for all logic (CH32V runs at 5 V; CD4051 and 74HC595 at 5 V).
 
 ## 4. MCU pin map (TSSOP-20, identical for CH32V003 / CH32V002)
 
 | Pin | Port | Function | Pin | Port | Function |
 |---|---|---|---|---|---|
-| 1 | PD4 | 74HC595 LATCH | 11 | PC1 | SUB osc (GPIO) |
-| 2 | PD5 | spare (ADC A5) | 12 | PC2 | TIM2 CH2 (remap 1) → PULSE |
+| 1 | PD4 | ADC A7 ← temperature diode | 11 | PC1 | SUB osc (GPIO) |
+| 2 | PD5 | ADC A5 ← audio loopback | 12 | PC2 | TIM2 CH2 (remap 1) → PULSE |
 | 3 | PD6 | USART RX ← MIDI | 13 | PC3 | mux S0 / 595 DATA |
-| 4 | PD7 | NRST | 14 | PC4 | mux S1 / 595 CLK |
+| 4 | PD7 | 74HC595 LATCH (NRST disabled) | 14 | PC4 | mux S1 / 595 CLK |
 | 5 | PA1 | touch mux B → ADC A1 | 15 | PC5 | TIM2 CH1 (remap 1) → DCO reset |
 | 6 | PA2 | touch mux A → ADC A0 | 16 | PC6 | TIM1 CH1 (remap 1) → CV_AMP |
 | 7 | VSS | GND | 17 | PC7 | TIM1 CH2 (remap 1) → CV_CUT |
@@ -85,24 +89,25 @@ Parts outside the JLCPCB lists:
 | 9 | VDD | +5 V | 19 | PD2 | mux S2 |
 | 10 | PC0 | TIM1 CH3 (remap 1) → CV_RES | 20 | PD3 | TIM1 CH4 (remap 1) → CV_VCA |
 
-Open: confirm TIM1/TIM2 remap-1 pin assignments are identical on CH32V002 (datasheet table 2-2).
+Open: confirm TIM1/TIM2 remap-1 pin assignments and the NRST-disable option bit are identical on CH32V002.
 
 ## 5. Preliminary BOM (LCSC)
 
-| Function | Part | LCSC | Library |
-|---|---|---|---|
-| Op-amp (DCO, VMID, output) | TL072CDT | C6961 | basic |
-| Op-amp (CV filters) | LM324DT | C71035 | basic |
-| Ladder / VCA transistors | BC847BS (dual NPN) | C41375126 | promo |
-| Matched pairs (alt.) | MMDT3904 | C41375125 | promo |
-| DCO reset switch | 2N7002 | C8545 | basic |
-| Touch mux | CD4051BM96 | C21379 | promo |
-| LED driver | 74HC595D | C5947 | basic |
-| MIDI opto | LTV-817S | C109227 | basic |
-| 5 V regulator | 78L05 (SOT-89) | C71136 | basic |
-| Reverse protection | SS14 | C2480 | basic |
-| LEDs | KT-0603R (red) | C2286 | basic |
-| Passives | 0603 R / C from basic list | — | basic |
+| Function | Part | Qty | LCSC | Library |
+|---|---|---|---|---|
+| Op-amps: DCO + VCA diff amp / ladder INA / VREF + res. diff amp | TL072CDT | 3 | C6961 | basic |
+| V→I (DCO, RES, VCA), expo reference | LM324DT | 1 | C71035 | basic |
+| Ladder (5), expo (1), resonance (1), VCA (1) | BC847BS (dual NPN) | 8 | C41375126 | promo |
+| V→I transistors, level shift, temperature diode | MMBT3904 | 5 | C20526 | basic |
+| DCO reset switch | 2N7002 | 1 | C8545 | basic |
+| Touch mux | CD4051BM96 | 2 | C21379 | promo |
+| LED driver + trim DAC | 74HC595D | 3 | C5947 | basic |
+| MIDI opto | LTV-817S | 1 | C109227 | basic |
+| 5 V regulator | 78L05 (SOT-89) | 1 | C71136 | basic |
+| Reverse protection | SS14 | 1 | C2480 | basic |
+| LEDs | KT-0603R (red) | 16 | C2286 | basic |
+| Passives | 0603 R (1 %) / C from basic list | — | — | basic |
+| MCU | CH32V003F4P6 / CH32V002F4P6 | 1 | own stock, DNP | — |
 
 ## 6. Simulation plan (ngspice-42, WSL)
 
@@ -114,7 +119,9 @@ Open: confirm TIM1/TIM2 remap-1 pin assignments are identical on CH32V002 (datas
 | S4 | VCA | gain vs. CV_VCA, off-attenuation, CV feedthrough |
 | S5 | Touch channel | pad + CD4051 + ADC sample cap: slope delta finger vs. no finger |
 | S6 | Full voice | note sequence with envelopes → WAV file |
-| S7 | Power | VMID stability, supply rejection |
+| S7 | Power | VREF stability, supply rejection, power-up |
+
+Results: [sim_report.md](sim_report.md). Verification & validation: [verification_plan.md](verification_plan.md).
 
 ## 7. Firmware
 

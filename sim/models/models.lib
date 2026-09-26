@@ -1,0 +1,107 @@
+* TouchSynth shared SPICE models (ngspice-42)
+* Sources: vendor macromodels / Gummel-Poon parameters as published (TI, NXP, LTspice std lib).
+
+* ---------------------------------------------------------------------------
+* BJTs
+* NXP BC847B (used for BC847BS dual: same die)
+.model BC847B NPN(IS=1.822E-14 NF=0.9932 ISE=2.894E-16 NE=1.4 BF=324.4 IKF=0.109
++ VAF=82 NR=0.9931 ISC=9.982E-12 NC=1.763 BR=8.29 IKR=0.09 VAR=17.9 RB=10
++ IRB=5E-06 RBM=5 RE=0.649 RC=0.7014 XTB=0 EG=1.11 XTI=3 CJE=1.244E-11
++ VJE=0.7579 MJE=0.3656 TF=4.908E-10 XTF=9.51 VTF=2.927 ITF=0.3131 PTF=0
++ CJC=3.347E-12 VJC=0.5463 MJC=0.391 XCJC=0.6193 TR=9E-08 CJS=0 VJS=0.75
++ MJS=0.333 FC=0.979)
+* MMBT3904 (generic 2N3904)
+.model MMBT3904 NPN(IS=6.734f XTI=3 EG=1.11 VAF=74.03 BF=416.4 NE=1.259
++ ISE=6.734f IKF=66.78m XTB=1.5 BR=.7371 NC=2 ISC=0 IKR=0 RC=1 CJC=3.638p
++ MJC=.3085 VJC=.75 FC=.5 CJE=4.493p MJE=.2593 VJE=.75 TR=239.5n TF=301.2p
++ ITF=.4 VTF=4 XTF=2 RB=10)
+
+* ---------------------------------------------------------------------------
+* MOSFET 2N7002 (LTspice standard VDMOS)
+.model 2N7002 VDMOS(Rg=3 Vto=1.6 Rd=0 Rs=.75 Rb=.14 Kp=.17 mtriode=1.25
++ Cgdmax=80p Cgdmin=12p Cgs=50p Cjo=50p Is=.04p ksubthres=.1)
+
+* ---------------------------------------------------------------------------
+* Diodes
+.model D1N4148 D(IS=2.52n RS=0.568 N=1.752 CJO=4p M=0.4 TT=20n BV=100 IBV=100u)
+.model DSS14 D(IS=1.4u RS=0.04 N=1.1 CJO=110p M=0.5 BV=40 IBV=0.5m)
+
+* ---------------------------------------------------------------------------
+* TL072 (TI Boyle macromodel)  pins: +in -in V+ V- out
+.SUBCKT TL072 1 2 3 4 5
+C1   11 12 3.498E-12
+C2    6  7 15.00E-12
+DC    5 53 DX
+DE   54  5 DX
+DLP  90 91 DX
+DLN  92 90 DX
+DP    4  3 DX
+EGND 99  0 POLY(2) (3,0) (4,0) 0 .5 .5
+FB    7 99 POLY(5) VB VC VE VLP VLN 0 4.715E6 -5E6 5E6 5E6 -5E6
+GA    6  0 11 12 282.8E-6
+GCM   0  6 10 99 8.942E-9
+ISS   3 10 DC 195.0E-6
+HLIM 90  0 VLIM 1K
+J1   11  2 10 JX
+J2   12  1 10 JX
+R2    6  9 100.0E3
+RD1   4 11 3.536E3
+RD2   4 12 3.536E3
+RO1   8  5 150
+RO2   7 99 150
+RP    3  4 2.143E3
+RSS  10 99 1.026E6
+VB    9  0 DC 0
+VC    3 53 DC 2.200
+VE   54  4 DC 2.200
+VLIM  7  8 DC 0
+VLP  91  0 DC 25
+VLN   0 92 DC 25
+.MODEL DX D(IS=800.0E-18)
+.MODEL JX PJF(IS=15.00E-12 BETA=270.1E-6 VTO=-1)
+.ENDS
+
+* ---------------------------------------------------------------------------
+* LM324 (TI Boyle macromodel)  pins: +in -in V+ V- out
+.SUBCKT LM324 1 2 3 4 5
+C1   11 12 5.544E-12
+C2    6  7 20.00E-12
+DC    5 53 DX
+DE   54  5 DX
+DLP  90 91 DX
+DLN  92 90 DX
+DP    4  3 DX
+EGND 99  0 POLY(2) (3,0) (4,0) 0 .5 .5
+FB    7 99 POLY(5) VB VC VE VLP VLN 0 15.91E6 -20E6 20E6 20E6 -20E6
+GA    6  0 11 12 125.7E-6
+GCM   0  6 10 99 7.067E-9
+IEE   3 10 DC 10.04E-6
+HLIM 90  0 VLIM 1K
+Q1   11  2 13 QX
+Q2   12  1 14 QX
+R2    6  9 100.0E3
+RC1   4 11 7.957E3
+RC2   4 12 7.957E3
+RE1  13 10 2.773E3
+RE2  14 10 2.773E3
+REE  10 99 19.92E6
+RO1   8  5 50
+RO2   7 99 50
+RP    3  4 30.31E3
+VB    9  0 DC 0
+VC    3 53 DC 2.100
+VE   54  4 DC .6
+VLIM  7  8 DC 0
+VLP  91  0 DC 40
+VLN   0 92 DC 40
+.MODEL DX D(IS=800.0E-18)
+.MODEL QX PNP(IS=800.0E-18 BF=250)
+.ENDS
+
+* ---------------------------------------------------------------------------
+* 78L05 behavioural: dropout ~1.7 V, 5 V out, PSRR ~ 65 dB, Iq 3 mA
+.SUBCKT REG78L05 in out gnd
+Bx   x   gnd V = min(5.0 + 0.0006*(v(in,gnd)-10), v(in,gnd)-1.7)
+Rx   x   out 0.2
+Iq   in  gnd 3m
+.ENDS

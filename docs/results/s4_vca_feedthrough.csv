@@ -1,0 +1,4 @@
+case,step_untrimmed_v,step_trimmed_v,trim_code,vt_null_v
+matched,-0.0228934,-0.0228934,128,0
+A: +1 % Rc, +1 mV,-0.0896667,0.000562829,34,0.673679
+B: −1 % Rc, −2 mV,0.0971023,3.44302e-05,230,4.49321
