@@ -1,0 +1,402 @@
+(kicad_sch
+	(version 20250114)
+	(generator "touchsynth_gen")
+	(generator_version "10.0")
+	(uuid "f4cf969e-4db8-4016-922c-73226d1b31bd")
+	(paper "A4")
+	(title_block
+		(title "TouchSynth")
+		(date "2026-09-26")
+		(rev "0.1")
+	)
+	(lib_symbols)
+	(sheet
+		(at 20 40)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "301baa6f-7dd1-451b-8363-2a16d0c04e51")
+		(property "Sheetname" "power"
+			(at 20 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "power.kicad_sch"
+			(at 20 85.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "touchsynth"
+				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+					(page "2")
+				)
+			)
+		)
+	)
+	(text "Power, references and ladder bias"
+		(exclude_from_sim no)
+		(at 23 62 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "629472fe-65fb-4b42-855a-d0a066f29dbb")
+	)
+	(sheet
+		(at 115 40)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "7a2633f6-cd7d-4b3f-a6de-38a842b47011")
+		(property "Sheetname" "mcu"
+			(at 115 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "mcu.kicad_sch"
+			(at 115 85.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "touchsynth"
+				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+					(page "3")
+				)
+			)
+		)
+	)
+	(text "MCU, programming header and MIDI in"
+		(exclude_from_sim no)
+		(at 118 62 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "a223c68d-5894-41f8-a0f0-bd2713da053d")
+	)
+	(sheet
+		(at 210 40)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "f9f93f8e-3979-4935-9643-789193e50a03")
+		(property "Sheetname" "touch_led"
+			(at 210 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "touch_led.kicad_sch"
+			(at 210 85.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "touchsynth"
+				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+					(page "4")
+				)
+			)
+		)
+	)
+	(text "Touch pads, multiplexers, LEDs and trim DAC"
+		(exclude_from_sim no)
+		(at 213 62 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "50630772-a020-4a16-a527-ada2eb36fd91")
+	)
+	(sheet
+		(at 305 40)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "f2ec9c4a-8379-47f7-b0e1-51240c899a25")
+		(property "Sheetname" "dco"
+			(at 305 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "dco.kicad_sch"
+			(at 305 85.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "touchsynth"
+				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+					(page "5")
+				)
+			)
+		)
+	)
+	(text "DCO and CV_AMP"
+		(exclude_from_sim no)
+		(at 308 62 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "53fab298-1c70-42fc-9281-8847122c8a31")
+	)
+	(sheet
+		(at 20 110)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "72a99bd4-194d-4f3f-a0a7-36988fa1e856")
+		(property "Sheetname" "vcf"
+			(at 20 109.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "vcf.kicad_sch"
+			(at 20 155.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "touchsynth"
+				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+					(page "6")
+				)
+			)
+		)
+	)
+	(text "CV_CUT, expo converter, ladder filter, mixer"
+		(exclude_from_sim no)
+		(at 23 132 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "fed183c2-e8f2-47dc-a5a2-9641e2b28a97")
+	)
+	(sheet
+		(at 115 110)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "0bb34ded-c305-47af-8f37-56c8caeae4b7")
+		(property "Sheetname" "resonance"
+			(at 115 109.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "resonance.kicad_sch"
+			(at 115 155.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "touchsynth"
+				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+					(page "7")
+				)
+			)
+		)
+	)
+	(text "CV_RES and resonance VCA"
+		(exclude_from_sim no)
+		(at 118 132 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "5662902e-ae4b-4c47-a97b-a1ea6442a3f0")
+	)
+	(sheet
+		(at 210 110)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "74f25742-bbf2-4da3-bfde-df7dd5a449ca")
+		(property "Sheetname" "vca"
+			(at 210 109.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "vca.kicad_sch"
+			(at 210 155.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "touchsynth"
+				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+					(page "8")
+				)
+			)
+		)
+	)
+	(text "CV_VCA, VCA, line out and audio loopback"
+		(exclude_from_sim no)
+		(at 213 132 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "0c362f82-c1ab-4f74-9f92-32983f54d982")
+	)
+	(text "TouchSynth — MCU-controlled analog mono synth (CH32V003/V002)"
+		(exclude_from_sim no)
+		(at 20 25 0)
+		(effects
+			(font
+				(size 4 4)
+				(thickness 0.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "f0f2878a-692a-4479-b281-cf4ea2bff516")
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+)

@@ -27,3 +27,10 @@ __pycache__/
 
 # Rendered example WAVs (mp3 copies are kept; regenerate with sim/behav/examples.py)
 docs/audio/features/*.wav
+
+# KiCad generated / local files
+hw/touchsynth/*.net
+hw/touchsynth/*.pdf
+hw/touchsynth/erc.rpt
+hw/touchsynth/*-backups/
+hw/touchsynth/*.kicad_prl
