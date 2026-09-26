@@ -156,15 +156,15 @@ group("Programming (WCH-LinkE)")
 add("J", "Connector_Generic:Conn_01x03", "SWIO", FP["HDR3"], {1: "+5V", 2: "SWIO", 3: "GND"}, bom=False,
     note="WCH-LinkE: 5V, SWIO, GND")
 add("TP", "Connector:TestPoint", "NRST", FP["TP"], {1: "NRST"}, bom=False)
-group("MIDI in")
-# MIDI in: current loop -> 220R -> LTV-817S LED (1N4148W reverse protection), open collector pulled up to +5 V
+group("MIDI in (DNP)")
+# MIDI in (not populated in rev 0.1; firmware enables the PD6 pull-up): current loop -> 220R -> LTV-817S LED (1N4148W reverse protection), open collector pulled up to +5 V
 add("J", "Connector_Generic:Conn_01x02", "MIDI IN", FP["HDR2"], {1: "MIDI_4", 2: "MIDI_5"}, bom=False,
     note="DIN-5 pin 4 / pin 5 (or TRS)")
-R(None, "220", "MIDI_4", "MIDI_A")
-add("D", "Diode:1N4148W", "1N4148W", "Diode_SMD:D_SOD-123", {1: "MIDI_A", 2: "MIDI_5"}, lcsc="C81598")
+R(None, "220", "MIDI_4", "MIDI_A", dnp=True)
+add("D", "Diode:1N4148W", "1N4148W", "Diode_SMD:D_SOD-123", {1: "MIDI_A", 2: "MIDI_5"}, lcsc="C81598", dnp=True)
 add("U", "Isolator:LTV-817S", "LTV-817S", "Package_DIP:SMDIP-4_W9.53mm",
-    {1: "MIDI_A", 2: "MIDI_5", 3: "GND", 4: "MIDI_RX"}, lcsc="C109227")
-R(None, "470", "+5V", "MIDI_RX")
+    {1: "MIDI_A", 2: "MIDI_5", 3: "GND", 4: "MIDI_RX"}, lcsc="C109227", dnp=True)
+R(None, "470", "+5V", "MIDI_RX", dnp=True)
 
 # =========================================================================== touch pads, muxes, LEDs, trim DAC
 sheet("touch_led")

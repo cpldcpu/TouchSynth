@@ -18,7 +18,7 @@ POWER_SYMS = {"GND": "power:GND", "+5V": "power:+5V"}
 CHAR_W = 1.05          # approx. width of a 1.27 mm label character
 
 
-FIELD_ANGLE = {90: os.environ.get("FA90", "90")}
+FIELD_ANGLE = {90: "90", 270: "90"}
 
 
 def uid():

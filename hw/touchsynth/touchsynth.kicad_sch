@@ -2,7 +2,7 @@
 	(version 20250114)
 	(generator "touchsynth_gen")
 	(generator_version "10.0")
-	(uuid "f4cf969e-4db8-4016-922c-73226d1b31bd")
+	(uuid "86f4d9ff-f6c4-486e-8b1b-1bc40a4be669")
 	(paper "A4")
 	(title_block
 		(title "TouchSynth")
@@ -25,7 +25,7 @@
 		(fill
 			(color 0 0 0 0.0000)
 		)
-		(uuid "301baa6f-7dd1-451b-8363-2a16d0c04e51")
+		(uuid "bf3e4286-6419-42b8-baf8-c59f2a8b4f56")
 		(property "Sheetname" "power"
 			(at 20 39.3 0)
 			(effects
@@ -46,7 +46,7 @@
 		)
 		(instances
 			(project "touchsynth"
-				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+				(path "/86f4d9ff-f6c4-486e-8b1b-1bc40a4be669"
 					(page "2")
 				)
 			)
@@ -61,7 +61,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "629472fe-65fb-4b42-855a-d0a066f29dbb")
+		(uuid "993dec4a-29eb-4b1c-9a28-ef1c041f8c7a")
 	)
 	(sheet
 		(at 115 40)
@@ -78,7 +78,7 @@
 		(fill
 			(color 0 0 0 0.0000)
 		)
-		(uuid "7a2633f6-cd7d-4b3f-a6de-38a842b47011")
+		(uuid "1b45b040-86f0-443c-a8b0-2b3b25d1fe2a")
 		(property "Sheetname" "mcu"
 			(at 115 39.3 0)
 			(effects
@@ -99,7 +99,7 @@
 		)
 		(instances
 			(project "touchsynth"
-				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+				(path "/86f4d9ff-f6c4-486e-8b1b-1bc40a4be669"
 					(page "3")
 				)
 			)
@@ -114,7 +114,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "a223c68d-5894-41f8-a0f0-bd2713da053d")
+		(uuid "9ef962b7-f6e1-4dee-88fd-609865d03e19")
 	)
 	(sheet
 		(at 210 40)
@@ -131,7 +131,7 @@
 		(fill
 			(color 0 0 0 0.0000)
 		)
-		(uuid "f9f93f8e-3979-4935-9643-789193e50a03")
+		(uuid "7e5b93fc-b18b-4874-b1f8-0638b0722889")
 		(property "Sheetname" "touch_led"
 			(at 210 39.3 0)
 			(effects
@@ -152,7 +152,7 @@
 		)
 		(instances
 			(project "touchsynth"
-				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+				(path "/86f4d9ff-f6c4-486e-8b1b-1bc40a4be669"
 					(page "4")
 				)
 			)
@@ -167,7 +167,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "50630772-a020-4a16-a527-ada2eb36fd91")
+		(uuid "a8169eab-c141-406d-a866-ce0dac61532b")
 	)
 	(sheet
 		(at 305 40)
@@ -184,7 +184,7 @@
 		(fill
 			(color 0 0 0 0.0000)
 		)
-		(uuid "f2ec9c4a-8379-47f7-b0e1-51240c899a25")
+		(uuid "53774a03-548e-4447-9e12-49fb49bda221")
 		(property "Sheetname" "dco"
 			(at 305 39.3 0)
 			(effects
@@ -205,7 +205,7 @@
 		)
 		(instances
 			(project "touchsynth"
-				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+				(path "/86f4d9ff-f6c4-486e-8b1b-1bc40a4be669"
 					(page "5")
 				)
 			)
@@ -220,7 +220,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "53fab298-1c70-42fc-9281-8847122c8a31")
+		(uuid "b28c568d-3d38-4905-9b62-3f374e554614")
 	)
 	(sheet
 		(at 20 110)
@@ -237,7 +237,7 @@
 		(fill
 			(color 0 0 0 0.0000)
 		)
-		(uuid "72a99bd4-194d-4f3f-a0a7-36988fa1e856")
+		(uuid "a94cf94a-20c7-4d6c-95de-d696a05956d4")
 		(property "Sheetname" "vcf"
 			(at 20 109.3 0)
 			(effects
@@ -258,7 +258,7 @@
 		)
 		(instances
 			(project "touchsynth"
-				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+				(path "/86f4d9ff-f6c4-486e-8b1b-1bc40a4be669"
 					(page "6")
 				)
 			)
@@ -273,7 +273,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "fed183c2-e8f2-47dc-a5a2-9641e2b28a97")
+		(uuid "0547251d-12f4-48dd-94e1-908d7b8a30d1")
 	)
 	(sheet
 		(at 115 110)
@@ -290,7 +290,7 @@
 		(fill
 			(color 0 0 0 0.0000)
 		)
-		(uuid "0bb34ded-c305-47af-8f37-56c8caeae4b7")
+		(uuid "b3c43e5b-2a9a-4e57-9195-ac924192938b")
 		(property "Sheetname" "resonance"
 			(at 115 109.3 0)
 			(effects
@@ -311,7 +311,7 @@
 		)
 		(instances
 			(project "touchsynth"
-				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+				(path "/86f4d9ff-f6c4-486e-8b1b-1bc40a4be669"
 					(page "7")
 				)
 			)
@@ -326,7 +326,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "5662902e-ae4b-4c47-a97b-a1ea6442a3f0")
+		(uuid "fbc31800-509f-484c-9c8c-7fbf1540ec92")
 	)
 	(sheet
 		(at 210 110)
@@ -343,7 +343,7 @@
 		(fill
 			(color 0 0 0 0.0000)
 		)
-		(uuid "74f25742-bbf2-4da3-bfde-df7dd5a449ca")
+		(uuid "644c8c5f-6226-486e-a330-22a3f7c71334")
 		(property "Sheetname" "vca"
 			(at 210 109.3 0)
 			(effects
@@ -364,7 +364,7 @@
 		)
 		(instances
 			(project "touchsynth"
-				(path "/f4cf969e-4db8-4016-922c-73226d1b31bd"
+				(path "/86f4d9ff-f6c4-486e-8b1b-1bc40a4be669"
 					(page "8")
 				)
 			)
@@ -379,7 +379,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "0c362f82-c1ab-4f74-9f92-32983f54d982")
+		(uuid "a48fce81-5e4a-4633-aeb9-195fdc469954")
 	)
 	(text "TouchSynth — MCU-controlled analog mono synth (CH32V003/V002)"
 		(exclude_from_sim no)
@@ -392,7 +392,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "f0f2878a-692a-4479-b281-cf4ea2bff516")
+		(uuid "72c52195-772f-4f36-8f27-4585c769d8db")
 	)
 	(sheet_instances
 		(path "/"
