@@ -1656,10 +1656,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "56d613f2-d3b8-41bb-b0b9-4f0504d4d7cc")
+			(uuid "1281b876-26af-42e7-b624-7bc69de40bf3")
 		)
 		(pin "2"
-			(uuid "80fd82f5-2bb0-465e-b2bc-7ffed669a79f")
+			(uuid "3e8337ac-b6de-49fe-b65a-092869ca9f34")
 		)
 		(instances
 			(project "touchsynth"
@@ -1734,10 +1734,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "0b6dcfbb-5273-420c-a544-573bd10addb0")
+			(uuid "a10b3de2-a1e5-47d3-9f76-1a415b8b8475")
 		)
 		(pin "2"
-			(uuid "5981ce2a-163c-46f1-acc6-b4823fd0ca17")
+			(uuid "2b247ebb-77f9-4fa7-9f16-39d6a79415dc")
 		)
 		(instances
 			(project "touchsynth"
@@ -1812,13 +1812,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "6b5efc05-ea09-4cc3-9c99-b4b9a0caff34")
+			(uuid "99bb3ec5-6b62-456a-a964-a333a50240c8")
 		)
 		(pin "2"
-			(uuid "17b16618-5347-4ae6-b100-1a2062ae59b5")
+			(uuid "4c7a8878-13dd-413d-a905-338cbf8359bd")
 		)
 		(pin "3"
-			(uuid "13adc493-548e-418f-85a8-baa659a12973")
+			(uuid "23bb423f-e673-439b-ba0d-0edeaace2c8b")
 		)
 		(instances
 			(project "touchsynth"
@@ -1893,10 +1893,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "0e3d3dce-d4e1-4f29-9af4-e6f68455dd8f")
+			(uuid "a0ff2392-931a-4e9c-bd35-858b6b438e3e")
 		)
 		(pin "2"
-			(uuid "3176163a-dc2f-40b7-acd2-9631a2a694d9")
+			(uuid "cb32e84e-bfa0-48f6-a9d0-fb5ee2ac3c82")
 		)
 		(instances
 			(project "touchsynth"
@@ -1971,10 +1971,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "bed573c0-5681-412f-898d-62f0ce436e0e")
+			(uuid "012639d2-de73-462b-afe2-77e8096bb205")
 		)
 		(pin "2"
-			(uuid "b68e5df3-ebea-4102-a0e7-70cc8989b4ed")
+			(uuid "5f16ae8f-c382-4166-bf12-888109513389")
 		)
 		(instances
 			(project "touchsynth"
@@ -2049,10 +2049,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "5beb1363-dc83-431b-867f-9a9fcb29e185")
+			(uuid "63180fa1-d7d9-41b2-b121-0fad1cee18cc")
 		)
 		(pin "2"
-			(uuid "d5020415-83d0-4361-95e7-46ddb4e2f066")
+			(uuid "15c7372f-977f-4070-bea2-3c085869015e")
 		)
 		(instances
 			(project "touchsynth"
@@ -2127,10 +2127,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "9ca3915a-9416-42b0-89b5-155a121dc215")
+			(uuid "44ef55af-cd5b-4266-ab08-cc4e9424486d")
 		)
 		(pin "2"
-			(uuid "2d3a39ef-a8a4-445a-b735-55a8069cfac9")
+			(uuid "69d819e2-1da4-407e-b2ac-d81062f5cd00")
 		)
 		(instances
 			(project "touchsynth"
@@ -2205,10 +2205,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "bf428ee5-de50-4bf0-adc0-1ac676bae653")
+			(uuid "dd0880fb-4e04-4d72-bda7-c22f696ae4ed")
 		)
 		(pin "2"
-			(uuid "f5bd57bd-d6fe-4e4b-9673-28970515b947")
+			(uuid "518cd28d-b21c-4c1e-a68a-fe73209b2341")
 		)
 		(instances
 			(project "touchsynth"
@@ -2283,10 +2283,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "9797ef55-8155-47de-a225-0e30290fade7")
+			(uuid "3cc7e2d1-0fe7-4be7-91ac-28370d778bab")
 		)
 		(pin "2"
-			(uuid "831f9b97-d994-47d1-98cd-8cd13e61398c")
+			(uuid "a053deeb-9081-4e15-94ba-777dee8ff8cb")
 		)
 		(instances
 			(project "touchsynth"
@@ -2361,10 +2361,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "00fedc3e-e019-4215-8816-21a84dc723d8")
+			(uuid "4152075c-1eea-4761-9a3d-7532931880e3")
 		)
 		(pin "2"
-			(uuid "1f441136-7cef-453b-a947-e9dfd2eeb147")
+			(uuid "7984c2c2-a14a-4bd9-a981-7187f73309c8")
 		)
 		(instances
 			(project "touchsynth"
@@ -2439,13 +2439,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "de83dbbc-70a6-45e9-bfaa-a85e378ec4a9")
+			(uuid "fb7ad8d2-bca5-4ca8-9573-d5a4b59b5aa1")
 		)
 		(pin "2"
-			(uuid "82f7a0d9-3d2a-4361-a4ac-905ac91199d3")
+			(uuid "7688ac09-dedd-4869-9aa4-f24352f07d94")
 		)
 		(pin "3"
-			(uuid "a186596a-6863-4217-abb1-68cdfe554c5b")
+			(uuid "3e0d848a-db4a-46e0-ae1c-d53f87339a80")
 		)
 		(instances
 			(project "touchsynth"
@@ -2520,10 +2520,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "78fc705b-716a-40a6-88a3-1c2fad9d1ba8")
+			(uuid "7db41ac0-c9e1-4035-abe4-859518ac749f")
 		)
 		(pin "2"
-			(uuid "5742753b-2bb2-40ce-bcb1-3f0c393ee8b2")
+			(uuid "e5029a03-9d97-4c37-a46d-630c8d5d8462")
 		)
 		(instances
 			(project "touchsynth"
@@ -2598,10 +2598,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "8df29f61-7f21-425e-9555-18fd12501d84")
+			(uuid "4b87d96a-9820-40b6-a0ec-88dbff1aca0e")
 		)
 		(pin "2"
-			(uuid "a092f86f-9cec-4f14-a1e1-61a4764a64b8")
+			(uuid "1d8e3b5b-3022-447a-9570-a38d5d65e735")
 		)
 		(instances
 			(project "touchsynth"
@@ -2676,10 +2676,10 @@
 			)
 		)
 		(pin "4"
-			(uuid "d5164c2b-9d82-41cf-be66-c4189e0d6635")
+			(uuid "bdcdc268-f585-42cd-8cc3-9522a4ac696c")
 		)
 		(pin "8"
-			(uuid "51d54746-778a-4fa0-b8d5-135ea717c719")
+			(uuid "f01ca69b-7b42-4a0b-85ae-46264f85e73d")
 		)
 		(instances
 			(project "touchsynth"
@@ -2763,10 +2763,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "05eec5e1-f797-431d-a423-b5432c3ddce6")
+			(uuid "2231b19b-809e-4241-8d5d-299f4b01df5a")
 		)
 		(pin "2"
-			(uuid "0a7b7c8e-2a49-48d0-9ffc-98b09882031e")
+			(uuid "585d31c7-0406-4e0d-910b-d24df3302837")
 		)
 		(instances
 			(project "touchsynth"
@@ -2841,10 +2841,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "d2b89284-1b55-4759-bdab-db024ec795e6")
+			(uuid "95db3c26-34ce-442c-b36c-72aaa1590b91")
 		)
 		(pin "2"
-			(uuid "1510fe5d-eda3-4dbe-bf44-22225712dca2")
+			(uuid "4550436a-7041-4a62-af10-fa96e5dfdef4")
 		)
 		(instances
 			(project "touchsynth"
@@ -2919,10 +2919,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "a0fdc0bb-d7a5-4a09-b2b2-741c312fa370")
+			(uuid "c2d9bdae-8686-44ff-8c02-d62e07b282f9")
 		)
 		(pin "2"
-			(uuid "97a38215-b006-49c3-a357-23352c4fa579")
+			(uuid "fb505ca1-6984-457a-802e-9a9d6e8abc2e")
 		)
 		(instances
 			(project "touchsynth"
@@ -2997,10 +2997,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "a0f5e031-6a7e-4712-a0cc-3ec181c96315")
+			(uuid "ca821a36-5871-4154-815c-0f2e1ab7cde1")
 		)
 		(pin "2"
-			(uuid "7134a48c-32d3-4dec-97a3-00e632bc8314")
+			(uuid "97c3be42-edde-40a2-85c8-39e266c6a7b5")
 		)
 		(instances
 			(project "touchsynth"
@@ -3075,10 +3075,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "9501beff-53da-42eb-96ee-bc3c3d8513d7")
+			(uuid "d938ef49-d120-4522-adfc-fa5af0a1ddbf")
 		)
 		(pin "2"
-			(uuid "0a1b2211-4bff-417e-90c7-6bd4864da32b")
+			(uuid "444b8fa3-b9ce-46e4-9259-c0ad4ef57e01")
 		)
 		(instances
 			(project "touchsynth"
@@ -3153,10 +3153,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "694c2bb1-1bd0-4e7a-880c-976acf25b83f")
+			(uuid "a14d3da1-e8f0-45e3-a24b-9b550a8b5361")
 		)
 		(pin "2"
-			(uuid "b5c74e36-02ca-4ca2-9400-16e44d1e04a5")
+			(uuid "83d06344-5497-43b3-95a1-2eb9db81a627")
 		)
 		(instances
 			(project "touchsynth"
@@ -3231,10 +3231,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "ee2bc0a8-0a7f-4516-9bd4-114155d0b5ae")
+			(uuid "ec28aaeb-7cca-44ef-bef6-9ed63478999b")
 		)
 		(pin "2"
-			(uuid "726e7f33-a897-4f90-a614-e705c287ee21")
+			(uuid "15d497db-000f-4cb4-9825-1122bf1fa944")
 		)
 		(instances
 			(project "touchsynth"
@@ -3309,10 +3309,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "e4545c31-2dfd-46ab-9197-45e8a5734f0d")
+			(uuid "1e73de5b-82e4-4873-9dd3-560379e30648")
 		)
 		(pin "2"
-			(uuid "c3255051-778f-4ff3-8844-cafa030e2e3a")
+			(uuid "7a923c86-9b0a-4e66-bb66-e130f9d80650")
 		)
 		(instances
 			(project "touchsynth"
@@ -3387,10 +3387,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "987ffec1-3bd2-4263-a2c1-c6c52a576a6f")
+			(uuid "920424ee-2d8b-4abe-8746-157eaab27404")
 		)
 		(pin "2"
-			(uuid "6306de5a-283f-42b8-9ab8-971d6d6db33f")
+			(uuid "37045540-b5cd-4353-9d9a-a68fa16d138b")
 		)
 		(instances
 			(project "touchsynth"
@@ -3465,10 +3465,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "3e7ae81e-3d61-40c9-b82d-cadec0356ffa")
+			(uuid "e1d06be6-77ce-4ba2-a6fd-3c7c5b70e809")
 		)
 		(pin "2"
-			(uuid "7c8d62ce-d05b-4c06-9912-65327e62d1af")
+			(uuid "5d5bd896-2c99-4977-969c-af1414dc914b")
 		)
 		(instances
 			(project "touchsynth"
@@ -3543,10 +3543,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "4f559454-4ef6-4702-a2b6-1d718f81aec0")
+			(uuid "65091a34-ae10-49fb-b9a0-43c53bb2a64c")
 		)
 		(pin "2"
-			(uuid "510d76f7-cbbd-4486-b768-2702ed5bacef")
+			(uuid "c0bd94eb-3b49-4459-85d8-86e32117166c")
 		)
 		(instances
 			(project "touchsynth"
@@ -3621,10 +3621,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "900157d0-7651-4e41-8f79-6b7a9c9dd2dd")
+			(uuid "c05f06e0-9ade-4d9f-9121-dc16c2cc1b8e")
 		)
 		(pin "2"
-			(uuid "0282f082-2b88-4b19-b163-002c6f33d2b7")
+			(uuid "14d6ef37-4c8a-4e2a-b50a-f15e05e744dc")
 		)
 		(instances
 			(project "touchsynth"
@@ -3699,10 +3699,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "76ab26fd-4341-4ae6-8d1b-b0f2381cbde9")
+			(uuid "8960e8cc-10e3-4411-81c3-13cbcafcea73")
 		)
 		(pin "2"
-			(uuid "11dede1b-0e82-4d8f-b333-2c0a5ea32aee")
+			(uuid "132e6023-b895-4446-b400-8a9f25e104c3")
 		)
 		(instances
 			(project "touchsynth"
@@ -3777,10 +3777,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "da39bcde-41f1-4745-9293-93f367658167")
+			(uuid "06f3966a-3258-4a2b-a078-5759bcbb529c")
 		)
 		(pin "2"
-			(uuid "61b392a6-3d95-4f44-8a25-6a8da844eaab")
+			(uuid "251d7f34-6754-461f-8c06-0bb407a1a384")
 		)
 		(instances
 			(project "touchsynth"
@@ -3855,10 +3855,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "b3d109cc-8d2c-41d5-b932-57c6faef54ea")
+			(uuid "c352ad76-7b89-4bd3-9d2b-11d5ced1702f")
 		)
 		(pin "2"
-			(uuid "2316ebb9-3e6a-4c30-8b50-8476a5a35bbc")
+			(uuid "29fe7afd-f12c-45ce-a564-d8d4f5e7705f")
 		)
 		(instances
 			(project "touchsynth"
@@ -3933,10 +3933,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "e400e3fc-69d5-4d3c-a908-d90ca062d4a4")
+			(uuid "c62e7316-11e7-425d-a89b-17cb5196f2ec")
 		)
 		(pin "2"
-			(uuid "f5f9048e-8b6c-4c5c-9795-5d1a2467cbfa")
+			(uuid "473f53e8-f396-4aac-aacb-3a0f7ecbf888")
 		)
 		(instances
 			(project "touchsynth"
@@ -4011,10 +4011,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "84fd24d9-b1b5-4a66-aeed-0694bbe29d43")
+			(uuid "a1979743-d3dd-455e-8e2d-5e8e8dd9a82d")
 		)
 		(pin "2"
-			(uuid "14316bfb-e380-4a67-ad2c-c3a85ac427fd")
+			(uuid "52a303ce-e505-4d2e-9334-c1673aa073cf")
 		)
 		(instances
 			(project "touchsynth"
@@ -4089,10 +4089,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "380ef22a-2a00-4f9c-b1b7-d9de616356fd")
+			(uuid "da6d2809-a8a9-4fec-a74a-9f4096ea944f")
 		)
 		(pin "2"
-			(uuid "09610662-088b-4b8c-943c-be80d5d3f01c")
+			(uuid "8d5f1dea-3200-44cc-b24d-0285f6197edd")
 		)
 		(instances
 			(project "touchsynth"
@@ -4130,7 +4130,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x01_P2.54mm_Vertical"
 			(at 222.25 152.4 0)
 			(effects
 				(font
@@ -4166,8 +4166,17 @@
 				(hide yes)
 			)
 		)
+		(property "Note" "scope ground left"
+			(at 222.25 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
-			(uuid "dbe9fbf2-164d-4160-8872-1413d6636ca3")
+			(uuid "55037f7b-1aaa-4f9e-b5ac-098ae7cdf089")
 		)
 		(instances
 			(project "touchsynth"
@@ -4180,7 +4189,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 242.57 152.4 0)
+		(at 240.03 152.4 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -4188,7 +4197,7 @@
 		(dnp no)
 		(uuid "54d88ddb-0202-5514-aa9e-58cb33192d89")
 		(property "Reference" "TP2"
-			(at 243.87 150.049 0)
+			(at 241.33 150.049 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4196,8 +4205,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "VP"
-			(at 243.87 152.249 0)
+		(property "Value" "GND"
+			(at 241.33 152.249 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4205,8 +4214,8 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 242.57 152.4 0)
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x01_P2.54mm_Vertical"
+			(at 240.03 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4215,7 +4224,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 242.57 152.4 0)
+			(at 240.03 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4224,7 +4233,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 242.57 152.4 0)
+			(at 240.03 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4233,7 +4242,16 @@
 			)
 		)
 		(property "Sim" ""
-			(at 242.57 152.4 0)
+			(at 240.03 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Note" "scope ground right"
+			(at 240.03 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4242,7 +4260,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e6cdb14b-ee09-4c27-951f-74232472a2f4")
+			(uuid "85b5b41b-8ea8-4ce2-a46e-39ccafdf0179")
 		)
 		(instances
 			(project "touchsynth"
@@ -4255,7 +4273,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 262.89 152.4 0)
+		(at 257.81 152.4 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -4263,7 +4281,7 @@
 		(dnp no)
 		(uuid "9dd97509-6422-5fa8-b003-b0922f77255c")
 		(property "Reference" "TP3"
-			(at 264.19 150.049 0)
+			(at 259.11 150.049 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4271,8 +4289,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "+5V"
-			(at 264.19 152.249 0)
+		(property "Value" "VP"
+			(at 259.11 152.249 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4281,7 +4299,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 262.89 152.4 0)
+			(at 257.81 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4290,7 +4308,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 262.89 152.4 0)
+			(at 257.81 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4299,7 +4317,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 262.89 152.4 0)
+			(at 257.81 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4308,7 +4326,7 @@
 			)
 		)
 		(property "Sim" ""
-			(at 262.89 152.4 0)
+			(at 257.81 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4317,7 +4335,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3849a72f-a913-4f19-b5e2-76828c0ed5b3")
+			(uuid "60148ccd-6371-4bde-86b4-c29cc806088e")
 		)
 		(instances
 			(project "touchsynth"
@@ -4330,7 +4348,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 283.21 152.4 0)
+		(at 275.59 152.4 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -4338,7 +4356,7 @@
 		(dnp no)
 		(uuid "64798cc5-b958-5dd1-bf47-f44ce1f9d07a")
 		(property "Reference" "TP4"
-			(at 284.51 150.049 0)
+			(at 276.89 150.049 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4346,8 +4364,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "VREF"
-			(at 284.51 152.249 0)
+		(property "Value" "+5V"
+			(at 276.89 152.249 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4356,7 +4374,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 283.21 152.4 0)
+			(at 275.59 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4365,7 +4383,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 283.21 152.4 0)
+			(at 275.59 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4374,7 +4392,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 283.21 152.4 0)
+			(at 275.59 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4383,7 +4401,7 @@
 			)
 		)
 		(property "Sim" ""
-			(at 283.21 152.4 0)
+			(at 275.59 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4392,7 +4410,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "cbded483-ac5e-4a84-85a3-4244c5032e10")
+			(uuid "2c040418-1273-44b7-a715-c47ed8dd607b")
 		)
 		(instances
 			(project "touchsynth"
@@ -4405,7 +4423,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 303.53 152.4 0)
+		(at 293.37 152.4 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -4413,7 +4431,7 @@
 		(dnp no)
 		(uuid "bbcb483c-ae95-5419-90ff-1f9a5ea1994a")
 		(property "Reference" "TP5"
-			(at 304.83 150.049 0)
+			(at 294.67 150.049 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4421,8 +4439,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "VBIAS"
-			(at 304.83 152.249 0)
+		(property "Value" "VREF"
+			(at 294.67 152.249 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4431,7 +4449,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 303.53 152.4 0)
+			(at 293.37 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4440,7 +4458,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 303.53 152.4 0)
+			(at 293.37 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4449,7 +4467,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 303.53 152.4 0)
+			(at 293.37 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4458,7 +4476,7 @@
 			)
 		)
 		(property "Sim" ""
-			(at 303.53 152.4 0)
+			(at 293.37 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4467,7 +4485,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6fc42bc3-c04d-4491-a47c-22d8fee67eee")
+			(uuid "d759c463-326f-460a-a3ea-64b7ca2cf4e6")
 		)
 		(instances
 			(project "touchsynth"
@@ -4480,7 +4498,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 323.85 152.4 0)
+		(at 311.15 152.4 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -4488,7 +4506,7 @@
 		(dnp no)
 		(uuid "ec16b969-2486-5434-9ef0-b0866c038519")
 		(property "Reference" "TP6"
-			(at 325.15 150.049 0)
+			(at 312.45 150.049 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4496,8 +4514,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "V25"
-			(at 325.15 152.249 0)
+		(property "Value" "VBIAS"
+			(at 312.45 152.249 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4506,7 +4524,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 323.85 152.4 0)
+			(at 311.15 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4515,7 +4533,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 323.85 152.4 0)
+			(at 311.15 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4524,7 +4542,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 323.85 152.4 0)
+			(at 311.15 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4533,7 +4551,7 @@
 			)
 		)
 		(property "Sim" ""
-			(at 323.85 152.4 0)
+			(at 311.15 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4542,7 +4560,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "fb8c0310-372f-4ba1-9ebc-f7d294dff46e")
+			(uuid "e734ba3b-b490-410e-bb42-7b22e35dc028")
 		)
 		(instances
 			(project "touchsynth"
@@ -4555,7 +4573,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 344.17 152.4 0)
+		(at 328.93 152.4 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -4563,7 +4581,7 @@
 		(dnp no)
 		(uuid "6c4797b4-847f-5fad-8b1b-1ab61c950ab5")
 		(property "Reference" "TP7"
-			(at 345.47 150.049 0)
+			(at 330.23 150.049 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4571,8 +4589,8 @@
 				(justify left)
 			)
 		)
-		(property "Value" "VB0"
-			(at 345.47 152.249 0)
+		(property "Value" "V25"
+			(at 330.23 152.249 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4581,7 +4599,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 344.17 152.4 0)
+			(at 328.93 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4590,7 +4608,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 344.17 152.4 0)
+			(at 328.93 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4599,7 +4617,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 344.17 152.4 0)
+			(at 328.93 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4608,7 +4626,7 @@
 			)
 		)
 		(property "Sim" ""
-			(at 344.17 152.4 0)
+			(at 328.93 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4617,12 +4635,87 @@
 			)
 		)
 		(pin "1"
-			(uuid "8007a668-d022-46b0-abec-bf0ee36e2341")
+			(uuid "f29c899c-0767-4173-98ac-82967abe53ff")
 		)
 		(instances
 			(project "touchsynth"
 				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6/76816264-039e-56e3-93df-cb80e947fd10"
 					(reference "TP7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector:TestPoint")
+		(at 346.71 152.4 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "90169774-edf6-5c41-95c0-a9d8275ff177")
+		(property "Reference" "TP8"
+			(at 348.01 150.049 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "VB0"
+			(at 348.01 152.249 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
+			(at 346.71 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 346.71 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" ""
+			(at 346.71 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim" ""
+			(at 346.71 152.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "8a79bd5b-8a71-45fe-bc8b-474323f941cf")
+		)
+		(instances
+			(project "touchsynth"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6/76816264-039e-56e3-93df-cb80e947fd10"
+					(reference "TP8")
 					(unit 1)
 				)
 			)
@@ -4636,8 +4729,8 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "90169774-edf6-5c41-95c0-a9d8275ff177")
-		(property "Reference" "TP8"
+		(uuid "159e9ab1-8f58-5f7a-8f4e-e1e6288ac11a")
+		(property "Reference" "TP9"
 			(at 365.79 150.049 0)
 			(effects
 				(font
@@ -4692,12 +4785,12 @@
 			)
 		)
 		(pin "1"
-			(uuid "d0a35b2f-b9c5-4e2d-b654-d5b104f8c31c")
+			(uuid "46d5539e-1753-4929-97c2-c1bd0e70eb56")
 		)
 		(instances
 			(project "touchsynth"
 				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6/76816264-039e-56e3-93df-cb80e947fd10"
-					(reference "TP8")
+					(reference "TP9")
 					(unit 1)
 				)
 			)
@@ -4705,15 +4798,15 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 384.81 152.4 0)
+		(at 382.27 152.4 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "159e9ab1-8f58-5f7a-8f4e-e1e6288ac11a")
-		(property "Reference" "TP9"
-			(at 386.11 150.049 0)
+		(uuid "0a4dbf95-c26a-5f85-938c-c5474e41854b")
+		(property "Reference" "TP10"
+			(at 383.57 150.049 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4722,7 +4815,7 @@
 			)
 		)
 		(property "Value" "VB4"
-			(at 386.11 152.249 0)
+			(at 383.57 152.249 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4731,7 +4824,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 384.81 152.4 0)
+			(at 382.27 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4740,7 +4833,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 384.81 152.4 0)
+			(at 382.27 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4749,7 +4842,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 384.81 152.4 0)
+			(at 382.27 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4758,7 +4851,7 @@
 			)
 		)
 		(property "Sim" ""
-			(at 384.81 152.4 0)
+			(at 382.27 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4767,12 +4860,12 @@
 			)
 		)
 		(pin "1"
-			(uuid "7065630a-9ac9-4739-a159-4d1a5e27c169")
+			(uuid "3c271827-2e36-48d7-859a-2703881daa99")
 		)
 		(instances
 			(project "touchsynth"
 				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6/76816264-039e-56e3-93df-cb80e947fd10"
-					(reference "TP9")
+					(reference "TP10")
 					(unit 1)
 				)
 			)
@@ -4787,7 +4880,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "a8ffc7e9-7bbd-4847-9d2c-9a34ac2ba29f")
+		(uuid "3e477833-a6bf-4692-a878-185eb326a857")
 	)
 	(wire
 		(pts
@@ -4798,7 +4891,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "fad0aa3a-cef6-481b-a496-244b8f68a29d")
+		(uuid "c1910639-e5f7-4650-9d49-a94a17b68ba4")
 	)
 	(wire
 		(pts
@@ -4809,7 +4902,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "77eb4603-fea7-4bb1-b7ca-bed57cb944e7")
+		(uuid "84daf10f-69da-4ed3-b9d9-0f95676c7769")
 	)
 	(wire
 		(pts
@@ -4820,7 +4913,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "c06cda67-2fb3-4b7b-8233-82004aa4cb5c")
+		(uuid "ed9bea60-f891-4886-a6cb-8ad7e0268a2e")
 	)
 	(wire
 		(pts
@@ -4831,7 +4924,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "25414e2e-4d80-4873-9de0-dde5b17ff361")
+		(uuid "f71cad56-c08f-4d38-9655-a32ad697ec5e")
 	)
 	(wire
 		(pts
@@ -4842,7 +4935,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "8646d3e1-454e-4a6d-a2e2-035ecc3265dd")
+		(uuid "5bbe98c3-1253-4bbe-beda-53ce56d682ea")
 	)
 	(wire
 		(pts
@@ -4853,7 +4946,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "f0b7a64f-b7e2-4a8e-b5e2-9091a60da64e")
+		(uuid "a3c912a4-8956-45b7-b4ed-e5fe14fc1690")
 	)
 	(wire
 		(pts
@@ -4864,7 +4957,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "fa866873-2879-41ae-a8e9-17fe19af59fd")
+		(uuid "f166d5e8-127f-4a71-ba53-c0d7ccdfc940")
 	)
 	(wire
 		(pts
@@ -4875,7 +4968,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "14ac4eef-471a-4634-bf19-6389eb87dcc9")
+		(uuid "0c756eec-81b7-49b2-9355-a2e771154519")
 	)
 	(wire
 		(pts
@@ -4886,7 +4979,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "5ee5120b-5441-4f9c-8517-49edfda694e0")
+		(uuid "c4593298-d917-4b1e-82ef-05df23878bc8")
 	)
 	(wire
 		(pts
@@ -4897,7 +4990,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "b5309b5d-c231-48e8-8eca-863d7dadaa12")
+		(uuid "e6840d58-484f-48a3-a3a1-2be30605728d")
 	)
 	(wire
 		(pts
@@ -4908,7 +5001,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "bf16df55-42b1-4615-8040-bbf3afcca3e6")
+		(uuid "020eff78-9d02-4755-9948-661a7a970964")
 	)
 	(wire
 		(pts
@@ -4919,7 +5012,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "d4e56701-7b74-45d3-a974-c4abdfe86ebd")
+		(uuid "fa5f204a-528b-4452-9ba8-1cccd064b889")
 	)
 	(wire
 		(pts
@@ -4930,7 +5023,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "0002a9eb-c206-4930-a380-e413033ead17")
+		(uuid "1af0d2ff-1c9f-41f3-bbec-646f9ffab848")
 	)
 	(wire
 		(pts
@@ -4941,7 +5034,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "0e0652b2-751f-4df9-9698-d978115f8cd2")
+		(uuid "58b4d96f-b445-487e-a45d-67ed819901d3")
 	)
 	(wire
 		(pts
@@ -4952,7 +5045,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "4b967a62-f807-45a9-934a-170959c45e5b")
+		(uuid "0b75bbbd-0877-47a5-953f-a619689368a4")
 	)
 	(wire
 		(pts
@@ -4963,7 +5056,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "7165cc0f-47ce-4741-88fb-61bc41af7868")
+		(uuid "fb3ed5bd-6575-4611-89ee-cbb355a921e4")
 	)
 	(wire
 		(pts
@@ -4974,7 +5067,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "6b0fc09c-1cd7-4a01-b55e-091ec34ffb24")
+		(uuid "2976c7e5-ebb0-4309-9705-c19d8e672c3a")
 	)
 	(wire
 		(pts
@@ -4985,7 +5078,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "1e603504-fefd-4e92-9ea6-8d4e78e0693a")
+		(uuid "021430eb-d73c-4b31-a4d7-7d3d7858cfc5")
 	)
 	(wire
 		(pts
@@ -4996,7 +5089,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "27002fd9-9697-47c2-826e-ef34ff7fc5ed")
+		(uuid "3d71c99f-15cf-4f0f-a8cf-7412acf908c6")
 	)
 	(wire
 		(pts
@@ -5007,7 +5100,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "4acd9b65-812e-4f40-8376-6e70b6dc069a")
+		(uuid "2ea7f53a-bb7f-4a91-8195-836a3e8db7ee")
 	)
 	(wire
 		(pts
@@ -5018,7 +5111,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "8e773623-fe58-41f3-affc-a6b7020b4951")
+		(uuid "8f8c1248-b1af-48d8-8116-f7d74ab9ce32")
 	)
 	(wire
 		(pts
@@ -5029,7 +5122,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "2ad67b4c-44a0-4ecb-909f-a4219df5c2fe")
+		(uuid "f45d5c97-fca0-42a1-8265-00f2c3f71a72")
 	)
 	(wire
 		(pts
@@ -5040,7 +5133,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "48446e32-a281-475a-82f5-f4f0ebf331a7")
+		(uuid "28620908-ac75-45d1-9111-8b6f72554b6b")
 	)
 	(wire
 		(pts
@@ -5051,7 +5144,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "40723532-d28e-4656-87c0-055a2a392992")
+		(uuid "86ca21d4-34a9-474e-b51c-4db749f625a6")
 	)
 	(wire
 		(pts
@@ -5062,7 +5155,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "d372261f-4848-466b-a12a-b05fec8d70bd")
+		(uuid "b1917916-48ef-49d7-a6f6-837e1d17f9ea")
 	)
 	(wire
 		(pts
@@ -5073,7 +5166,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "4d0eda7b-5ebc-4d1f-bbb2-869f15457d49")
+		(uuid "ac54fe8f-3a0f-495b-bc0d-485264e99aaf")
 	)
 	(wire
 		(pts
@@ -5084,7 +5177,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "ec8fafb0-479a-436e-b3d1-d04fd16caa25")
+		(uuid "3ec7b905-dc79-4d26-a5da-8dfd320b1fef")
 	)
 	(wire
 		(pts
@@ -5095,7 +5188,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "5af29121-95b0-46e7-ae79-b2dc26fa5a7c")
+		(uuid "d11eb1b8-ac27-4fc8-8be3-1e453190be6f")
 	)
 	(wire
 		(pts
@@ -5106,7 +5199,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "20e16614-4286-4f70-b7a5-a512d3e26439")
+		(uuid "dd55f92a-8dc8-4dc8-ac63-21676089722d")
 	)
 	(wire
 		(pts
@@ -5117,7 +5210,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "3c4c4a7b-4c8a-4078-912c-ebd0589ababa")
+		(uuid "0d70004d-b4d3-42ed-8775-519f831ce46a")
 	)
 	(wire
 		(pts
@@ -5128,7 +5221,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "0c07327b-2f46-4a83-9e6a-ebb462eb2988")
+		(uuid "b0eab60b-eb94-4032-938e-addc07785885")
 	)
 	(wire
 		(pts
@@ -5139,7 +5232,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "1fd037a3-d502-42a3-bcfa-a8b32cfd9c1e")
+		(uuid "8972c190-6b3f-48ca-ac81-ed3977266aa1")
 	)
 	(wire
 		(pts
@@ -5150,7 +5243,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "81a7bb04-0950-48e5-92d0-e654189c9f9f")
+		(uuid "8e2d7e3d-0f64-4f4c-b358-eb9b2b565f5b")
 	)
 	(wire
 		(pts
@@ -5161,7 +5254,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "196caf63-8ca4-49cd-918f-9a336536bb68")
+		(uuid "e4eda94f-393c-44af-ad45-f216baf0c570")
 	)
 	(wire
 		(pts
@@ -5172,7 +5265,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "5f9b1171-4a8d-47ef-be9c-ad50d3570e05")
+		(uuid "ecdf5901-c436-4520-8431-05637e1caea1")
 	)
 	(wire
 		(pts
@@ -5183,7 +5276,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "4dd00340-7f90-4009-b88b-d355c826b5bd")
+		(uuid "ca3faa22-58cd-4366-8bff-5f832c48d69d")
 	)
 	(wire
 		(pts
@@ -5194,7 +5287,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "192d54e6-fbcb-49d5-bf58-7659b0186e7d")
+		(uuid "a3cefaad-035e-4d45-9748-e362739af37c")
 	)
 	(wire
 		(pts
@@ -5205,7 +5298,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "67f3a798-f3f1-4b29-8e97-7511c268c965")
+		(uuid "15c92063-b301-49d0-976f-06bde44109c8")
 	)
 	(wire
 		(pts
@@ -5216,7 +5309,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "a4b77c12-8401-4c4f-9692-2f8a2c06f70d")
+		(uuid "1eb23ca4-2dd2-4dfe-a7c2-79a94794e64b")
 	)
 	(wire
 		(pts
@@ -5227,7 +5320,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "6b933b96-623b-420d-af02-906fb1f9842e")
+		(uuid "4e3089f9-510c-44dc-a737-50bfd649132a")
 	)
 	(wire
 		(pts
@@ -5238,7 +5331,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "155f4472-e038-4837-8a4b-4213c9b57266")
+		(uuid "8bd48e5b-ab1f-4b79-b96a-ae8292367598")
 	)
 	(wire
 		(pts
@@ -5249,7 +5342,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "1a6f05f1-5a77-4f8d-a583-bb5767772643")
+		(uuid "aa691cf0-f3f9-443a-b1dc-37a9851f387d")
 	)
 	(wire
 		(pts
@@ -5260,7 +5353,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "769ede21-583b-4c76-9509-5ae06d594349")
+		(uuid "11a754f3-9abf-4b72-b7ca-eda22c1c2a1d")
 	)
 	(wire
 		(pts
@@ -5271,7 +5364,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "baf3d11f-76a1-43bb-84db-835d8e08be79")
+		(uuid "b28e3b7e-0ec8-4e28-bfb4-eac6eb1fcd9a")
 	)
 	(wire
 		(pts
@@ -5282,7 +5375,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "48a251d4-2a96-497d-a0b8-3a52a4ab2d21")
+		(uuid "ef2987fb-b631-4296-a204-e3385d1b42a6")
 	)
 	(wire
 		(pts
@@ -5293,7 +5386,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "5b24893b-cc43-4592-9612-1c4812defa41")
+		(uuid "0bca5b04-c98e-4dc1-aa4c-5672727eeb28")
 	)
 	(wire
 		(pts
@@ -5304,73 +5397,84 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "5c174677-afbb-4937-9263-8465198d3121")
+		(uuid "af6c7891-6154-49fb-96a3-ee7b6ee99d43")
 	)
 	(wire
 		(pts
-			(xy 242.57 152.4)
-			(xy 242.57 154.94)
+			(xy 240.03 152.4)
+			(xy 240.03 154.94)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "82d94974-a0df-4366-ae2a-a4e133c6a829")
+		(uuid "326ac92b-748d-4187-93dd-fbabbe9132fd")
 	)
 	(wire
 		(pts
-			(xy 262.89 152.4)
-			(xy 262.89 154.94)
+			(xy 257.81 152.4)
+			(xy 257.81 154.94)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "10603f46-b735-4613-9807-ec688017f987")
+		(uuid "609300e6-b1e7-4793-8459-de67a19ad894")
 	)
 	(wire
 		(pts
-			(xy 283.21 152.4)
-			(xy 283.21 154.94)
+			(xy 275.59 152.4)
+			(xy 275.59 154.94)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "db03da29-c635-4304-828e-bdd5f34f210a")
+		(uuid "649e3bde-b268-4a87-9127-efd7bb16d22f")
 	)
 	(wire
 		(pts
-			(xy 303.53 152.4)
-			(xy 303.53 154.94)
+			(xy 293.37 152.4)
+			(xy 293.37 154.94)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "1a1af308-a7a6-4308-9e82-fcafa2d651ea")
+		(uuid "64c58e5d-ce34-4a78-8977-c4de6c13cd77")
 	)
 	(wire
 		(pts
-			(xy 323.85 152.4)
-			(xy 323.85 154.94)
+			(xy 311.15 152.4)
+			(xy 311.15 154.94)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "c25decec-7719-49cc-aee6-0aa331baa5c2")
+		(uuid "fb7733b5-1a1d-4eea-b3e7-12ead68f6048")
 	)
 	(wire
 		(pts
-			(xy 384.81 152.4)
-			(xy 384.81 154.94)
+			(xy 328.93 152.4)
+			(xy 328.93 154.94)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "6e5b33b7-27b1-4128-a780-764df13f95c3")
+		(uuid "9488baf3-6d28-4d0d-a097-b2cbb1e24749")
+	)
+	(wire
+		(pts
+			(xy 382.27 152.4)
+			(xy 382.27 154.94)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cfecf39a-cfd7-46b1-b75c-5d9c255acd8b")
 	)
 	(wire
 		(pts
@@ -5381,18 +5485,18 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "75e2395d-6e4e-4b49-9dbd-3fca9dedffa2")
+		(uuid "d9ee6b13-b85a-467a-95fd-c4a087ef5e16")
 	)
 	(wire
 		(pts
-			(xy 344.17 152.4)
-			(xy 344.17 154.94)
+			(xy 346.71 152.4)
+			(xy 346.71 154.94)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "6d15c3b8-fe8c-4245-8c04-03ed8b4cc512")
+		(uuid "63c76e66-bfd7-4492-9076-c9e03a99628a")
 	)
 	(wire
 		(pts
@@ -5403,7 +5507,7 @@
 			(width 0)
 			(type default)
 		)
-		(uuid "62cc89d6-efe2-4dfa-b30c-1e043c503874")
+		(uuid "f801fdd1-384b-4b6e-aae7-b9beb8dfd2b4")
 	)
 	(global_label "VP"
 		(shape passive)
@@ -5415,7 +5519,7 @@
 			)
 			(justify left)
 		)
-		(uuid "aa063cd9-fd00-4076-960f-9ff7f810c1f6")
+		(uuid "916a4f4a-b877-4541-a97f-be169b87f3f4")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 106.68 50.8 0)
 			(effects
@@ -5436,7 +5540,7 @@
 			)
 			(justify left)
 		)
-		(uuid "66bf0db5-f8cc-4e46-be98-761d43f4407f")
+		(uuid "b1c96a12-7352-48cc-9ed1-bc1f773d513f")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 93.98 101.6 0)
 			(effects
@@ -5457,7 +5561,7 @@
 			)
 			(justify left)
 		)
-		(uuid "a8598d23-73b9-4a34-9932-f1f058397139")
+		(uuid "1c4208ed-3695-4ab8-b4a5-ba0aaa90cab5")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 121.92 91.44 0)
 			(effects
@@ -5478,7 +5582,7 @@
 			)
 			(justify left)
 		)
-		(uuid "a664d9ee-d955-4721-b6d2-854d4f00c0ee")
+		(uuid "a25c2276-8ecd-41ed-abfa-420557761db5")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 198.12 99.06 0)
 			(effects
@@ -5499,7 +5603,7 @@
 			)
 			(justify left)
 		)
-		(uuid "87ca71bc-4486-4a4a-aacc-8b1be26e1628")
+		(uuid "369832a8-564e-4958-86ae-d4ec7372d4d3")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 248.92 99.06 0)
 			(effects
@@ -5520,7 +5624,7 @@
 			)
 			(justify left)
 		)
-		(uuid "945bb2f9-8705-470a-b91d-90bc799d5281")
+		(uuid "316613b4-1ca6-4628-b48a-07fd8fb1ebc2")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 50.8 143.51 0)
 			(effects
@@ -5541,7 +5645,7 @@
 			)
 			(justify right)
 		)
-		(uuid "540c3ae7-7671-48af-8550-fb8e05852020")
+		(uuid "63fe6751-d0dc-4ef3-bfa1-7f8db18cbe50")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 38.1 153.67 0)
 			(effects
@@ -5562,7 +5666,7 @@
 			)
 			(justify right)
 		)
-		(uuid "c417c8a3-8cc0-4146-a64d-40d04e3f4b4f")
+		(uuid "6ce7f777-ea2e-42d8-a534-bc62f01dc1a1")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 38.1 163.83 0)
 			(effects
@@ -5583,7 +5687,7 @@
 			)
 			(justify right)
 		)
-		(uuid "1ea38d17-185f-4d85-b839-3caae2acc14c")
+		(uuid "7c9fd8da-10bf-4f9d-af6c-1e6f129625d9")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 38.1 173.99 0)
 			(effects
@@ -5604,7 +5708,7 @@
 			)
 			(justify right)
 		)
-		(uuid "dcc43a4e-721a-4274-9327-a3ae965dae01")
+		(uuid "aab73e34-c655-4da7-8b1e-a67ea477905e")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 38.1 184.15 0)
 			(effects
@@ -5625,7 +5729,7 @@
 			)
 			(justify right)
 		)
-		(uuid "fa2d2b0c-e5de-41c1-958d-e3d6ba70bd6c")
+		(uuid "45fb4c05-b064-4437-b23c-9cfca9f8f83d")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 38.1 194.31 0)
 			(effects
@@ -5638,7 +5742,7 @@
 	)
 	(global_label "VP"
 		(shape passive)
-		(at 242.57 154.94 270)
+		(at 257.81 154.94 270)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -5646,9 +5750,9 @@
 			)
 			(justify right)
 		)
-		(uuid "7db2797d-475f-474a-8046-80073da5541c")
+		(uuid "1e867bcb-4258-49bf-8517-d6e95ab33797")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 242.57 154.94 0)
+			(at 257.81 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5659,7 +5763,7 @@
 	)
 	(global_label "VREF"
 		(shape passive)
-		(at 283.21 154.94 270)
+		(at 293.37 154.94 270)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -5667,9 +5771,9 @@
 			)
 			(justify right)
 		)
-		(uuid "1af791cb-9034-45a4-b232-3bb3185b9cc5")
+		(uuid "5d01bc73-1150-4dfa-98f7-ba2da11ab435")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 283.21 154.94 0)
+			(at 293.37 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5680,7 +5784,7 @@
 	)
 	(global_label "VBIAS"
 		(shape passive)
-		(at 303.53 154.94 270)
+		(at 311.15 154.94 270)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -5688,9 +5792,9 @@
 			)
 			(justify right)
 		)
-		(uuid "024344c2-1964-4ae9-990e-7cdc890352d2")
+		(uuid "f35f85f7-069f-435b-85bd-9c5b796cb410")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 303.53 154.94 0)
+			(at 311.15 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5701,7 +5805,7 @@
 	)
 	(global_label "V25"
 		(shape passive)
-		(at 323.85 154.94 270)
+		(at 328.93 154.94 270)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -5709,9 +5813,9 @@
 			)
 			(justify right)
 		)
-		(uuid "03f7eba3-4fe6-490b-a420-7262c652703e")
+		(uuid "35aeba04-060c-4ee3-b6ac-03e34524746e")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 323.85 154.94 0)
+			(at 328.93 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5722,7 +5826,7 @@
 	)
 	(global_label "VB4"
 		(shape passive)
-		(at 384.81 154.94 270)
+		(at 382.27 154.94 270)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -5730,9 +5834,9 @@
 			)
 			(justify right)
 		)
-		(uuid "bab04999-04d0-4c5b-978f-5b6bda9b34c4")
+		(uuid "35c2d65d-edf2-4b42-be9c-2d2e871e38b5")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 384.81 154.94 0)
+			(at 382.27 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5751,7 +5855,7 @@
 			)
 			(justify right)
 		)
-		(uuid "308b605b-7498-42db-b45f-fc021565a561")
+		(uuid "1d3b9566-9130-41bb-9e4f-9ea8d6edd077")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 364.49 154.94 0)
 			(effects
@@ -5764,7 +5868,7 @@
 	)
 	(global_label "VB0"
 		(shape passive)
-		(at 344.17 154.94 270)
+		(at 346.71 154.94 270)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -5772,9 +5876,9 @@
 			)
 			(justify right)
 		)
-		(uuid "4a324138-9f13-48b6-9639-5c5a2b1f9e0c")
+		(uuid "8f86ed3a-7cc4-403a-90ef-29f78974dca0")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 344.17 154.94 0)
+			(at 346.71 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5791,7 +5895,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "ffcdbd06-a486-486e-b0f3-8d2650819844")
+		(uuid "762a3bd7-5627-463d-b120-9b58319bc0db")
 	)
 	(label "VREF_DIV"
 		(at 48.26 99.06 0)
@@ -5801,7 +5905,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "7f658615-4475-4f2b-9af9-015c56e878ba")
+		(uuid "8d4745c9-897a-465f-a2a0-604a2608e4cb")
 	)
 	(label "VREF_SN"
 		(at 81.28 111.76 270)
@@ -5811,7 +5915,7 @@
 			)
 			(justify right bottom)
 		)
-		(uuid "164609c6-c6ef-45d1-bda1-d9d326bca2c1")
+		(uuid "59d3306b-d0cb-4fbc-83e2-7de6cb234f5a")
 	)
 	(symbol
 		(lib_id "power:GND")
@@ -5821,7 +5925,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "13be3c29-572c-4109-a6a6-82ffea7164e1")
+		(uuid "6bc31ee9-428e-4f1b-b1b8-723418d112aa")
 		(property "Reference" "#PWR01001"
 			(at 48.26 58.42 0)
 			(effects
@@ -5858,7 +5962,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6c19afc6-73f7-4eb4-80f5-e0adff619179")
+			(uuid "17646462-a5e1-45f5-a00d-da5eae8eb2a3")
 		)
 		(instances
 			(project "touchsynth"
@@ -5877,7 +5981,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "27148250-6e2a-4494-9360-56206d4d9bbc")
+		(uuid "a719eb30-7657-48b7-9292-cbc1439d299c")
 		(property "Reference" "#PWR01002"
 			(at 76.2 63.5 0)
 			(effects
@@ -5914,7 +6018,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "227e3092-5376-44eb-865d-1be8831b68b5")
+			(uuid "6e59e3a5-3534-48cb-a99c-278c2bbcf471")
 		)
 		(instances
 			(project "touchsynth"
@@ -5933,7 +6037,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "ea4e62fc-0766-48ea-b239-dcd41784425d")
+		(uuid "ad79f46b-6846-47ac-9ed8-eee0a04775be")
 		(property "Reference" "#PWR01003"
 			(at 86.36 63.5 0)
 			(effects
@@ -5970,7 +6074,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "78d128db-390c-484a-ab40-44cdce076708")
+			(uuid "69dd4c44-ee27-4fb8-b0e4-381b75aa47b6")
 		)
 		(instances
 			(project "touchsynth"
@@ -5989,7 +6093,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "0874bc00-83ad-466c-93df-3f4e1709a625")
+		(uuid "2f9ad951-e380-46a9-903c-e9ced071af37")
 		(property "Reference" "#PWR01004"
 			(at 124.46 63.5 0)
 			(effects
@@ -6026,7 +6130,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "cd366fc5-cc6c-46af-a9df-b88e1e123325")
+			(uuid "c9bf5b6b-b257-42c2-a455-05c59ddfc71c")
 		)
 		(instances
 			(project "touchsynth"
@@ -6045,7 +6149,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "383dcb23-a906-4078-ae23-d11d92918afd")
+		(uuid "b89227c3-6602-46ed-ad74-78ee54a078a8")
 		(property "Reference" "#PWR01005"
 			(at 142.24 63.5 0)
 			(effects
@@ -6082,7 +6186,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "bcbf08fc-795f-48f7-8d7a-12c7e978968e")
+			(uuid "a9a57bcd-ec06-45fc-b4e2-b3a68a0df72b")
 		)
 		(instances
 			(project "touchsynth"
@@ -6101,7 +6205,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "d5c09494-8c85-47eb-969d-6d486e3f31c4")
+		(uuid "c81cf82d-ec8c-4ff0-a1e4-e01f2c00e026")
 		(property "Reference" "#PWR01006"
 			(at 152.4 63.5 0)
 			(effects
@@ -6138,7 +6242,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "66227f78-4c13-4e73-ba64-9e74804feeef")
+			(uuid "2a0940f5-6a0d-48c3-a550-246dd5cfb2ff")
 		)
 		(instances
 			(project "touchsynth"
@@ -6157,7 +6261,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "e1dd5d76-38d8-480e-a91d-66fd850eb8b4")
+		(uuid "bbfb4065-e50e-404a-8e60-afb0e2bc061a")
 		(property "Reference" "#PWR01007"
 			(at 162.56 55.88 0)
 			(effects
@@ -6194,7 +6298,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3655dcea-67fb-494f-9d4b-0b6ac87184ff")
+			(uuid "29dceaff-1632-452e-a2bc-970d36526c6b")
 		)
 		(instances
 			(project "touchsynth"
@@ -6213,7 +6317,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "3e2b761d-dcb7-4c13-87c1-d2523fe7c2cf")
+		(uuid "53243f95-b3cf-4a7e-afdf-065290fab0a4")
 		(property "Reference" "#PWR01008"
 			(at 30.48 88.9 0)
 			(effects
@@ -6250,7 +6354,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6eecf7ec-923d-45cd-bcb7-2ba865202e0d")
+			(uuid "52cc7a18-96f0-4d17-b9d5-735f29ffb95e")
 		)
 		(instances
 			(project "touchsynth"
@@ -6269,7 +6373,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "e0587597-f043-43b8-adc3-5397ea0c315b")
+		(uuid "cfaed55c-ba88-43a3-81be-5c9f12247c59")
 		(property "Reference" "#PWR01009"
 			(at 30.48 106.68 0)
 			(effects
@@ -6306,7 +6410,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5fc854af-bb5d-4612-9363-62c50971d302")
+			(uuid "a932e375-38fc-4eea-8683-aa89a6a87866")
 		)
 		(instances
 			(project "touchsynth"
@@ -6325,7 +6429,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "b06eaa13-b694-4802-976f-ed6ad65e7771")
+		(uuid "2faa9b18-d727-4e09-b5d9-abfeaaec9fa4")
 		(property "Reference" "#PWR01010"
 			(at 40.64 106.68 0)
 			(effects
@@ -6362,7 +6466,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "16d65805-38bd-4d6b-b8c7-0203b32502a0")
+			(uuid "f1f7d1f4-94e1-4d0b-b141-71b88728fac3")
 		)
 		(instances
 			(project "touchsynth"
@@ -6381,7 +6485,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "73e77a17-51c7-4d68-b89c-f8586eaef981")
+		(uuid "5e656cfb-ac7a-47ed-8157-75456b219616")
 		(property "Reference" "#PWR01011"
 			(at 81.28 116.84 0)
 			(effects
@@ -6418,7 +6522,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a8ab5d23-dcd5-4b7a-94fd-05e116818d1c")
+			(uuid "483630f7-2003-4a56-82e5-c30bfefe4ac7")
 		)
 		(instances
 			(project "touchsynth"
@@ -6437,7 +6541,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "7c5a7bed-78f8-4c0c-be12-3acb92a51493")
+		(uuid "06ac5305-650d-4178-894c-36249afb73fb")
 		(property "Reference" "#PWR01012"
 			(at 121.92 109.22 0)
 			(effects
@@ -6474,7 +6578,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a26f68d7-3697-4fb1-b43d-70f15d1491bd")
+			(uuid "0822bb7f-acb0-4861-a820-e43735a9f110")
 		)
 		(instances
 			(project "touchsynth"
@@ -6493,7 +6597,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "66672540-cbf7-4ac9-b5a4-4ad8744764ce")
+		(uuid "c7ec496a-6d7e-43b3-8867-ee03b4a632fd")
 		(property "Reference" "#PWR01013"
 			(at 132.08 101.6 0)
 			(effects
@@ -6530,7 +6634,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "951d9634-ff84-4d45-b288-80f3bf94e48e")
+			(uuid "c259f6e5-dacb-4905-93a3-edac0931d2ff")
 		)
 		(instances
 			(project "touchsynth"
@@ -6549,7 +6653,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "585fe223-8cc7-4885-9443-08e9d1e77cbd")
+		(uuid "31ed668b-47ad-4cc0-91c5-dc848c6c2f5f")
 		(property "Reference" "#PWR01014"
 			(at 175.26 88.9 0)
 			(effects
@@ -6586,7 +6690,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "08f9fce8-1779-433b-8494-41d45e346530")
+			(uuid "63aefb7d-f996-4514-92b8-3a99cb6b439a")
 		)
 		(instances
 			(project "touchsynth"
@@ -6605,7 +6709,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "10dfac64-7c70-494a-b39a-26c9c2947b66")
+		(uuid "482440a7-c1f3-4bae-a9d5-34ee43362899")
 		(property "Reference" "#PWR01015"
 			(at 175.26 106.68 0)
 			(effects
@@ -6642,7 +6746,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "43d95954-7e50-4a97-8508-4512e92593a2")
+			(uuid "e63eeff9-2f80-4ae3-a1fc-f1d12a0ee967")
 		)
 		(instances
 			(project "touchsynth"
@@ -6661,7 +6765,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "1ee822b8-6374-4ba0-a217-3719fac380be")
+		(uuid "c01bd43e-e103-426e-b7a4-8253765a7c09")
 		(property "Reference" "#PWR01016"
 			(at 185.42 106.68 0)
 			(effects
@@ -6698,7 +6802,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a7e47232-bf17-4082-93ef-558d3bf7ab5a")
+			(uuid "ae50ebe7-6157-4af6-b9c4-105a03f7a976")
 		)
 		(instances
 			(project "touchsynth"
@@ -6717,7 +6821,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "5b7286ad-2022-4e18-a12b-051cc66c1023")
+		(uuid "c7aa1771-b692-42a4-87e6-7e68c7621273")
 		(property "Reference" "#PWR01017"
 			(at 226.06 88.9 0)
 			(effects
@@ -6754,7 +6858,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "10c8e48c-7806-4792-a10b-6675ec2ddbe6")
+			(uuid "cd2e0db8-f911-45a6-9fd0-cb3fdc402a03")
 		)
 		(instances
 			(project "touchsynth"
@@ -6773,7 +6877,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "d30223b8-8b64-49fd-ab7c-bb0f0ed2d04e")
+		(uuid "5f09e133-9e97-4923-9542-e9b0b5878aa4")
 		(property "Reference" "#PWR01018"
 			(at 226.06 106.68 0)
 			(effects
@@ -6810,7 +6914,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "7364131a-83ea-4431-9203-8dd344b5c116")
+			(uuid "40ef8edd-250a-4be5-815c-ef1d64477f18")
 		)
 		(instances
 			(project "touchsynth"
@@ -6829,7 +6933,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "3310cfb1-917b-433f-ba92-7167433e613c")
+		(uuid "7c5dad61-eaf5-4874-a297-d8f1ef068409")
 		(property "Reference" "#PWR01019"
 			(at 236.22 106.68 0)
 			(effects
@@ -6866,7 +6970,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b81245be-ce95-4302-9155-b3f9e4d549be")
+			(uuid "dae28d23-0d0a-4858-b114-2b5d6dd20ca6")
 		)
 		(instances
 			(project "touchsynth"
@@ -6885,7 +6989,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "5cafe6e1-896d-4afe-87db-5353fcdfe8a6")
+		(uuid "5b244ba3-4e69-43e5-9285-7200493f267d")
 		(property "Reference" "#PWR01020"
 			(at 71.12 153.67 0)
 			(effects
@@ -6922,7 +7026,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "39a0b7e0-0efb-424c-a1a0-880b9ee3cf9c")
+			(uuid "cac6ad51-4c47-4d1c-b54d-56bbbceabac0")
 		)
 		(instances
 			(project "touchsynth"
@@ -6941,7 +7045,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "2f9a39e4-a33e-4602-92a3-b6ace0ac93dd")
+		(uuid "fcb48c9e-bb94-4cda-ae46-0e0fb7383c4d")
 		(property "Reference" "#PWR01021"
 			(at 71.12 163.83 0)
 			(effects
@@ -6978,7 +7082,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "146245c1-0348-4afa-9375-9acae91d05fc")
+			(uuid "9de161df-2a66-450a-a870-76c823364072")
 		)
 		(instances
 			(project "touchsynth"
@@ -6997,7 +7101,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "e3a9141a-96ca-475e-acfc-da254430601f")
+		(uuid "10def3a4-9490-4b5b-ba9c-25e06e47ad85")
 		(property "Reference" "#PWR01022"
 			(at 71.12 173.99 0)
 			(effects
@@ -7034,7 +7138,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0f4b8d9f-840b-45b1-8a8b-ea12c18dc576")
+			(uuid "941a91fc-c762-4dcc-9334-f50adf0bf9a0")
 		)
 		(instances
 			(project "touchsynth"
@@ -7053,7 +7157,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "78a0ae28-1345-4a0c-89a0-b11fa69725e8")
+		(uuid "ee44656b-3d89-4d46-b5d0-95055d008fbf")
 		(property "Reference" "#PWR01023"
 			(at 71.12 184.15 0)
 			(effects
@@ -7090,7 +7194,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "c8f661d5-696c-48a6-bbb1-e8b2cbe9319a")
+			(uuid "8793878c-1f9d-47a7-bc40-e02767d726a9")
 		)
 		(instances
 			(project "touchsynth"
@@ -7109,7 +7213,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "a30fcdc8-077a-481b-b28f-6c4ec7dceefc")
+		(uuid "64b91848-74a1-4579-b10a-289e2e248003")
 		(property "Reference" "#PWR01024"
 			(at 71.12 194.31 0)
 			(effects
@@ -7146,7 +7250,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "492899d2-76cc-48dd-aa5f-3e3ebb2e99dc")
+			(uuid "f7550d31-3ead-4d69-ba34-bc04f6799a06")
 		)
 		(instances
 			(project "touchsynth"
@@ -7165,7 +7269,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "ebce36bb-d4ab-46ef-838d-905fe24d8871")
+		(uuid "bd82bf41-0579-4b5b-a62f-cb3ebfaad2b6")
 		(property "Reference" "#PWR01025"
 			(at 50.8 204.47 0)
 			(effects
@@ -7202,7 +7306,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "af4d9586-f430-41d3-a5f4-ea06bb9272cf")
+			(uuid "0479d0ca-9c3b-4df5-b469-1ed409d2818d")
 		)
 		(instances
 			(project "touchsynth"
@@ -7221,7 +7325,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "55d617bf-b8b2-420b-9052-aa45484c2dab")
+		(uuid "9a58a9bd-e436-4eed-8d8f-2a1e8555408a")
 		(property "Reference" "#PWR01026"
 			(at 222.25 154.94 0)
 			(effects
@@ -7258,7 +7362,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "9576d711-c6bc-4f48-94ad-85af7e1c9df0")
+			(uuid "9e124751-eb64-463e-884e-caa1970dd6cc")
 		)
 		(instances
 			(project "touchsynth"
@@ -7270,16 +7374,16 @@
 		)
 	)
 	(symbol
-		(lib_id "power:+5V")
-		(at 262.89 154.94 180)
+		(lib_id "power:GND")
+		(at 240.03 154.94 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "f8e782b8-a1aa-44bb-a167-c8940bbbe43a")
+		(uuid "2fc84134-21aa-44ec-9f58-1334cfacb7a1")
 		(property "Reference" "#PWR01027"
-			(at 262.89 154.94 0)
+			(at 240.03 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7287,8 +7391,8 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "+5V"
-			(at 262.89 159.94 0)
+		(property "Value" "GND"
+			(at 240.03 159.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7296,7 +7400,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 262.89 154.94 0)
+			(at 240.03 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7305,7 +7409,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 262.89 154.94 0)
+			(at 240.03 154.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7314,12 +7418,68 @@
 			)
 		)
 		(pin "1"
-			(uuid "193f66e6-f905-4eee-a5ab-aca680677891")
+			(uuid "b93a67bb-1995-4c8f-b434-e78d6758ff8e")
 		)
 		(instances
 			(project "touchsynth"
 				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6/76816264-039e-56e3-93df-cb80e947fd10"
 					(reference "#PWR01027")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:+5V")
+		(at 275.59 154.94 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(uuid "e00fe2b1-1831-4cbd-9deb-0302526e8d92")
+		(property "Reference" "#PWR01028"
+			(at 275.59 154.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "+5V"
+			(at 275.59 159.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 275.59 154.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 275.59 154.94 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "ce38ee93-b549-463c-b7b4-78f8908234fc")
+		)
+		(instances
+			(project "touchsynth"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6/76816264-039e-56e3-93df-cb80e947fd10"
+					(reference "#PWR01028")
 					(unit 1)
 				)
 			)
@@ -7333,7 +7493,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "2a6fc58b-0b0c-45fb-a461-61e53e8f2ed7")
+		(uuid "63581365-88dc-4b02-87c4-38cabe752c50")
 		(property "Reference" "#FLG0101"
 			(at 48.26 53.42 0)
 			(effects
@@ -7370,7 +7530,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d7027e70-e7df-46d7-b68d-177b0f4d73c6")
+			(uuid "3e72d7d3-849e-4074-8067-70ccc42c9246")
 		)
 		(instances
 			(project "touchsynth"
@@ -7389,7 +7549,7 @@
 		(in_bom no)
 		(on_board yes)
 		(dnp no)
-		(uuid "9557a59d-f90d-4006-b11c-4aebb8b811b6")
+		(uuid "33931f79-5198-4952-abfe-9029b4910529")
 		(property "Reference" "#FLG0102"
 			(at 99.06 50.88 0)
 			(effects
@@ -7426,7 +7586,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "053ec4bc-e315-47c2-8375-09b26a6b173b")
+			(uuid "315975db-9bce-4509-b97e-5a114414db0e")
 		)
 		(instances
 			(project "touchsynth"
@@ -7441,121 +7601,121 @@
 		(at 30.48 99.06)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "ea50883e-5a1e-4af8-a129-7a346fd0c301")
+		(uuid "49553e76-ccc6-4acb-8269-a160010773f5")
 	)
 	(junction
 		(at 40.64 99.06)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "c35969dc-54d9-417a-bee0-b6f7f62f4e56")
+		(uuid "298a276a-24a4-4199-8282-e6e659bd4fe4")
 	)
 	(junction
 		(at 50.8 153.67)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "3e34e3da-1afb-445d-85c9-4da5ce8dc11a")
+		(uuid "4a073411-9815-4410-956f-aefbc9be040a")
 	)
 	(junction
 		(at 50.8 163.83)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "d10c118c-467a-4dd8-b1ea-575c92428f5c")
+		(uuid "c57f39d9-700b-4ae4-9058-c9c8475f647b")
 	)
 	(junction
 		(at 50.8 173.99)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "e8c0628e-5242-4cf7-895a-2b3d381b14bc")
+		(uuid "f0ba9cb9-abdb-45fc-a872-316c6bfe1861")
 	)
 	(junction
 		(at 50.8 184.15)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "1689688f-856d-485d-86e6-2a879b8a97fc")
+		(uuid "d1538349-38ff-4bd2-b3c5-0f58d81991b1")
 	)
 	(junction
 		(at 50.8 194.31)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "39a12337-cdf6-492c-b7e7-8ca34bc0ed5a")
+		(uuid "ec096c51-7fa6-48ff-8658-d8d11712a5fc")
 	)
 	(junction
 		(at 73.66 101.6)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "8ed61dc3-890e-4ca5-85ab-c15e230d15fd")
+		(uuid "2ce254e8-ab30-49c6-a59d-628dc33f09f3")
 	)
 	(junction
 		(at 76.2 55.88)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "1ebeeb28-b4b7-4710-9be5-f4f75d0a4251")
+		(uuid "7d27f29f-3aab-48ac-abeb-424f55b891e4")
 	)
 	(junction
 		(at 81.28 101.6)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "412de684-97df-4564-ab1c-b66ec7bae2ec")
+		(uuid "12bccb2f-b87d-4d83-8357-523ec4354e17")
 	)
 	(junction
 		(at 81.28 109.22)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "13f94a28-5992-4af7-922c-35a431d5ac52")
+		(uuid "5010b518-fdd3-4136-a37f-2674969c70e2")
 	)
 	(junction
 		(at 86.36 55.88)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "3fde855a-d4ca-4093-9bcd-9075bb17964f")
+		(uuid "38d58381-8018-4eb0-ace7-c16261f22e72")
 	)
 	(junction
 		(at 106.68 55.88)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "763103ba-c95c-4213-8549-9de83b09ed19")
+		(uuid "2fefc234-57dd-4d3d-aac4-e7b1fb73e9dc")
 	)
 	(junction
 		(at 121.92 93.98)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "b5e4e170-8178-402e-be09-d13256066b34")
+		(uuid "3258170d-5854-4cba-8fce-8758b64e3311")
 	)
 	(junction
 		(at 142.24 55.88)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "d426ada7-6db5-48b3-8e6e-9355a850dc3b")
+		(uuid "14aeb064-ae30-40ad-b80c-d86b5e69e754")
 	)
 	(junction
 		(at 152.4 55.88)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "bb3054eb-66b5-4aec-ae44-a2477d3abce8")
+		(uuid "334e0541-6ca6-4465-a025-7f2f2e8c145d")
 	)
 	(junction
 		(at 175.26 99.06)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "38f432b1-a7a1-478b-8ec4-8f880e39a6ad")
+		(uuid "b1c9d430-33fa-42c2-929f-638a51dbd98a")
 	)
 	(junction
 		(at 185.42 99.06)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "2e033a60-b251-4adf-b6a2-200e57436c4a")
+		(uuid "e5f39c72-60ee-48a0-b0c4-e4e78c8b718a")
 	)
 	(junction
 		(at 226.06 99.06)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "04c354ed-c362-47ba-8409-15fd42eedda1")
+		(uuid "640229a6-0226-4090-bbe5-ba5fb716df75")
 	)
 	(junction
 		(at 236.22 99.06)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "c217a0a0-d911-44a4-851e-38ef18151fbd")
+		(uuid "c4bd3ad6-f067-40b1-a4cc-2fb470fff7f9")
 	)
 	(text "Power, references and ladder bias"
 		(exclude_from_sim no)
@@ -7568,7 +7728,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "4b4d9b38-89d5-4f69-85bc-60af6bfa7556")
+		(uuid "643abef4-e9d8-49ba-a13a-cc9e44b33f7c")
 	)
 	(text "Input, reverse protection, 5 V"
 		(exclude_from_sim no)
@@ -7581,7 +7741,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "cc3f9a07-9f5f-4ddb-8a3a-3711d2298e21")
+		(uuid "0ac994aa-be09-40c5-819e-9adfb74cc42b")
 	)
 	(text "References: VREF 4.5 V (buffered), VBIAS 1.5 V, V25 2.5 V"
 		(exclude_from_sim no)
@@ -7594,7 +7754,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "a8bdae0f-e2b3-44b4-8d62-18d866afea9a")
+		(uuid "2726eb84-f33c-4720-b2df-bf75e2f2204d")
 	)
 	(text "Ladder bias chain (from V+; VB0...VB4 = 2.4...6.4 V at V+ = 8.6 V)"
 		(exclude_from_sim no)
@@ -7607,7 +7767,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "69850079-e264-455a-8412-fac24e2bd1e1")
+		(uuid "c133e2f8-9bbd-4a80-bf85-60bf4d64d1eb")
 	)
 	(text "Test points"
 		(exclude_from_sim no)
@@ -7620,7 +7780,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "30d91a2c-1589-4153-b604-efdce726aade")
+		(uuid "8f9d0901-28ba-4303-8302-a5daec0a6a63")
 	)
 	(polyline
 		(pts
@@ -7634,7 +7794,7 @@
 		(fill
 			(type none)
 		)
-		(uuid "804b02a1-396f-45ce-8b0c-2a87ff0cb5ed")
+		(uuid "5bcbd633-4649-4754-938a-0ef5e7946a9b")
 	)
 	(polyline
 		(pts
@@ -7648,7 +7808,7 @@
 		(fill
 			(type none)
 		)
-		(uuid "a1995dc8-5e6d-4be2-8cd8-1ab405cbbbec")
+		(uuid "6d954ba5-eb68-43d1-9538-b09baf4755fa")
 	)
 	(polyline
 		(pts
@@ -7662,7 +7822,7 @@
 		(fill
 			(type none)
 		)
-		(uuid "754d49d3-8b0e-4a83-ab93-3130b28a6f6b")
+		(uuid "1c8d14f4-823b-49ec-8ebd-aaa03f78a0a6")
 	)
 	(polyline
 		(pts
@@ -7676,6 +7836,6 @@
 		(fill
 			(type none)
 		)
-		(uuid "b2e2b513-c846-4029-8750-deb3f9939f89")
+		(uuid "5da39942-7816-4a31-b518-29ee3af1548a")
 	)
 )

@@ -18,8 +18,8 @@ def ref(sim):
     raise KeyError(sim)
 
 
-def tp(net):
-    return [p.ref for p in D.PARTS if p.lib_id == "Connector:TestPoint" and p.pins["1"] == net][0]
+def tp(net, k=0):
+    return [p.ref for p in D.PARTS if p.lib_id == "Connector:TestPoint" and p.pins["1"] == net][k]
 
 
 def dec(u):
@@ -45,8 +45,10 @@ def hpart(sh, r, x1, y, fields="above", flip=False):
 
 
 def tps(sh, nets, x, y, step=20.32):
+    seen = {}
     for i, n in enumerate(nets):
-        sh.place(tp(n), x + i * step, y, fields="right")
+        seen[n] = seen.get(n, -1) + 1
+        sh.place(tp(n, seen[n]), x + i * step, y, fields="right")
 
 
 def supply(sh, u, unit, x, y, cap):
@@ -137,7 +139,7 @@ def sheet_power(sh):
         sh.gnd((ref(cap), 2))
         yp = yb + U
     sh.heading("Test points", 215, 134, W)
-    tps(sh, ("GND", "VP", "+5V", "VREF", "VBIAS", "V25", "VB0", "VB2", "VB4"), 222.25, 152.4, 20.32)
+    tps(sh, ("GND", "GND", "VP", "+5V", "VREF", "VBIAS", "V25", "VB0", "VB2", "VB4"), 222.25, 152.4, 17.78)
 
 
 # ============================================================================ shared: CV filter + V->I

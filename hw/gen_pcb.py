@@ -32,10 +32,10 @@ def duid(*parts):
 KEYS = D.KEYS
 WHITE = [k for k in KEYS[:13] if "#" not in k]
 BLACK = [k for k in KEYS[:13] if "#" in k]
-WX0, WPITCH, WY = 8.25, 10.5, 82.0            # white key centres
-BY = 64.0                                     # black key row
-FX, FYS = 93.5, (64.0, 75.0, 86.0)            # function pads SHIFT, -, +
-LED_Y = 55.5
+WX0, WPITCH, WY = 8.25, 10.5, 83.5            # white key centres
+BY = 67.0                                     # black key row
+FX, FYS = 93.5, (65.75, 76.225, 86.7)         # function pads SHIFT, -, +: frames flush with the keybed
+LED_Y = 60.0
 
 
 def key_name(p):
@@ -65,8 +65,30 @@ DIGITAL_ORDER = [
     "MCU (CH32V003 / CH32V002, hand-soldered)", "MIDI in (DNP)", "Touch multiplexers",
     "Shift registers (LEDs + trim DAC)", "VCA trim DAC (8-bit R-2R)",
 ]
-CONNECTORS = {"PWR 9-12V": (9.4, 5.0), "LINE OUT": (59.0, 5.0), "SWIO": (74.0, 5.0), "MIDI IN": (87.0, 5.0)}
+CONNECTORS = {"PWR 9-12V": (9.4, 5.0), "LINE OUT": (66.0, 5.0), "MIDI IN": (77.0, 5.0), "SWIO": (85.0, 5.0)}
+SCOPE_GND = {"left": (20.0, 5.0), "right": (57.0, 5.0)}   # well clear of the headers
 PIN_NAMES = {"VIN": "+", "GND": "-", "LINEOUT": "OUT", "+5V": "5V", "MIDI_4": "4", "MIDI_5": "5"}
+# In2.Cu: "NET@region" -> polygon (0.5 mm gaps between the regions): VP under the analog area, +5V under the
+# right column and the keys I/O row (L shape), GND under the keyboard
+PLANES_IN2 = {
+    "VP@analog": [(0.3, 0.3), (75.25, 0.3), (75.25, 44.75), (0.3, 44.75)],
+    "+5V@digital": [(75.75, 0.3), (99.7, 0.3), (99.7, 54.0), (0.3, 54.0), (0.3, 45.25), (75.75, 45.25)],
+    "GND@keys": [(0.3, 54.5), (99.7, 54.5), (99.7, 99.7), (0.3, 99.7)],
+}
+
+
+def in_poly(pts, x, y, margin=0.0):
+    """point inside the polygon and at least `margin` away from its edges"""
+    inside = False
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1]):
+        if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+            inside = not inside
+        if margin:
+            dx, dy = x1 - x0, y1 - y0
+            t = max(0.0, min(1.0, ((x - x0) * dx + (y - y0) * dy) / (dx * dx + dy * dy)))
+            if math.hypot(x - x0 - t * dx, y - y0 - t * dy) < margin:
+                return False
+    return inside
 HOLES = [(4.0, 4.0), (96.0, 4.0), (4.0, 96.0), (96.0, 96.0)]
 
 
@@ -152,9 +174,9 @@ def zone(board, layer, pts, net=None, rule_area=False, name=""):
             z.SetDoNotAllowFootprints(False)
     else:
         z.SetNet(net)
-        z.SetLocalClearance(MM(0.3))
-        z.SetMinThickness(MM(0.25))
-        z.SetThermalReliefGap(MM(0.3))
+        z.SetLocalClearance(MM(0.2))
+        z.SetMinThickness(MM(0.2))
+        z.SetThermalReliefGap(MM(0.25))
         z.SetThermalReliefSpokeWidth(MM(0.4))
         z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
     if name:
@@ -224,6 +246,10 @@ def order_by_connectivity(parts):
 POWER_NETS = {"GND", "VP", "+5V"}
 
 
+def tp_label_w(p):
+    return 0.4 + len(p.value) * 0.8
+
+
 def _geom(fp, rot):
     """bbox (relative to position) and pad offsets for a rotation"""
     fp.SetOrientationDegrees(rot)
@@ -234,14 +260,17 @@ def _geom(fp, rot):
     return box, pads
 
 
-def greedy_place(board, fps, placed, step=0.5, clr=0.15):
+def greedy_place(board, fps, placed, step=0.5, clr=0.3):
     import pcb_place as PP
     rects = []
     padpos = {}                                        # net -> [(x, y)]
     def add_placed(p, fp):
         bb = fp.GetBoundingBox(False)
-        rects.append((pcbnew.ToMM(bb.GetLeft()), pcbnew.ToMM(bb.GetTop()),
-                      pcbnew.ToMM(bb.GetRight()), pcbnew.ToMM(bb.GetBottom())))
+        r = (pcbnew.ToMM(bb.GetLeft()), pcbnew.ToMM(bb.GetTop()), pcbnew.ToMM(bb.GetRight()), pcbnew.ToMM(bb.GetBottom()))
+        if p.lib_id == "Connector:TestPoint" and not (p.note or "").startswith("scope ground"):
+            cy = pcbnew.ToMM(fp.GetPosition().y)                      # keep the label area free as well
+            r = (r[0], min(r[1], cy - 0.55), r[2] + tp_label_w(p), max(r[3], cy + 0.55))
+        rects.append(r)
         for pd in fp.Pads():
             n = p.pins.get(pd.GetNumber())
             if n:
@@ -262,12 +291,13 @@ def greedy_place(board, fps, placed, step=0.5, clr=0.15):
     # decoupling caps: target = the supply pin of their IC
     dec_target, dec_block = {}, {}
     for p in todo:
-        if p.note and p.note.startswith("decoupling "):
-            ic = p.note.split()[1]
+        ic = PP.dec_ic(p)
+        if ic:                                          # target: the IC pin on the cap's supply net
             icp, icfp = fps[ic]
             dec_block[p.ref] = PP.block_of(icp)
+            supply = [n for n in p.pins.values() if n != "GND"][0]
             for pd in icfp.Pads():
-                if icp.pins.get(pd.GetNumber()) == "VP":
+                if icp.pins.get(pd.GetNumber()) == supply:
                     dec_target[p.ref] = (pcbnew.ToMM(pd.GetPosition().x), pcbnew.ToMM(pd.GetPosition().y))
     while todo:
         def links(p):
@@ -283,37 +313,51 @@ def greedy_place(board, fps, placed, step=0.5, clr=0.15):
         else:
             region = PP.place_rect(blk)
         rots = (0, 90) if len(p.pins) <= 3 else (0, 90, 180, 270)
+        if p.lib_id == "Connector:TestPoint":
+            rots = (0,)
         geoms = {r: _geom(fp, r) for r in rots}
-        near = [r for r in rects if r[2] > region[0] - 8 and r[0] < region[2] + 8 and r[3] > region[1] - 8
-                and r[1] < region[3] + 8]
-        best = None
-        x0, y0, x1, y1 = region
-        nx, ny = int((x1 - x0) / step) + 1, int((y1 - y0) / step) + 1
-        for rot, (box, pads) in geoms.items():
-            for i in range(nx):
-                x = x0 + i * step
-                if x + box[0] < x0 - 0.01 or x + box[2] > x1 + 0.01:
-                    continue
-                for j in range(ny):
-                    y = y0 + j * step
-                    if y + box[1] < y0 - 0.01 or y + box[3] > y1 + 0.01:
+        if p.lib_id == "Connector:TestPoint":             # reserve the net-name label right of the pad
+            (bx0, by0, bx1, by1), pads = geoms[0]
+            geoms[0] = ((bx0, min(by0, -0.55), bx1 + tp_label_w(p), max(by1, 0.55)), pads)
+        sx0, sy0, sx1, sy1 = PP.side_rect(blk if blk else dec_block[p.ref])   # never across analog / digital
+        sx0, sy0, sx1, sy1 = sx0 + PP.STREET, sy0 + PP.STREET, sx1 - PP.STREET, sy1 - PP.STREET
+        regions = [region] + [(max(region[0] - g_, sx0), max(region[1] - g_, sy0), min(region[2] + g_, sx1),
+                               min(region[3] + g_, sy1)) for g_ in (3.0, 8.0, 20.0)]   # fallback: spill over
+        if p.lib_id == "Connector:TestPoint":
+            regions.append((23.0, 2.2, 47.0, 7.8))         # last resort: the free strip on the top edge
+        for region in regions:
+            near = [r for r in rects if r[2] > region[0] - 8 and r[0] < region[2] + 8 and r[3] > region[1] - 8
+                    and r[1] < region[3] + 8]
+            best = None
+            x0, y0, x1, y1 = region
+            nx, ny = int((x1 - x0) / step) + 1, int((y1 - y0) / step) + 1
+            for rot, (box, pads) in geoms.items():
+                for i in range(nx):
+                    x = x0 + i * step
+                    if x + box[0] < x0 - 0.01 or x + box[2] > x1 + 0.01:
                         continue
-                    bx0, by0, bx1, by1 = x + box[0] - clr, y + box[1] - clr, x + box[2] + clr, y + box[3] + clr
-                    if any(bx0 < r[2] and r[0] < bx1 and by0 < r[3] and r[1] < by1 for r in near):
-                        continue
-                    cost = 0.0
-                    if p.ref in dec_target:
-                        tx, ty = dec_target[p.ref]
-                        cost = min(math.hypot(x + px - tx, y + py - ty) for num, px, py in pads)
-                    else:
-                        for num, px, py in pads:
-                            n = p.pins.get(num)
-                            if n in POWER_NETS or n not in padpos:
-                                continue
-                            cost += min(math.hypot(x + px - qx, y + py - qy) for qx, qy in padpos[n])
-                    cost += 0.001 * (x + y)                    # tie-break: top-left
-                    if best is None or cost < best[0]:
-                        best = (cost, x, y, rot)
+                    for j in range(ny):
+                        y = y0 + j * step
+                        if y + box[1] < y0 - 0.01 or y + box[3] > y1 + 0.01:
+                            continue
+                        bx0, by0, bx1, by1 = x + box[0] - clr, y + box[1] - clr, x + box[2] + clr, y + box[3] + clr
+                        if any(bx0 < r[2] and r[0] < bx1 and by0 < r[3] and r[1] < by1 for r in near):
+                            continue
+                        cost = 0.0
+                        if p.ref in dec_target:
+                            tx, ty = dec_target[p.ref]
+                            cost = min(math.hypot(x + px - tx, y + py - ty) for num, px, py in pads)
+                        else:
+                            for num, px, py in pads:
+                                n = p.pins.get(num)
+                                if n in POWER_NETS or n not in padpos:
+                                    continue
+                                cost += min(math.hypot(x + px - qx, y + py - qy) for qx, qy in padpos[n])
+                        cost += 0.001 * (x + y)                    # tie-break: top-left
+                        if best is None or cost < best[0]:
+                            best = (cost, x, y, rot)
+            if best is not None:
+                break
         if best is None:
             print(f"WARNING: no space for {p.ref} ({p.value}) in block {blk}")
             continue
@@ -328,7 +372,9 @@ def greedy_place(board, fps, placed, step=0.5, clr=0.15):
 def build(route=False, passes=30):
     board = pcbnew.NewBoard(PCB)
     ds = board.GetDesignSettings()
-    ds.SetCopperLayerCount(2)
+    ds.SetCopperLayerCount(4)
+    board.SetLayerType(pcbnew.In1_Cu, pcbnew.LT_POWER)   # planes: Freerouting keeps signals on F.Cu / B.Cu
+    board.SetLayerType(pcbnew.In2_Cu, pcbnew.LT_POWER)
     try:
         nc = ds.m_NetSettings.GetDefaultNetclass()
         nc.SetTrackWidth(MM(0.25)); nc.SetClearance(MM(0.2))
@@ -404,7 +450,7 @@ def build(route=False, passes=30):
             kt.SetText(k); kt.SetLayer(pcbnew.F_SilkS)
             kt.SetTextSize(pcbnew.VECTOR2I_MM(1.5, 1.5)); kt.SetTextThickness(MM(0.25))
             kx, ky = key_xy(k)
-            kt.SetPosition(pcbnew.VECTOR2I_MM(kx, ky + (5.0 if k in WHITE else 3.6 if k in BLACK else 2.2)))
+            kt.SetPosition(pcbnew.VECTOR2I_MM(kx, ky + (4.0 if k in WHITE else 3.6 if k in BLACK else 2.2)))
             board.Add(kt)
     leds = [p for p, fp in fps.values() if p.lib_id == "Device:LED"]
     for p in leds:
@@ -445,14 +491,12 @@ def build(route=False, passes=30):
                 pt.SetTextSize(pcbnew.VECTOR2I_MM(0.8, 0.8)); pt.SetTextThickness(MM(0.15))
                 pt.SetPosition(pcbnew.VECTOR2I(pad.GetPosition().x, MM(y + 2.0)))
                 board.Add(pt)
-    tps = [p for p, fp in fps.values() if p.lib_id == "Connector:TestPoint"]
-    for i, p in enumerate(tps):                       # one row, net names written downwards
-        put(p.ref, 15.0 + i * 2.05, 2.7); placed.add(p.ref)
-        v = fps[p.ref][1].Value()
-        v.SetTextSize(pcbnew.VECTOR2I_MM(0.8, 0.8)); v.SetTextThickness(MM(0.15))
-        v.SetKeepUpright(False)
-        v.SetTextAngleDegrees(90); v.SetHorizJustify(pcbnew.GR_TEXT_H_ALIGN_RIGHT)
-        v.SetPosition(pcbnew.VECTOR2I_MM(15.0 + i * 2.05, 3.75))
+    # scope ground pins on the top edge (the SMD test points are placed inside their blocks, see greedy_place)
+    for p, fp in fps.values():
+        if p.note and p.note.startswith("scope ground"):
+            x, y = SCOPE_GND[p.note.split()[-1]]
+            put(p.ref, x, y); placed.add(p.ref)
+            fp.Value().SetPosition(pcbnew.VECTOR2I_MM(x, y - 2.3))
     for i, (x, y) in enumerate(HOLES):
         h = load_fp("MountingHole:MountingHole_3.2mm_M3")
         h.SetReference(f"H{i + 1}"); h.SetValue("M3")
@@ -469,6 +513,13 @@ def build(route=False, passes=30):
     for ref, (x, y, rot) in PP.anchors().items():
         put(ref, x, y, rot); placed.add(ref)
     greedy_place(board, fps, placed)
+    for p, fp in fps.values():                        # test point labels: right of the pad
+        if p.lib_id == "Connector:TestPoint" and not (p.note or "").startswith("scope ground"):
+            v = fp.Value()
+            v.SetKeepUpright(False); v.SetTextAngleDegrees(0)
+            v.SetHorizJustify(pcbnew.GR_TEXT_H_ALIGN_LEFT)
+            pos = fp.GetPosition()
+            v.SetPosition(pcbnew.VECTOR2I(pos.x + MM(0.95), pos.y))
 
     # vias inside the touch pads (touch lines run on B.Cu); no F.Cu tracks across the keyboard
     for p, fp in fps.values():
@@ -483,7 +534,7 @@ def build(route=False, passes=30):
             board.Add(v)
     # (a strip between the white keys and the function pads stays open for the function-key LEDs)
     for x0, x1 in ((0.5, 87.1), (88.7, 99.5)):
-        kz = zone(board, pcbnew.F_Cu, [(x0, 58.0), (x1, 58.0), (x1, 99.5), (x0, 99.5)], rule_area=True)
+        kz = zone(board, pcbnew.F_Cu, [(x0, 61.0), (x1, 61.0), (x1, 99.5), (x0, 99.5)], rule_area=True)
         kz.SetDoNotAllowTracks(True)
         if hasattr(kz, "SetDoNotAllowZoneFills"):
             kz.SetDoNotAllowZoneFills(False)
@@ -498,12 +549,22 @@ def build(route=False, passes=30):
     edge = [(0.3, 0.3), (W - 0.3, 0.3), (W - 0.3, H - 0.3), (0.3, H - 0.3)]
     zone(board, pcbnew.F_Cu, edge, nets["GND"], name="GND_F")
     zone(board, pcbnew.B_Cu, edge, nets["GND"], name="GND_B")
+    zone(board, pcbnew.In1_Cu, edge, nets["GND"], name="GND_IN1")          # solid ground plane
+    for name, pts in PLANES_IN2.items():                                    # split power plane
+        zone(board, pcbnew.In2_Cu, pts, nets[name.split("@")[0]], name=name.replace("@", "_IN2_"))
+    # below each touch pad: no pour; no foreign tracks either (crosstalk) except in a 2.4 mm strip at the top of
+    # the pad where the key's own via sits and its touch line arrives
     for p, fp in fps.values():
         if p.ref.startswith("KEY"):
             bb = fp.GetBoundingBox(False)
             x0, y0 = pcbnew.ToMM(bb.GetLeft()), pcbnew.ToMM(bb.GetTop())
             x1, y1 = pcbnew.ToMM(bb.GetRight()), pcbnew.ToMM(bb.GetBottom())
-            zone(board, pcbnew.B_Cu, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], rule_area=True)
+            ys = pcbnew.ToMM(list(fp.Pads())[0].GetBoundingBox().GetTop()) + 2.4
+            zone(board, pcbnew.B_Cu, [(x0, y0), (x1, y0), (x1, ys), (x0, ys)], rule_area=True, name=KEY_AREA)
+            kk = zone(board, pcbnew.B_Cu, [(x0, ys), (x1, ys), (x1, y1), (x0, y1)], rule_area=True, name=KEY_KEEPOUT)
+            kk.SetDoNotAllowTracks(True); kk.SetDoNotAllowVias(True)
+            for layer in (pcbnew.In1_Cu, pcbnew.In2_Cu):                # no plane under the pad (sensitivity)
+                zone(board, layer, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], rule_area=True, name="KEY_CUTOUT")
 
     # silkscreen art: block frames, keybed, bottom strip, back side
     import pcb_art as A
@@ -526,22 +587,277 @@ def build(route=False, passes=30):
         do_route(board, passes)
 
 
-def do_route(board, passes):
+KEY_AREA = "KEY_NOPOUR"
+KEY_KEEPOUT = "KEY_KEEPOUT"
+
+
+def key_areas(board):
+    """the no-pour areas under the touch pads (B.Cu); older boards: unnamed B.Cu rule areas that allow tracks"""
+    return [z for z in board.Zones() if z.GetIsRuleArea() and (z.GetZoneName() == KEY_AREA or (
+        not z.GetZoneName() and z.GetLayer() == pcbnew.B_Cu and not z.GetDoNotAllowTracks()))]
+
+
+def freeroute(board, passes):
+    """one Freerouting run on the whole board (existing tracks are kept as the starting point). The key no-pour
+    areas are removed meanwhile: the DSN export would turn them into full keep-outs and block the touch lines."""
+    held = key_areas(board)
+    for z in held:
+        board.Remove(z)                                # detached, re-added unchanged after the import
     dsn = os.path.join(OUT, "touchsynth.dsn")
     ses = os.path.join(OUT, "touchsynth.ses")
-    ok = pcbnew.ExportSpecctraDSN(board, dsn)
-    print("DSN export:", ok)
+    print("DSN export:", pcbnew.ExportSpecctraDSN(board, dsn))
     jar = os.path.join(os.path.dirname(HERE), "tools", "freerouting-1.9.0.jar")
-    subprocess.run(["java", "-jar", jar, "-de", dsn, "-do", ses, "-mp", str(passes), "-dct", "0"], check=True)
-    ok = pcbnew.ImportSpecctraSES(board, ses)
-    print("SES import:", ok)
+    subprocess.run(["java", "-jar", jar, "-de", dsn, "-do", ses, "-mp", str(passes), "-mt", "0", "-dct", "0"], check=True)
+    print("SES import:", pcbnew.ImportSpecctraSES(board, ses))
+    for z in held:
+        board.Add(z)
+
+
+def stitch_planes(board):
+    stitch_gnd(board, "GND")
+    for name, pts in PLANES_IN2.items():
+        net = name.split("@")[0]
+        if net != "GND":
+            stitch_gnd(board, net, pts)
+
+
+def stitch_gnd(board, netname="GND", region=None, clr=0.22, via_d=0.6, drill=0.3, tw=0.3):
+    """give every SMD pad of `netname` (inside `region`, if given) a short track to its own via into the plane
+    (skips pads that already have a via of the net within 1.2 mm or where no candidate spot keeps the
+    clearance). Runs before routing; the vias and tracks are locked so Freerouting keeps them."""
+    gnd = board.FindNet(netname)
+    SC, SS = pcbnew.SHAPE_CIRCLE, pcbnew.SHAPE_SEGMENT
+    areas = [z for z in board.Zones() if z.GetIsRuleArea()]
+    items = []                                              # (bbox mm, item) of other-net copper
+    def bb(it):
+        b = it.GetBoundingBox()
+        return (pcbnew.ToMM(b.GetLeft()), pcbnew.ToMM(b.GetTop()), pcbnew.ToMM(b.GetRight()), pcbnew.ToMM(b.GetBottom()))
+    for it in list(board.GetPads()) + list(board.GetTracks()):
+        if it.GetNetCode() != gnd.GetNetCode():
+            items.append((bb(it), it))
+    gvias = [(pcbnew.ToMM(t.GetPosition().x), pcbnew.ToMM(t.GetPosition().y)) for t in board.GetTracks()
+             if t.GetClass() == "PCB_VIA" and t.GetNetCode() == gnd.GetNetCode()]
+    for fp in board.GetFootprints():
+        if fp.GetReference().startswith(("KEY", "H")):
+            continue
+        for pad in fp.Pads():
+            if pad.GetNetCode() != gnd.GetNetCode() or pad.GetAttribute() != pcbnew.PAD_ATTRIB_SMD:
+                continue
+            px, py = pcbnew.ToMM(pad.GetPosition().x), pcbnew.ToMM(pad.GetPosition().y)
+            if py > 60.0:                                   # function-key LEDs: keyboard area, F.Cu pour
+                continue
+            if region and not in_poly(region, px, py, 0.8):
+                continue
+            if any(math.hypot(px - vx, py - vy) < 1.2 for vx, vy in gvias):
+                continue
+            half = max(pcbnew.ToMM(pad.GetSize().x), pcbnew.ToMM(pad.GetSize().y)) / 2
+            done = False
+            for d in (half + 0.45, half + 0.7, half + 1.0, half + 1.4, half + 1.9):
+                for k in range(16):
+                    a = 2 * math.pi * k / 16
+                    cx, cy = px + d * math.cos(a), py + d * math.sin(a)
+                    if not (2.0 < cx < W - 2.0 and 2.0 < cy < H - 2.0):
+                        continue
+                    if region and not in_poly(region, cx, cy, 0.8):
+                        continue
+                    if any(z.Outline().Contains(pcbnew.VECTOR2I_MM(cx, cy)) for z in areas):
+                        continue
+                    via_s = SC(pcbnew.VECTOR2I_MM(cx, cy), MM(via_d / 2))
+                    trk_s = SS(pcbnew.VECTOR2I_MM(px, py), pcbnew.VECTOR2I_MM(cx, cy), MM(tw))
+                    box = (min(px, cx) - 1.5, min(py, cy) - 1.5, max(px, cx) + 1.5, max(py, cy) + 1.5)
+                    bad = False
+                    for (x0, y0, x1, y1), it in items:
+                        if x1 < box[0] or x0 > box[2] or y1 < box[1] or y0 > box[3]:
+                            continue
+                        for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
+                            if not it.IsOnLayer(layer):
+                                continue
+                            sh = it.GetEffectiveShape(layer)
+                            if sh.Collide(via_s, MM(clr)) or (layer == pcbnew.F_Cu and sh.Collide(trk_s, MM(clr))):
+                                bad = True
+                                break
+                        if bad:
+                            break
+                    if bad:
+                        continue
+                    v = pcbnew.PCB_VIA(board)
+                    v.SetPosition(pcbnew.VECTOR2I_MM(cx, cy)); v.SetDrill(MM(drill)); v.SetWidth(MM(via_d))
+                    v.SetNet(gnd); v.SetLocked(True); board.Add(v)
+                    t = pcbnew.PCB_TRACK(board)
+                    t.SetStart(pcbnew.VECTOR2I_MM(px, py)); t.SetEnd(pcbnew.VECTOR2I_MM(cx, cy))
+                    t.SetWidth(MM(tw)); t.SetLayer(pcbnew.F_Cu); t.SetNet(gnd); t.SetLocked(True); board.Add(t)
+                    items.append(((cx - 0.3, cy - 0.3, cx + 0.3, cy + 0.3), v))   # same net, but keeps later vias apart
+                    gvias.append((cx, cy))
+                    done = True
+                    break
+                if done:
+                    break
+            if not done:
+                print(f"stitch: no via spot for {fp.GetReference()} pad {pad.GetNumber()}")
+    print(f"stitch vias {netname}:", len(gvias))
+
+
+def silk_boxes(board):
+    """bounding boxes (mm) of the board-level silkscreen art and text on both sides (vias would punch holes)"""
+    out = []
+    for d in board.GetDrawings():
+        if d.GetLayer() in (pcbnew.F_SilkS, pcbnew.B_SilkS):
+            b = d.GetBoundingBox()
+            out.append((pcbnew.ToMM(b.GetLeft()), pcbnew.ToMM(b.GetTop()), pcbnew.ToMM(b.GetRight()),
+                        pcbnew.ToMM(b.GetBottom())))
+    return out
+
+
+def stitch_grid(board, pitch=2.5, via_d=0.6, drill=0.3):
+    """GND vias on a grid wherever both pours are filled around the spot: ties pour islands of the two layers
+    together (call after a zone fill)."""
+    gnd = board.FindNet("GND")
+    fills = {}
+    for z in board.Zones():
+        if not z.GetIsRuleArea() and z.GetNetCode() == gnd.GetNetCode():
+            fills[z.GetLayer()] = z.GetFilledPolysList(z.GetLayer())
+    novia = [z for z in board.Zones() if z.GetIsRuleArea() and z.GetDoNotAllowVias()]
+    vias = [(pcbnew.ToMM(t.GetPosition().x), pcbnew.ToMM(t.GetPosition().y)) for t in board.GetTracks()
+            if t.GetClass() == "PCB_VIA"]
+    silk = silk_boxes(board)
+    n = 0
+    r = via_d / 2 + 0.1
+    ring = [(r * math.cos(k * math.pi / 4), r * math.sin(k * math.pi / 4)) for k in range(8)] + [(0, 0)]
+    y = 2.0
+    while y < H - 2.0:
+        x = 2.0
+        while x < W - 2.0:
+            ok = all(fills[L].Contains(pcbnew.VECTOR2I_MM(x + dx, y + dy)) for L in (pcbnew.F_Cu, pcbnew.B_Cu)
+                     for dx, dy in ring)
+            ok = ok and not any(z.Outline().Contains(pcbnew.VECTOR2I_MM(x, y)) for z in novia)
+            ok = ok and all(math.hypot(x - vx, y - vy) > 1.2 for vx, vy in vias)
+            ok = ok and all(math.hypot(x - hx, y - hy) > 3.3 for hx, hy in HOLES)
+            ok = ok and not any(b[0] - r < x < b[2] + r and b[1] - r < y < b[3] + r for b in silk)
+            if ok:
+                v = pcbnew.PCB_VIA(board)
+                v.SetPosition(pcbnew.VECTOR2I_MM(x, y)); v.SetDrill(MM(drill)); v.SetWidth(MM(via_d))
+                v.SetNet(gnd); board.Add(v)
+                vias.append((x, y)); n += 1
+            x += pitch
+        y += pitch
+    print("grid stitch vias:", n)
+
+
+def fill_and_save(board):
     board.BuildConnectivity()
-    filler = pcbnew.ZONE_FILLER(board)
-    filler.Fill(board.Zones())
+    pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     board.BuildConnectivity()
     pcbnew.SaveBoard(PCB, board)
+
+
+def do_route(board, passes):
+    stitch_planes(board)
+    import pcb_maze                                # plane-net pads outside their plane region: route them first
+    pcb_maze.route_leftovers(board, only=[n.split("@")[0] for n in PLANES_IN2 if not n.startswith("GND")],
+                             lock=True)
+    freeroute(board, passes)                       # full route
+    freeroute(board, 20)                           # second run from the result: picks up what is still open
+    post_route(board)
     print("routed and saved")
 
 
+def post_route(board):
+    board.BuildConnectivity()
+    pcbnew.ZONE_FILLER(board).Fill(board.Zones())
+    stitch_grid(board)
+    import pcb_gnd
+    pcb_gnd.refill(board)
+    pcb_gnd.link_islands(board, freeroute, passes=30)
+    pcb_gnd.bridge_islands(board)
+    import pcb_maze
+    pcb_maze.route_leftovers(board)
+    fill_and_save(board)
+
+
+def finish():
+    """one more incremental Freerouting run on the existing routed board"""
+    board = pcbnew.LoadBoard(PCB)
+    freeroute(board, 20)
+    post_route(board)
+    print("finished and saved")
+
+
+def open_nets(board, skip=("GND",)):
+    import pcb_gnd
+    out = []
+    for name in sorted({p.GetNetname() for p in board.GetPads() if p.GetNetCode() > 0}):
+        if name not in skip and len(pcb_gnd.net_components(board, name)) > 1:
+            out.append(name)
+    return out
+
+
+def ripup(board, nets, margin=1.2):
+    """delete the unlocked signal copper near the straight line of every open connection of `nets`"""
+    import pcb_gnd
+    planes = {"GND"} | {n.split("@")[0] for n in PLANES_IN2}
+    corridors = []
+    for name in nets:
+        comps = pcb_gnd.net_components(board, name)
+        src = comps[-1]["items"]
+        rest = [it for c in comps[:-1] for it in c["items"]]
+        if not src or not rest:
+            continue
+        a, b = min(((p, q) for p in src for q in rest),
+                   key=lambda pq: (pq[0].GetPosition() - pq[1].GetPosition()).EuclideanNorm())
+        corridors.append(pcbnew.SHAPE_SEGMENT(a.GetPosition(), b.GetPosition(), MM(2 * margin)))
+    gone = 0
+    for t in list(board.GetTracks()):
+        if t.IsLocked() or t.GetNetname() in planes or t.GetNetname() in nets:
+            continue
+        L = t.GetLayer() if t.GetClass() != "PCB_VIA" else pcbnew.F_Cu
+        sh = t.GetEffectiveShape(L)
+        if any(sh.Collide(c, 0) for c in corridors):
+            board.Delete(t)
+            gone += 1
+    print(f"rip-up: {gone} track pieces removed around {len(corridors)} open connections")
+
+
+def unsilk_vias(board):
+    """delete free-standing GND vias (grid vias) that sit under silkscreen art or text"""
+    silk = silk_boxes(board)
+    ends = set()
+    for t in board.GetTracks():
+        if t.GetClass() != "PCB_VIA":
+            ends.add((t.GetStart().x, t.GetStart().y)); ends.add((t.GetEnd().x, t.GetEnd().y))
+    n = 0
+    for v in list(board.GetTracks()):
+        if v.GetClass() != "PCB_VIA" or v.IsLocked() or v.GetNetname() != "GND":
+            continue
+        p = v.GetPosition()
+        if (p.x, p.y) in ends:
+            continue
+        x, y = pcbnew.ToMM(p.x), pcbnew.ToMM(p.y)
+        if any(b[0] - 0.45 < x < b[2] + 0.45 and b[1] - 0.45 < y < b[3] + 0.45 for b in silk):
+            board.Delete(v); n += 1
+    print(f"removed {n} grid vias under silkscreen")
+
+
+def repair(rounds=3):
+    import pcb_gnd
+    board = pcbnew.LoadBoard(PCB)
+    unsilk_vias(board)
+    pcb_gnd.refill(board)
+    for r in range(rounds):
+        nets = open_nets(board)
+        print(f"repair round {r}: open nets {nets}")
+        if not nets:
+            break
+        ripup(board, nets)
+        freeroute(board, 30)
+        post_route(board)
+        board = pcbnew.LoadBoard(PCB)
+    print("repair done, open nets:", open_nets(board))
+
+
 if __name__ == "__main__":
-    build(route="--route" in sys.argv)
+    if "--repair" in sys.argv:
+        repair()
+    elif "--finish" in sys.argv:
+        finish()
+    else:
+        build(route="--route" in sys.argv)

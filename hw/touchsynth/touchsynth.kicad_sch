@@ -61,7 +61,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "2b3f6f47-a3bd-4bd7-9117-8bb67c0aa21b")
+		(uuid "8ec8af43-9a28-42b0-8ad3-a131264f6181")
 	)
 	(sheet
 		(at 115 40)
@@ -114,7 +114,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "ba85e90e-33eb-4bcc-93fe-b8b30bef92a7")
+		(uuid "43b33921-0503-4893-894a-8716038d870f")
 	)
 	(sheet
 		(at 210 40)
@@ -167,7 +167,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "da6f14a0-4b0e-4075-aa9f-5729208a6a45")
+		(uuid "f7fd239f-4bd7-42d6-af2f-4149a1631955")
 	)
 	(sheet
 		(at 305 40)
@@ -220,7 +220,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "8ac173da-6da5-4d59-a4b8-1aefe418c07f")
+		(uuid "fbd94356-7869-4235-bc05-2dbd513b73c0")
 	)
 	(sheet
 		(at 20 110)
@@ -273,7 +273,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "bc40a27f-991f-41d8-8e01-f137c22670a8")
+		(uuid "9a1e28d3-008b-485e-b219-f7f683472b76")
 	)
 	(sheet
 		(at 115 110)
@@ -326,7 +326,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "f82eb09f-cac6-433f-a6b6-60f4abd17020")
+		(uuid "e2e79e85-8cd6-407c-9764-980a2df6efe9")
 	)
 	(sheet
 		(at 210 110)
@@ -379,7 +379,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "d436f67e-4361-4e22-ab0e-b827b7724c4e")
+		(uuid "cf385ed1-476f-4e67-b1dc-ea3e2b5bbcfd")
 	)
 	(text "TouchSynth — MCU-controlled analog mono synth (CH32V003/V002)"
 		(exclude_from_sim no)
@@ -392,7 +392,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "f5af1529-b617-4532-9051-b97c89ca5068")
+		(uuid "ed265f0c-ea58-4013-a517-f32732e9c636")
 	)
 	(sheet_instances
 		(path "/"

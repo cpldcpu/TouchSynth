@@ -299,9 +299,14 @@ def back(board, y0):
     poly(board, L, [(mx(xs[3] + bw / 2), yb + bh), (mx(xs[3] + bw / 2), ym + bh / 2)], 0.2)
     arrow((xs[3] + bw / 2, ym + bh / 2), (xs[2] + bw, ym + bh / 2))
     t("loopback", xs[3] + bw / 2 + 0.8, ym - 3.9, 0.9, thick=0.15, just="l")
-    # facts
-    yf = ym + bh + 4.0
-    facts = ["supply 9-12 V DC  |  16 touch keys  |  SWIO: WCH-LinkE / minichlink",
-             "simulated in ngspice, laid out in KiCad 10, firmware on ch32fun"]
-    for i, f in enumerate(facts):
-        t(f, 50.0, yf + i * 2.0, 1.0, thick=0.15)
+    back_facts(board, ym + bh + 2.8)
+
+
+FACTS = ["supply 9-12 V DC  |  16 touch keys  |  SWIO: WCH-LinkE / minichlink",
+         "simulated in ngspice, laid out in KiCad 10, firmware on ch32fun",
+         "rev 0.1  |  2026-09-27  |  design: cpldcpu & Claude Opus 5.5"]
+
+
+def back_facts(board, y):
+    for i, f in enumerate(FACTS):
+        text(board, pcbnew.B_SilkS, f, W - 50.0, y + i * 1.8, 1.0, 0.15, mirror=True)

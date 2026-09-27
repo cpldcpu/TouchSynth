@@ -24,6 +24,7 @@ FP = dict(
     SO16="Package_SO:SOIC-16_3.9x9.9mm_P1.27mm", LED="LED_SMD:LED_0603_1608Metric",
     HDR2="Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
     HDR3="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical", TP="TestPoint:TestPoint_Pad_D1.0mm",
+    TPGND="Connector_PinHeader_2.54mm:PinHeader_1x01_P2.54mm_Vertical",
 )
 
 
@@ -138,7 +139,8 @@ for sim, v, a, b in [("RB5", "2.2k", "VP", "VB4"), ("RB4", "1k", "VB4", "VB3"), 
 for i, v in [(4, 9), (3, 8), (2, 7), (1, 6), (0, 4)]:
     C(f"CB{i}", "10u", f"VB{i}", "GND", v)
 group("Test points")
-add("TP", "Connector:TestPoint", "GND", FP["TP"], {1: "GND"}, bom=False)
+for side in ("left", "right"):                   # 2.54 mm pins for the scope ground clip
+    add("TP", "Connector:TestPoint", "GND", FP["TPGND"], {1: "GND"}, bom=False, note=f"scope ground {side}")
 for n in ("VP", "+5V", "VREF", "VBIAS", "V25", "VB0", "VB2", "VB4"):
     add("TP", "Connector:TestPoint", n, FP["TP"], {1: n}, bom=False)
 

@@ -43,3 +43,4 @@ hw/touchsynth/*.ses
 hw/touchsynth/route.log
 hw/logs/
 tools/logs/
+hw/touchsynth/*.log
