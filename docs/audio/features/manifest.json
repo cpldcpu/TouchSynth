@@ -155,36 +155,36 @@
   "id": "tune_acid",
   "group": "Demo tunes (stored in the MCU)",
   "title": "Acid",
-  "what": "Original 16-step acid bass line: high resonance, filter-envelope accents and slides.",
-  "seconds": 8.15,
-  "peak_v": 0.438,
+  "what": "Original acid bass line (A A B A + turnaround): high resonance, filter-envelope accents and slides.",
+  "seconds": 19.4,
+  "peak_v": 0.507,
   "bpm": 128,
   "preset": "acid",
-  "steps": 64,
-  "flash_bytes": 192
+  "steps": 160,
+  "flash_bytes": 480
  },
  {
   "id": "tune_prelude",
   "group": "Demo tunes (stored in the MCU)",
   "title": "Prelude",
-  "what": "J. S. Bach, Prelude in C major BWV 846, bars 1–4 (public domain), as a 16th-note arpeggio with saw + pulse and a slow PWM.",
-  "seconds": 10.25,
+  "what": "J. S. Bach, Prelude in C major BWV 846, bars 1–19 (public domain), as a 16th-note arpeggio with saw + pulse and a slow PWM.",
+  "seconds": 48.65,
   "peak_v": 0.387,
   "bpm": 100,
   "preset": "arp",
-  "steps": 64,
-  "flash_bytes": 192
+  "steps": 305,
+  "flash_bytes": 915
  },
  {
   "id": "tune_ode",
   "group": "Demo tunes (stored in the MCU)",
   "title": "Ode",
-  "what": "L. v. Beethoven, 'Ode to Joy' (public domain) on a lead patch with sub oscillator, glide and vibrato.",
-  "seconds": 18.1,
-  "peak_v": 0.724,
+  "what": "L. v. Beethoven, 'Ode to Joy', full theme A A' B A' (public domain), on a lead patch with sub oscillator, glide and vibrato.",
+  "seconds": 35.56,
+  "peak_v": 0.74,
   "bpm": 110,
   "preset": "lead",
-  "steps": 30,
-  "flash_bytes": 90
+  "steps": 62,
+  "flash_bytes": 186
  }
 ]

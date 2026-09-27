@@ -201,11 +201,12 @@ def main():
         print(f"{ex['id']:16s} peak {pk:.2f} V  {'CLIP' if pk > FULL_SCALE else ''}")
         manifest.append(dict(id=ex["id"], group=ex["group"], title=ex["title"], what=ex["what"],
                              seconds=round(len(y) / B.FS_OUT, 2), peak_v=round(float(pk), 3)))
-    for name, desc in [("acid", "Original 16-step acid bass line: high resonance, filter-envelope accents and slides."),
-                       ("prelude", "J. S. Bach, Prelude in C major BWV 846, bars 1–4 (public domain), as a 16th-note "
+    for name, desc in [("acid", "Original acid bass line (A A B A + turnaround): high resonance, filter-envelope "
+                                "accents and slides."),
+                       ("prelude", "J. S. Bach, Prelude in C major BWV 846, bars 1–19 (public domain), as a 16th-note "
                                    "arpeggio with saw + pulse and a slow PWM."),
-                       ("ode", "L. v. Beethoven, 'Ode to Joy' (public domain) on a lead patch with sub oscillator, "
-                               "glide and vibrato.")]:
+                       ("ode", "L. v. Beethoven, 'Ode to Joy', full theme A A' B A' (public domain), on a lead patch "
+                               "with sub oscillator, glide and vibrato.")]:
         y, tune = render_tune(name)
         wav = os.path.join(AUD, f"tune_{name}.wav")
         write_wav(wav, y); to_mp3(wav)

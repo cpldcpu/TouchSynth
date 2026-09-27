@@ -801,22 +801,49 @@ Hand-soldered (not in the assembly BOM):
 \end{itemize}
 
 % =====================================================================================================
-\section{Firmware (planned)}
-The firmware uses ch32fun (a git submodule) with \file{TARGET\_MCU = CH32V003} or \file{CH32V002}; the build
-for both targets has been verified with the capacitive-touch example. The planned structure:
+\section{Firmware}
+Firmware version 0.1 (\file{firmware/touchsynth/}) is built on ch32fun for the CH32V003, CH32V002 and
+CH32V006 from one code base. It uses 11.7\,KB of the 16\,KB flash of the smallest part. It has not yet run on
+hardware. Its structure follows the timing of the design:
 \begin{itemize}
-  \item \textbf{Audio timing}: TIM2 runs the DCO period and the pulse wave. Its update interrupt toggles
-    the sub-oscillator.
-  \item \textbf{Control voltages}: TIM1 generates the four CV PWMs; DMA bursts apply the sigma-delta
-    dither.
-  \item \textbf{Control loop} at \SI{1}{kHz}: envelopes, LFO, glide, arpeggiator and sequencer, and the
-    calibration tables that map musical parameters to CV codes.
-  \item \textbf{User interface}: the touch scan (at least \SI{200}{Hz}) with per-pad baselines. SHIFT +
-    key selects a parameter, $-$/$+$ change it, and the LEDs show the selection and value as a bar.
-  \item \textbf{Demo tunes}: three tunes stored in flash in the 3-byte step format of the behavioural model.
-  \item \textbf{Test firmware} (\file{synthtest}): a text command interface over the SWIO debug channel
-    for automated verification with \file{minichlink}, see Section~\ref{sec:vv}.
+  \item \textbf{TIM1 update interrupt} at \SI{46.875}{kHz}: loads the four CV compare registers with 2-bit
+    sigma-delta dither (10-bit PWM, 12-bit effective) and clocks the noise LFSR. An interrupt was chosen over
+    DMA bursts for simplicity; it costs a few percent of the CPU.
+  \item \textbf{TIM2}: the DCO period. Channel 1 produces the \SI{3}{\micro s} active-low reset pulse,
+    channel 2 the pulse wave, and the update interrupt toggles the sub-oscillator.
+  \item \textbf{Control loop} at \SI{1}{kHz} (SysTick): glide, LFO, envelopes, key tracking, the CV laws
+    and the demo-tune player. It mirrors the firmware layer of the behavioural model. All maths is fixed
+    point, because the CH32V003 has no multiplier.
+  \item \textbf{Main loop}: the touch scan of all 16 pads through the multiplexers with per-pad baselines
+    and thresholds, the SHIFT/$-$/$+$ user interface, the LED and trim-DAC shift registers, MIDI input, and a
+    test console over SWIO for the verification plan (Section~\ref{sec:vv}).
 \end{itemize}
+The calibration tables, presets and demo tunes are generated from the simulation results and
+\file{tunes.py} by \file{gen\_tables.py}; nothing is copied by hand.
+
+\paragraph{Pin assignment check.} Writing the firmware was also a check of the pin assignment.
+\file{check\_pins.py} compares every pin constant in the firmware with:
+\begin{itemize}
+  \item the net in the design,
+  \item the port in the KiCad symbol,
+  \item the timer, USART and ADC function of that port on each chip family.
+\end{itemize}
+All 16 signal pins pass on both families. The check found one difference that the firmware must handle: the
+timer remap \emph{codes} differ (Table~\ref{tab:remap}). The same remaps also route complementary outputs to
+PC3, PC4 and PD1 (SWIO). The firmware never enables them.
+
+\begin{table}[h]
+\centering\small
+\caption{Timer remaps used by the firmware.}\label{tab:remap}
+\begin{tabular}{@{}l l l@{}}
+\toprule
+Function & CH32V003 & CH32V002 / V006 \\
+\midrule
+TIM1 CH1--CH4 $\to$ PC6, PC7, PC0, PD3 & \texttt{TIM1\_REMAP} = 01 & \texttt{TIM1\_RM} = 0010 \\
+TIM2 CH1, CH2 $\to$ PC5, PC2 & \texttt{TIM2\_REMAP} = 01 & \texttt{TIM2\_RM} = 010 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 % =====================================================================================================
 \section{Verification and validation plan}\label{sec:vv}
@@ -935,8 +962,8 @@ Power, hum & S7 & B2--B5, T12, V6 \\
   \item \textbf{Touch sensitivity on the 4-layer board.} The inner planes are cut out under the pads, but
     the touch lines run over the power plane and have more capacitance than assumed in S5. Check with T2;
     if needed, increase the number of samples or lower the thresholds.
-  \item \textbf{CH32V002 timer remap.} Confirm that the TIM1/TIM2 remap-1 pins are identical to the
-    CH32V003.
+  \item \textbf{CH32V006 pinout.} The firmware builds for the CH32V006 (more flash and RAM). Its TSSOP-20
+    pinout is assumed identical to the CH32V002; check it against the V006 datasheet before fitting one.
   \item \textbf{Assembly.} Check the orientation of the SOT-23/SOT-363 transistors, the diode and the LEDs
     at the first inspection. Hand-solder the TSSOP-20 MCU.
   \item \textbf{Documentation.} The specification (\file{docs/spec.md}) and the verification plan still

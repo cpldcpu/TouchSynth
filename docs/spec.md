@@ -91,7 +91,7 @@ Parts outside the JLCPCB lists:
 | 9 | VDD | +5 V | 19 | PD2 | mux S2 |
 | 10 | PC0 | TIM1 CH3 (remap 1) → CV_RES | 20 | PD3 | TIM1 CH4 (remap 1) → CV_VCA |
 
-Open: confirm TIM1/TIM2 remap-1 pin assignments are identical on CH32V002.
+Remaps (checked by `firmware/touchsynth/check_pins.py`): the same pins work on both families, but the codes differ: CH32V003 TIM1_REMAP = 01, TIM2_REMAP = 01; CH32V002/V006 TIM1_RM = 0010, TIM2_RM = 010.
 
 ## 5. Preliminary BOM (LCSC)
 
