@@ -96,7 +96,7 @@ def sheet_power(sh):
     vcap(sh, rv2, x, yn)
     sh.w((x, yn), (x + 10.16, yn))
     vcap(sh, cvr, x + 10.16, yn)
-    u2 = ref("XVREF")
+    u2 = by(lambda p: p.sim == "XVREF/XDCO")
     sh.place(u2, 63.5, yn + U, unit=1, fields="above")            # + at (55.88, yn)
     sh.w((x + 10.16, yn), (u2, 3))
     o, m = sh.P(u2, 1), sh.P(u2, 2)
@@ -215,10 +215,10 @@ def sheet_dco(sh):
     col = cv_vi(sh, "A", 30.48, 55.88, lm, 1, (3, 2, 1), "REVA")
     sh.lbl(col, "DCO_INT", (0, -1), stub=U)
     sh.heading("Integrator (TL072) with 2N7002 reset and NPN gate level shifter", 15, 95, W)
-    u = by(lambda p: p.sim == "XDCO/XDIF")
+    u = by(lambda p: p.sim == "XVREF/XDCO")
     xo, yo = 180.34, 166.37
-    sh.place(u, xo, yo, unit=1, mirror="x", fields="below")        # '-' on top
-    ip, im, o = sh.P(u, 3), sh.P(u, 2), sh.P(u, 1)
+    sh.place(u, xo, yo, unit=2, mirror="x", fields="below")        # '-' on top
+    ip, im, o = sh.P(u, 5), sh.P(u, 6), sh.P(u, 7)
     sh.lbl(ip, "VREF", (-1, 0), stub=5.08)
     xl, xr = im[0] - 5.08, o[0] + 5.08
     ci, m = ref("CI"), ref("MRST")
@@ -246,7 +246,6 @@ def sheet_dco(sh):
     p0 = (b[0] - 7.62, b[1])
     hpart(sh, rlsb, p0[0], p0[1])
     sh.lbl(p0, "DCO_RST", (-1, 0), stub=U)
-    supply(sh, u, 3, 300.0, 160.0, dec(u))
     tps(sh, ("XAMP",), 330.2, 60.96)
 
 
@@ -283,8 +282,8 @@ def sheet_resonance(sh):
         sh.lbl((rr, 1), "VP", (0, -1), stub=U)
         d = (-1, 0) if net == "RES_C1" else (1, 0)
         sh.w((c[0], c[1] - U), (c[0] + d[0] * 7.62, c[1] - U)); sh.lbl((c[0] + d[0] * 7.62, c[1] - U), net, d)
-    u = by(lambda p: p.sim == "XVREF/XRDIF")
-    out = diff_amp(sh, u, 2, (5, 6, 7), "RRD1", "RRD2", "RRD3", "RRD4", 238.76, 137.16, "RES_C1", "RES_C2")
+    u = by(lambda p: p.sim == "XRDIF/XDIF")
+    out = diff_amp(sh, u, 1, (3, 2, 1), "RRD1", "RRD2", "RRD3", "RRD4", 238.76, 137.16, "RES_C1", "RES_C2")
     crf, rrf = ref("CRF"), ref("RRF")
     sh.w(out, (out[0] + 7.62, out[1]))
     p = hpart(sh, crf, out[0] + 7.62, out[1])
@@ -332,7 +331,7 @@ def sheet_vca(sh):
         sh.lbl((rr, 1), "VP", (0, -1), stub=U)
         d = (-1, 0) if net == "VCA_C1" else (1, 0)
         sh.w((c[0], c[1] - U), (c[0] + d[0] * 7.62, c[1] - U)); sh.lbl((c[0] + d[0] * 7.62, c[1] - U), net, d)
-    u = by(lambda p: p.sim == "XDCO/XDIF")
+    u = by(lambda p: p.sim == "XRDIF/XDIF")
     out = diff_amp(sh, u, 2, (5, 6, 7), "RD1", "RD2", "RD3", "RD4", 238.76, 137.16, "VCA_C1", "VCA_C2")
     cout = ref("COUT")
     xo = out[0] + 17.78
@@ -354,7 +353,7 @@ def sheet_vca(sh):
     sh.w((xl, yl), (xl + 25.4, yl))
     vcap(sh, rlb2, xl + 7.62, yl); vcap(sh, clb, xl + 15.24, yl)
     sh.lbl((xl + 25.4, yl), "ADC_AUDIO", (1, 0))
-    sh.place(dec(u), 386.08, 60.96, fields="right")
+    supply(sh, u, 3, 370.84, 71.12, dec(u))
     tps(sh, ("XVCA", "VTRIM"), 322.58, 55.88)
 
 
@@ -559,13 +558,17 @@ def sheet_touch_led(sh):
     for i, s in enumerate(srs):
         sh.place(s, 80.0 + i * 120.0, 190.0, fields="above")
         sh.place(decs[i], 125.0 + i * 120.0, 160.0, fields="right")
-    sh.heading("LEDs (4.7k arrays, ~0.6 mA each)", 15, 250, W)
-    rns = [p.ref for p in D.PARTS if p.lib_id == "Device:R_Pack04"]
-    leds = [p.ref for p in D.PARTS if p.lib_id == "Device:LED"]
-    for i, rn in enumerate(rns):
-        sh.place(rn, 40.0 + i * 130.0, 290.0, rot=90, fields="above")
-        for j in range(4):
-            sh.place(leds[4 * i + j], 75.0 + i * 130.0 + j * 0, 270.0 + j * 12.7, rot=180, fields="right")
+    sh.heading("LEDs (4.7k series resistors, ~0.6 mA each)", 15, 250, W)
+    for i in range(16):
+        r = by(lambda p, i=i: p.note == f"LED {i} series")
+        led = by(lambda p, i=i: p.lib_id == "Device:LED" and p.pins["2"] == f"LED_A{i}")
+        x1, y = 30.48 + (i // 4) * 132.08, 270.51 + (i % 4) * 15.24
+        sh.lbl((x1, y), f"LED_Q{i}", (-1, 0))
+        a = hpart(sh, r, x1, y)
+        sh.place(led, a[0] + 16.51, y, rot=180, fields="above")
+        sh.w(a, sh.P(led, 2))
+        sh.lbl(a, f"LED_A{i}", (1, 0))
+        sh.gnd(sh.P(led, 1), stub=2.54)
     sh.heading("VCA trim DAC: 8-bit R-2R ladder (R = 100k, 2R = 200k), output impedance 100k", 15, 335, W)
     x0, yl = 45.72, 375.92
     term = by(lambda p: p.note == "R-2R termination")

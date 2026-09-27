@@ -240,6 +240,30 @@ class Sheet:
                 else:
                     self.labels.append((net, q, d, None))
                 added += 1
+        # every remaining net gets one name label, so KiCad uses the design net name (PCB parity)
+        f2, _ = self._nodes()
+        named = set()
+        for net, p, d, k in self.labels:
+            named.add(net)
+        for net, p, d in self.powers:
+            named.add(net)
+        for net, gs in net_groups.items():
+            if net in named or net.startswith("NC_"):
+                continue
+            members = [m for ms in gs.values() for m in ms]
+            root = f2((members[0][2], members[0][3]))
+            segs = [(a_, b_) for a_, b_ in self.wires if f2(a_) == root]
+            hs = [s_ for s_ in segs if s_[0][1] == s_[1][1] and abs(s_[0][0] - s_[1][0]) >= 2 * STUB]
+            if hs:
+                a_, b_ = max(hs, key=lambda s_: abs(s_[0][0] - s_[1][0]))
+                mid = (snap((a_[0] + b_[0]) / 2), a_[1])
+                self.labels.append((net, mid, (1, 0), None))
+            else:
+                pl, num, x, y, d = members[0]
+                q = (snap(x + d[0] * STUB), snap(y + d[1] * STUB))
+                self.wires.append(((x, y), q))
+                self.labels.append((net, q, d, None))
+            added += 1
         return added
 
     def split_wires(self):

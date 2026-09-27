@@ -10,6 +10,14 @@ import design as D
 import draw as W
 import gen_sch as G
 import layouts as LAY
+import uuid as _uuid
+
+NS = _uuid.UUID("7a1f3c2e-5b8d-4e6f-9a0b-1c2d3e4f5a6b")
+
+
+def duid(*parts):
+    """deterministic UUID (stable across regenerations, used to link PCB footprints to symbols)"""
+    return str(_uuid.uuid5(NS, "/".join(str(p) for p in parts)))
 
 OUT = G.OUT
 
@@ -82,7 +90,7 @@ def write_sheet(sh, gsheet, paper):
             props.append(("Note", p.note, X, Y, True, None))
         gs.lib(p.lib_id)
         G.symbol_instance(gs, p.lib_id, p.ref, p.value, X, Y, pl.rot, pl.unit, props, list(pl.pins.keys()),
-                          dnp=p.dnp, bom=p.bom)
+                          dnp=p.dnp, bom=p.bom, uuid_=duid("sym", p.ref, pl.unit))
         if pl.mirror:
             gs.items[-1].insert(4, ["mirror", pl.mirror])
     for a, b in sh.wires:
@@ -115,7 +123,7 @@ def write_sheet(sh, gsheet, paper):
 def build():
     os.makedirs(OUT, exist_ok=True)
     per, glob = units_by_sheet()
-    root_uuid = G.uid()
+    root_uuid = G.Q(duid("root"))
     today = datetime.date.today().isoformat()
     sheets = []
     for i, (name, title) in enumerate(D.SHEETS.items()):
@@ -136,6 +144,7 @@ def build():
         sh.complete(glob)
         sh.split_wires()
         gs = G.Sheet(name, title, glob)
+        gs.uuid = G.Q(duid("sheet", name))
         gs.idx = i + 1
         gs.path = f"/{root_uuid}/{gs.uuid}"
         write_sheet(sh, gs, paper)

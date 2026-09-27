@@ -76,10 +76,10 @@ class Sheet:
         return self.libs[lib_id]
 
 
-def symbol_instance(sh, lib_id, ref, value, x, y, rot, unit, props, pins, dnp=False, bom=True, board=True):
+def symbol_instance(sh, lib_id, ref, value, x, y, rot, unit, props, pins, dnp=False, bom=True, board=True, uuid_=None):
     sym = [ "symbol", ["lib_id", Q(lib_id)], ["at", fmt(x), fmt(y), str(rot)], ["unit", str(unit)],
             ["exclude_from_sim", "no"], ["in_bom", "yes" if bom else "no"], ["on_board", "yes" if board else "no"],
-            ["dnp", "yes" if dnp else "no"], ["uuid", uid()] ]
+            ["dnp", "yes" if dnp else "no"], ["uuid", Q(uuid_) if uuid_ else uid()] ]
     for name, val, px, py, hide, just in props:
         eff = ["effects", ["font", ["size", "1.27", "1.27"]]]
         fang = FIELD_ANGLE.get(rot, "0")

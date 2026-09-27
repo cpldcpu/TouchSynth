@@ -22,7 +22,7 @@ FP = dict(
     SOT23="Package_TO_SOT_SMD:SOT-23", SOT363="Package_TO_SOT_SMD:SOT-363_SC-70-6",
     SO8="Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", SO14="Package_SO:SOIC-14_3.9x8.7mm_P1.27mm",
     SO16="Package_SO:SOIC-16_3.9x9.9mm_P1.27mm", LED="LED_SMD:LED_0603_1608Metric",
-    RPACK="Resistor_SMD:R_Array_Convex_4x0603", HDR2="Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+    HDR2="Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
     HDR3="Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical", TP="TestPoint:TestPoint_Pad_D1.0mm",
 )
 
@@ -124,9 +124,9 @@ C("C5B", "100n", "+5V", "GND", 5)
 group("References: VREF 4.5 V, VBIAS 1.5 V, V25 2.5 V")
 # VREF = 4.5 V, TL072 follower with 10R + 1u snubber; second half = resonance difference amplifier
 R("RV1", "1k", "+5V", "VREF_DIV"); R("RV2", "9.1k", "VREF_DIV", "GND"); C("CVR", "10u", "VREF_DIV", "GND", 5)
-TL072("XVREF/XRDIF", ("VREF_DIV", "VREF", "VREF"), ("RES_DP", "RES_DM", "RESOUT"))
-PARTS[-2].unit_sheets = {2: "resonance"}
-PARTS[-2].unit_groups = {2: "Resonance VCA and difference amplifier"}
+TL072("XVREF/XDCO", ("VREF_DIV", "VREF", "VREF"), ("VREF", "DCO_INT", "SAW"))
+PARTS[-2].unit_sheets = {2: "dco"}
+PARTS[-2].unit_groups = {2: "Integrator and reset"}
 R("RSN", "10", "VREF", "VREF_SN"); C("CSN", "1u", "VREF_SN", "GND", 5)
 R("RB1A", "3.3k", "+5V", "VBIAS"); R("RB1B", "1.5k", "VBIAS", "GND"); C("CBIA", "1u", "VBIAS", "GND", 5)
 R("R25A", "10k", "+5V", "V25"); R("R25B", "10k", "V25", "GND"); C("C25", "1u", "V25", "GND", 5)
@@ -195,11 +195,8 @@ for k in range(3):
     C(None, "100n", "+5V", "GND", 5, note="74HC595 decoupling")
     ser = f"SR_CHAIN_{k + 1}"
 group("LEDs")
-for k in range(4):                                # 4.7k arrays + LEDs (~0.6 mA each)
-    add("RN", "Device:R_Pack04", "4.7k x4", FP["RPACK"],
-        {1: f"LED_Q{4 * k}", 2: f"LED_Q{4 * k + 1}", 3: f"LED_Q{4 * k + 2}", 4: f"LED_Q{4 * k + 3}",
-         8: f"LED_A{4 * k}", 7: f"LED_A{4 * k + 1}", 6: f"LED_A{4 * k + 2}", 5: f"LED_A{4 * k + 3}"}, lcsc="C1980")
-for i in range(16):
+for i in range(16):                               # 4.7k + LED (~0.6 mA), resistor next to its LED
+    R(None, "4.7k", f"LED_Q{i}", f"LED_A{i}", note=f"LED {i} series")
     add("D", "Device:LED", "red", FP["LED"], {2: f"LED_A{i}", 1: "GND"}, lcsc="C2286", note=f"above key {KEYS[i]}")
 group("VCA trim DAC (8-bit R-2R)")
 # 8-bit R-2R DAC (R = 100k, 2R = 200k), Q0 = LSB; output VTRIM (Thevenin 100k)
@@ -291,9 +288,9 @@ R("RVC1", "4.7k", "VP", "VCA_C1"); R("RVC2", "4.7k", "VP", "VCA_C2")
 R("RD1", "10k", "VCA_C1", "VCA_DM"); R("RD2", "22k", "VCA_DM", "VCAOUT")
 R("RD3", "10k", "VCA_C2", "VCA_DP"); R("RD4", "22k", "VCA_DP", "VREF")
 group("Difference amplifier, line out")
-TL072("XDCO/XDIF", ("VREF", "DCO_INT", "SAW"), ("VCA_DP", "VCA_DM", "VCAOUT"))
-PARTS[-2].unit_sheets = {1: "dco", 3: "dco"}
-PARTS[-2].unit_groups = {1: "Integrator and reset", 3: "Integrator and reset"}
+TL072("XRDIF/XDIF", ("RES_DP", "RES_DM", "RESOUT"), ("VCA_DP", "VCA_DM", "VCAOUT"))
+PARTS[-2].unit_sheets = {1: "resonance"}
+PARTS[-2].unit_groups = {1: "Resonance VCA and difference amplifier"}
 C("COUT", "10u", "VCAOUT", "LINEOUT", 5); R(None, "100k", "LINEOUT", "GND", note="output bleeder")
 add("J", "Connector_Generic:Conn_01x02", "LINE OUT", FP["HDR2"], {1: "LINEOUT", 2: "GND"}, bom=False)
 group("Audio loopback to PD5")

@@ -34,3 +34,12 @@ hw/touchsynth/*.pdf
 hw/touchsynth/erc.rpt
 hw/touchsynth/*-backups/
 hw/touchsynth/*.kicad_prl
+
+# downloaded tools
+tools/*.jar
+hw/touchsynth/*.rpt
+hw/touchsynth/*.dsn
+hw/touchsynth/*.ses
+hw/touchsynth/route.log
+hw/logs/
+tools/logs/
