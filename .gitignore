@@ -44,3 +44,11 @@ hw/touchsynth/route.log
 hw/logs/
 tools/logs/
 hw/touchsynth/*.log
+
+# LaTeX build files
+docs/report/*.aux
+docs/report/*.log
+docs/report/*.fls
+docs/report/*.fdb_latexmk
+docs/report/*.out
+docs/report/*.toc
