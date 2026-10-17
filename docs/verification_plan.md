@@ -50,22 +50,46 @@ so they can be plotted next to the simulation data.
 
 ## 3. L1 — Bring-up (MCU not fitted, then fitted)
 
-Supply: lab supply 9.0 V, current limit 100 mA.
+Supply: lab supply 9.0 V, current limit 100 mA, meter ground on a scope-ground pin. Expected values: DC operating
+point of the netlist with the MCU pins floating ([sim/bringup/bringup_op.py](../sim/bringup/bringup_op.py),
+`docs/results/bringup_expected.csv`), revised 2026-10-17 after board 1.
 
-| # | Step | Expected (sim) | Limit |
-|---|---|---|---|
-| B1 | visual / continuity: no bridges on TSSOP-20, CD4051, 74HC595 | — | — |
-| B2 | reverse polarity 9 V for 1 s | I < 1 mA | pass |
-| B3 | input current, no MCU | ≈ 10 mA analog + 78L05 Iq (S3 op: 10 mA) | 5…25 mA |
-| B4 | V+ at 9 V in | 8.6 V | 8.4…8.8 V |
-| B5 | +5V | 5.0 V | 4.8…5.2 V |
-| B6 | VREF | 4.50 V (1 k / 9.1 k) | 4.45…4.55 V |
-| B7 | VB0…VB4 at V+ = 8.6 V | 2.40 / 3.40 / 4.40 / 5.40 / 6.40 V | ±3 % |
-| B8 | TAIL (ladder emitters) | 1.86 V | 1.7…2.0 V |
-| B9 | LPF (INA output, no signal) | 4.50 V | 4.3…4.7 V |
-| B10 | VCAOUT | 4.50 V | 4.3…4.7 V |
-| B11 | fit MCU, flash `synthtest`, `id` answers | — | — |
-| B12 | input current with MCU, LEDs off | +5…8 mA | < 40 mA |
+- **Linear CVs (AMP, RES, VCA):** pulled to 0 V by their 15 k last-stage resistor.
+- **Cutoff CV:** the network has no DC path of its own, so XCUT_IN floats to VBIAS and the ladder tail runs at the
+  expo reference current (about 8 µA).
+- **DCO:** held in reset, so SAW = VREF.
+- **74HC595s:** random power-up state. Any number of the 16 red LEDs (0.68 mA each) may light, and VTRIM can read
+  0.4…5 V.
+
+| # | Step | Expected at 9 V (sim) | Limit | Board 1 (9 V, all LEDs on) |
+|---|---|---|---|---|
+| B1 | visual / continuity: no bridges on the ICs and MCU pads; no short VP–GND, +5V–GND | — | — | — |
+| B2 | reverse polarity 9 V for 1 s | I < 1 mA | pass | 0 mA |
+| B3 | input current, no MCU | 14.8 mA (LEDs off) … 25.7 mA (all on) | 10…35 mA | 25 mA |
+| B4 | VP | 8.72 V | 8.4…8.9 V | 8.57 V |
+| B5 | +5V | 5.00 V | 4.8…5.2 V | 5.028 V |
+| B6 | VREF | 4.50 V | 4.45…4.55 V | 4.53 V |
+| B6a | VBIAS / V25 | 1.56 / 2.50 V | ±3 % | 1.57 / 2.515 V |
+| B7 | VB0 / VB2 / VB4 as ratio to VP | 0.281 / 0.513 / 0.745 | ±3 % | 0.279 / 0.504 / 0.733 (2.39 / 4.32 / 6.28 V) |
+| B8 | TAIL (ladder emitters) | 1.96 V | 1.8…2.1 V | 1.88 V |
+| B9 | LPF (INA output, no signal) | 4.50 V | 4.3…4.7 V | 4.53 V |
+| B10 | SAW / RESOUT / VCAOUT | 4.50 V each | 4.3…4.7 V | 4.52 / 4.52 / 4.51 V |
+| B10a | XAMP / XRES / XVCA | 0 V | < 50 mV | 0 / 0 / 0 |
+| B10b | XCUT_IN (= VBIAS) | 1.56 V | ±3 % | 1.57 V |
+| B10c | VTRIM | 0.4…4.96 V (random) | — | 4.92 V (code 255) |
+| B11 | fit MCU, flash `firmware/touchsynth`, `id` answers | — | — | |
+| B12 | input current with MCU, firmware idle | 20…31 mA (1…16 LEDs) | < 40 mA | |
+
+At 12 V in: VP 11.72 V, VB0/2/4 3.28/6.00/8.72 V, TAIL 2.79 V, input current 15.9…26.8 mA without the MCU.
+
+**Board 1:** B1–B10 pass. VP is 0.15 V below the simulation (the SS14 drops about 0.43 V). Relative to VP, VB2 and VB4
+are about 1.7 % low, which is inside the limit but more than the resistor tolerance explains (about 50 µA leaves
+the bias chain at the upper taps). Watch this in T6–T8. Bring-up also exposed two model errors, now fixed in
+`sim/models/models.lib`: the 78L05 model drew no load current from its input, and the TL072 model drew 4 mA per
+amplifier instead of 1.4 mA.
+
+After B11 the firmware drives the LEDs, sets the trim DAC to mid-scale (VTRIM ≈ 2.7 V) and drives the cutoff PWM
+low (XCUT_IN ≈ 0.2 V).
 
 ## 4. L2 — Functional tests (automated, `selftest`)
 

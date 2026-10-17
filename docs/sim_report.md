@@ -19,7 +19,7 @@ the behavioural model are in [`audio/features/`](audio/features/).
 | S4 | VCA | ≥ 70 dB off, low CV feedthrough | 121 dB off; thump 94–101 mV → < 0.6 mV after trim | pass |
 | S5 | Touch | Δ ≥ 5 × noise, scan ≥ 200 Hz | SNR 39 (V003) / 152 (V002) worst case; 1.4 kHz | pass |
 | S6 | Full voice | plausible sound, loopback in range | 1.22 Vpp line out; loopback node 2.3…2.9 V | pass |
-| S7 | Power | 9–12 V, ≤ 60 mA, low hum | 33 / 42 mA; hum −81 dB re 1.33 Vpp | pass (power-on pop accepted, §8.3) |
+| S7 | Power | 9–12 V, ≤ 60 mA, low hum | 31 / 32 mA; hum −81 dB re 1.33 Vpp | pass (power-on pop accepted, §8.3) |
 
 Accepted limitations: power-on pop at the line out (§8.3) and cutoff temperature drift (§4.4). See also the
 model limitations (§12).
@@ -188,10 +188,14 @@ DC content of the pulse wave, which appears as a slow (0.7 Hz) wobble of the lin
 
 | Vin (+200 mVpp 100 Hz ripple) | +5 V ripple | VREF ripple | Line-out ripple | Hum re 1.33 Vpp | Input current |
 |---|---|---|---|---|---|
-| 9 V | 0.12 mVpp | 19 µVpp | 112 µVpp | −81 dB | 32.7 mA |
-| 12 V | 0.12 mVpp | 19 µVpp | 113 µVpp | −81 dB | 42.2 mA |
+| 9 V | 0.12 mVpp | 20 µVpp | 113 µVpp | −81 dB | 31.1 mA |
+| 12 V | 0.12 mVpp | 20 µVpp | 113 µVpp | −81 dB | 32.3 mA |
 
-(Input current includes an assumed 15 mA for MCU, logic and LEDs.)
+(Input current includes an assumed 15 mA for MCU, logic and LEDs. Corrected 2026-10-17 after the first board bring-up, which
+measured 25 mA without MCU and with all LEDs lit: the 78L05 model drew only its quiescent current from the input
+(now a series pass element), and the TL072 macromodel drew about 4 mA per amplifier instead of 1.4 mA (now a
+constant supply current). Revision 2 reported 32.7 / 42.2 mA; the two errors partly cancelled. Ripple, hum and
+power-up results are unchanged.)
 
 **Design history (VREF buffer).** A TL072 driving 10 µF through a 100 Ω isolation resistor outside the loop
 gave 1.1 mVpp of 100 Hz on VREF (the difference amplifiers draw V+-dependent currents from VREF) and −47 dB

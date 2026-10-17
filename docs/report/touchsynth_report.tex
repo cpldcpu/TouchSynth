@@ -428,7 +428,7 @@ S3 & Ladder VCF & \SIrange{30}{15000}{Hz}, 24\,dB/oct, self-oscillation & \SIran
 S4 & VCA & $\geq$ \SI{70}{dB} off, low feed-through & 121\,dB; thump 94--101\,mV $\to$ $<$ 0.6\,mV after trim & pass \\
 S5 & Touch & $\Delta \geq 5\times$ noise, $\geq$ \SI{200}{Hz} & SNR 39 (V003) / 152 (V002) worst case; 1.4\,kHz scan & pass \\
 S6 & Full voice & plausible sound, loopback in range & \SI{1.22}{V_{pp}} line out; loopback \SIrange{2.3}{2.9}{V} & pass \\
-S7 & Power & \SIrange{9}{12}{V}, $\leq$ \SI{60}{mA}, low hum & 33 / 42\,mA; hum \SI{-81}{dB} & pass \\
+S7 & Power & \SIrange{9}{12}{V}, $\leq$ \SI{60}{mA}, low hum & 31 / 32\,mA; hum \SI{-81}{dB} & pass \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -564,7 +564,12 @@ sweep. The line output peaks at \SI{1.22}{V_{pp}}. The loopback node stays withi
 \begin{itemize}
   \item \textbf{Ripple}: with \SI{200}{mV_{pp}} of \SI{100}{Hz} ripple on the input, the line-output hum
     is \SI{-81}{dB} relative to \SI{1.33}{V_{pp}} at both \SI{9}{V} and \SI{12}{V}.
-  \item \textbf{Current}: 33 and \SI{42}{mA}, including an assumed \SI{15}{mA} for the logic and LEDs.
+  \item \textbf{Current}: 31 and \SI{32}{mA} at 9 and \SI{12}{V}, including an assumed \SI{15}{mA} for the MCU, logic
+    and LEDs. (Revision 0.1 of this report gave 33 and \SI{42}{mA} from two model errors that partly
+    cancelled: the 78L05 model drew only its quiescent current from the input, and the TL072 macromodel drew
+    about \SI{4}{mA} per amplifier instead of \SI{1.4}{mA}. Both were found at bring-up,
+    Section~\ref{sec:vv}; the corrected model matches the measured \SI{25}{mA} of board 1 within
+    \SI{1}{mA}.)
   \item \textbf{VREF buffer history}: the first VREF buffer (TL072 driving \SI{10}{\micro F} through
     \SI{100}{\ohm} outside the loop) let \SI{1.1}{mV_{pp}} of hum through, \SI{-47}{dB} at the output. A
     dual-loop variant fixed the hum but had a \SI{48}{\ohm} impedance peak. The final plain follower with
@@ -870,28 +875,83 @@ L4 & validation & playing, listening, long-run stability (user) \\
 \end{table}
 
 \subsection{Bring-up}
+Bring-up starts with the MCU not fitted, using a lab supply at \SI{9.0}{V} with a \SI{100}{mA} current limit
+and the multimeter ground on one of the two scope-ground pins. The expected values in
+Table~\ref{tab:bringup} are the DC operating point of the simulation netlist in exactly this state
+(\file{sim/bringup/bringup\_op.py}, results in \file{docs/results/bringup\_expected.csv}). Without the MCU
+its pins float:
+\begin{itemize}
+  \item \textbf{Linear CVs at zero}: the AMP, RES and VCA filter networks are pulled to \SI{0}{V} by their
+    \SI{15}{k\ohm} last-stage resistor, so resonance is off and the VCA is shut.
+  \item \textbf{Cutoff CV at VBIAS}: the cutoff network has no DC path of its own. XCUT\_IN floats up to
+    VBIAS through the expo divider, both expo bases sit at VBIAS, and the ladder tail carries the expo
+    reference current (about \SI{8}{\micro A}). Once the MCU drives the pin low, XCUT\_IN drops to about
+    \SI{0.2}{V} and the tail current to nearly zero.
+  \item \textbf{DCO held in reset}: the reset level shifter has no base drive, so the 2N7002 shorts the
+    integrator capacitor and SAW sits at VREF.
+  \item \textbf{Random shift-register state}: the 74HC595s power up with random outputs. Any number of the
+    16 red LEDs (about \SI{0.68}{mA} each) may light, which moves the input current between the two values
+    given for B3, and VTRIM can be anywhere between 0.4 and \SI{5}{V}.
+\end{itemize}
+The ladder bias taps are a divider from VP, so B7 is judged as the ratio to the measured VP. The other limits
+leave room for resistor (\SI{1}{\percent}) and reference tolerances. A value outside its limit points to the
+block on that test point's silkscreen frame.
+
 \begin{table}[h]
 \centering\small
-\caption{Bring-up steps (lab supply \SI{9.0}{V}, current limit \SI{100}{mA}).}\label{tab:bringup}
-\begin{tabularx}{\textwidth}{@{}l X l l@{}}
+\caption{Bring-up steps, MCU not fitted except B11--B12 (lab supply, current limit \SI{100}{mA}).
+Expected values from the DC operating point of the netlist; board 1 measured at \SI{9}{V}, 2026-10-17, all
+16 LEDs lit.}\label{tab:bringup}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{@{}l >{\raggedright\arraybackslash}X l l l l@{}}
 \toprule
-\# & Step & Expected & Limit \\
+\# & Step / test point & \SI{9}{V} in & \SI{12}{V} in & Limit (\SI{9}{V}) & Board 1 \\
 \midrule
-B1 & visual check, no bridges on the SOIC/TSSOP parts & -- & -- \\
-B2 & reverse polarity, \SI{1}{s} & $I < \SI{1}{mA}$ & pass \\
-B3 & input current, MCU not fitted & $\approx$ \SI{10}{mA} & \SIrange{5}{25}{mA} \\
-B4 & V+ & \SI{8.6}{V} & \SIrange{8.4}{8.8}{V} \\
-B5 & +5\,V & \SI{5.0}{V} & \SIrange{4.8}{5.2}{V} \\
-B6 & VREF & \SI{4.50}{V} & \SIrange{4.45}{4.55}{V} \\
-B7 & VB0 \ldots\ VB4 & 2.40 / 3.40 / 4.40 / 5.40 / 6.40\,V & $\pm$\SI{3}{\percent} \\
-B8 & TAIL & \SI{1.86}{V} & \SIrange{1.7}{2.0}{V} \\
-B9 & LPF (no signal) & \SI{4.50}{V} & \SIrange{4.3}{4.7}{V} \\
-B10 & VCAOUT & \SI{4.50}{V} & \SIrange{4.3}{4.7}{V} \\
-B11 & fit MCU, flash test firmware, \texttt{id} answers & -- & -- \\
-B12 & input current with MCU, LEDs off & +5 \ldots 8\,mA & $<$ \SI{40}{mA} \\
+B1 & visual check; unpowered: no short VP, +5V to GND & -- & -- & -- & -- \\
+B2 & reverse polarity, \SI{1}{s} & $I < \SI{1}{mA}$ & -- & pass & \SI{0}{mA} \\
+B3 & input current & 14.8\,/\,\SI{25.7}{mA}\textsuperscript{a} & 15.9\,/\,\SI{26.8}{mA}\textsuperscript{a}
+  & \SIrange{10}{35}{mA} & \SI{25}{mA}\textsuperscript{a} \\
+B4 & VP & \SI{8.72}{V} & \SI{11.72}{V} & \SIrange{8.4}{8.9}{V} & \SI{8.57}{V} \\
+B5 & +5V & \SI{5.00}{V} & \SI{5.00}{V} & \SIrange{4.8}{5.2}{V} & \SI{5.028}{V} \\
+B6 & VREF & \SI{4.50}{V} & \SI{4.50}{V} & \SIrange{4.45}{4.55}{V} & \SI{4.53}{V} \\
+B6a & VBIAS / V25 & 1.56 / \SI{2.50}{V} & 1.56 / \SI{2.50}{V} & $\pm$\SI{3}{\percent} & 1.57 / \SI{2.515}{V} \\
+B7 & VB0 / VB2 / VB4 & 2.46 / 4.48 / \SI{6.50}{V} & 3.28 / 6.00 / \SI{8.72}{V} & & 2.39 / 4.32 / \SI{6.28}{V} \\
+ & \quad as ratio to VP & 0.281 / 0.513 / 0.745 & & $\pm$\SI{3}{\percent} & 0.279 / 0.504 / 0.733 \\
+B8 & TAIL & \SI{1.96}{V} & \SI{2.79}{V} & \SIrange{1.8}{2.1}{V} & \SI{1.88}{V} \\
+B9 & LPF & \SI{4.50}{V} & \SI{4.50}{V} & \SIrange{4.3}{4.7}{V} & \SI{4.53}{V} \\
+B10 & SAW / RESOUT / VCAOUT & \SI{4.50}{V} & \SI{4.50}{V} & \SIrange{4.3}{4.7}{V} & 4.52 / 4.52 / \SI{4.51}{V} \\
+B10a & XAMP / XRES / XVCA & \SI{0}{V} & \SI{0}{V} & $<$ \SI{50}{mV} & 0 / 0 / \SI{0}{V} \\
+B10b & XCUT\_IN & \SI{1.56}{V} & \SI{1.56}{V} & $\pm$\SI{3}{\percent} & \SI{1.57}{V} \\
+B10c & VTRIM & 0.4 \ldots\ \SI{4.96}{V}\textsuperscript{b} & 0.4 \ldots\ \SI{4.96}{V}\textsuperscript{b} & -- & \SI{4.92}{V}\textsuperscript{b} \\
+B11 & MCU fitted, \texttt{id} & -- & -- & -- & \\
+B12 & current, MCU on & 20 \ldots\ \SI{31}{mA}\textsuperscript{c} & 21 \ldots\ \SI{32}{mA}\textsuperscript{c} & $<$ \SI{40}{mA} & \\
 \bottomrule
-\end{tabularx}
+\end{tabularx}\par\smallskip
+\raggedright\textsuperscript{a} all LEDs off / all 16 LEDs on (random 74HC595 state at power-up); board 1: all on.\quad
+\textsuperscript{b} random 74HC595 state; \SI{4.96}{V} = code 255.\quad \textsuperscript{c} MCU $\approx$ \SI{5}{mA}, 1 to 16 LEDs lit.
 \end{table}
+
+\paragraph{Board 1 result (MCU not fitted).} B1--B10 pass. All three 74HC595s came up with every output high
+(16 LEDs lit, VTRIM at code 255), which is a legitimate power-up state. Two observations:
+\begin{itemize}
+  \item \textbf{VP} is \SI{0.15}{V} below the simulation: the SS14 drops about \SI{0.43}{V} at \SI{25}{mA}
+    instead of the model's \SI{0.28}{V} (or the supply leads drop part of it). The ratiometric parts of the
+    design do not depend on it.
+  \item \textbf{Ladder bias}: relative to VP, VB0 is \SI{0.9}{\percent} low and VB2 / VB4 are about
+    \SI{1.7}{\percent} low. That is inside the limit but more than the resistor tolerance alone explains:
+    roughly \SI{50}{\micro A} leaves the chain at the upper taps. TAIL follows VB0 minus one $V_\mathrm{BE}$
+    and is consistent with it. To be watched in the VCF tests (T6--T8).
+\end{itemize}
+The first bring-up also corrected two simulation models: the 78L05 model drew only its quiescent current
+from the input, and the TL072 macromodel drew about \SI{4}{mA} per amplifier instead of the datasheet
+\SI{1.4}{mA}. Both are fixed in \file{sim/models/models.lib}. With them, the simulated input current with all
+LEDs lit is \SI{25.7}{mA}, against \SI{25}{mA} measured. The first version of Table~\ref{tab:bringup} had also
+driven the PWM nodes to \SI{0}{V}; that is the MCU-fitted state, not the floating one, and gave wrong
+expectations for XCUT\_IN, TAIL and VBIAS.
+
+\noindent After B11 the firmware drives the LEDs (octave display), sets the trim DAC to mid-scale (VTRIM
+about \SI{2.7}{V}, loaded by the \SI{1}{M\ohm} injection resistor) and drives the cutoff PWM low (XCUT\_IN
+about \SI{0.2}{V}). With \texttt{cv vca 0} and no note playing, B9--B10 should still hold.
 
 \subsection{Functional tests}
 \begin{longtable}{@{}l l p{6.2cm} p{3.9cm}@{}}

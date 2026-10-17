@@ -49,7 +49,10 @@ RD1   4 11 3.536E3
 RD2   4 12 3.536E3
 RO1   8  5 150
 RO2   7 99 150
-RP    3  4 2.143E3
+* supply current: the original RP = 2.143k drew ~4 mA per amplifier at 8.6 V; ST TL072CDT is 1.4 mA typ and
+* nearly supply-independent (board bring-up 2026-10-17 confirmed the lower value). Constant ~1 mA + ISS, soft
+* turn-on below 1 V so power-up transients stay well-behaved.
+BP    3  4 I = 1.0E-3*tanh(max(v(3,4),0))
 RSS  10 99 1.026E6
 VB    9  0 DC 0
 VC    3 53 DC 2.200
@@ -100,8 +103,10 @@ VLN   0 92 DC 40
 
 * ---------------------------------------------------------------------------
 * 78L05 behavioural: dropout ~1.7 V, 5 V out, PSRR ~ 65 dB, Iq 3 mA
+* series pass element: the source between 'in' and 'x' drops (Vin - Vout), so the load current flows from
+* 'in' and I(in) = I_load + Iq (the earlier shunt-source model drew only Iq from the input)
 .SUBCKT REG78L05 in out gnd
-Bx   x   gnd V = min(5.0 + 0.0006*(v(in,gnd)-10), v(in,gnd)-1.7)
+Bx   in  x   V = v(in,gnd) - min(5.0 + 0.0006*(v(in,gnd)-10), v(in,gnd)-1.7)
 Rx   x   out 0.2
 Iq   in  gnd 3m
 .ENDS
