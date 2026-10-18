@@ -583,6 +583,58 @@ sweep. The line output peaks at \SI{1.22}{V_{pp}}. The loopback node stays withi
 \caption{S7: (a) power-up at \SI{9}{V}; (b) VREF response to a \SI{1}{mA} load step.}\label{fig:s7}
 \end{figure}
 
+\subsection{S8 -- Pulse output as PWM DAC}\label{sec:s8}
+S8 (\file{sim/s8\_dac/}) checks the DAC mode of Section~\ref{sec:kettle} on the real netlist from the pulse
+input through mixer, ladder, VCA and line out, with the DCO held in reset. A \SI{1}{kHz} test tone at
+\SI{-3}{dBFS} is encoded exactly as the firmware does it: \SI{15.625}{kHz} samples, 8-bit duty with
+first-order error feedback. Three PWM variants are compared with an ideal DAC of the same scale, a continuous
+source that interpolates linearly between the samples (Table~\ref{tab:s8}):
+\begin{itemize}
+  \item \textbf{edge, hold}: TIM2 counting up at \SI{187.5}{kHz}, each sample held for 12 periods (the first
+    firmware version);
+  \item \textbf{centre, hold}: TIM2 counting up and down at \SI{93.75}{kHz}, so the pulses are centred in
+    the period; each sample held for 6 periods;
+  \item \textbf{centre, interpolated}: in addition, the duty is interpolated linearly from the previous
+    sample over the 6 periods (the firmware).
+\end{itemize}
+Results:
+\begin{itemize}
+  \item \textbf{Second harmonic}: with edge-aligned PWM the pulse centre moves with the duty, so the signal
+    also modulates the pulse position. That adds a second harmonic at \SI{-45}{dB} (\SI{0.6}{\percent}).
+    Centred pulses remove it: \SI{-68}{dB}, as clean as the ideal DAC. The third harmonic comes from the ladder
+    itself in all cases.
+  \item \textbf{Images}: holding each sample leaves images at $f_s \pm f$, \SI{-26}{dB} at a \SI{20}{kHz}
+    cutoff. Linear interpolation lowers them by \SI{23}{dB} to the level of the ideal DAC.
+  \item \textbf{Carrier}: halving the carrier to \SI{93.75}{kHz} for the centred pulses leaves it
+    \SI{28}{dB} below the tone with the filter fully open. It is ultrasonic and falls below \SI{-74}{dB} at
+    cutoffs of \SI{5}{kHz} and lower (the kettle uses \SI{4}{kHz}).
+  \item \textbf{Noise}: without the images, \SIrange{-52}{-56}{dB} in the audio band, about the board's own
+    noise floor. The level matches the ideal DAC within \SI{0.4}{dB}.
+\end{itemize}
+
+\begin{table}[h]
+\centering\small
+\caption{S8: \SI{1}{kHz} at \SI{-3}{dBFS} through the pulse input, three PWM variants and an ideal DAC
+(\file{docs/results/s8\_dac.csv}); levels relative to the \SI{1}{kHz} tone. The firmware uses
+\emph{centre, interpolated}.}\label{tab:s8}
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{@{}l l r r r r r r@{}}
+\toprule
+Cutoff & Source & 1\,kHz [mV] & H2 [dB] & H3 [dB] & Image [dB] & Carrier [dB] & Noise [dB] \\
+\midrule
+\SI{20}{kHz} & edge, hold & 292 & $-45$ & $-47$ & $-26$ & $-53$ & $-43$ \\
+ & centre, hold & 292 & $-68$ & $-47$ & $-27$ & $-28$ & $-50$ \\
+ & centre, interpolated & 290 & $-69$ & $-47$ & $-49$ & $-28$ & $-52$ \\
+ & ideal & 295 & $-66$ & $-55$ & $-50$ & -- & $-49$ \\
+\midrule
+\SI{5}{kHz} & edge, hold & 348 & $-46$ & $-42$ & $-43$ & $-87$ & $-55$ \\
+ & centre, hold & 348 & $-66$ & $-42$ & $-43$ & $-74$ & $-56$ \\
+ & centre, interpolated & 346 & $-67$ & $-42$ & $-66$ & $-74$ & $-56$ \\
+ & ideal & 359 & $-65$ & $-43$ & $-67$ & -- & $-51$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Design changes found by simulation}\label{sec:lesson}
 Table~\ref{tab:changes} lists every change that the simulations caused. The most instructive was the
 \emph{CV network loading} bug:
@@ -809,21 +861,25 @@ Hand-soldered (not in the assembly BOM):
 % =====================================================================================================
 \section{Firmware}
 Firmware version 0.1 (\file{firmware/touchsynth/}) is built on ch32fun for the CH32V003, CH32V002 and
-CH32V006 from one code base. With the three demo tunes it uses 13.8\,KB of the 16\,KB flash of the smallest
-part; the CH32V006 build (37.7\,KB) also holds the multitrack parts of Section~\ref{sec:tunes}. It runs on
-board 1 (Section~\ref{sec:board1}). Its structure follows the timing of the design:
+CH32V006 from one code base. With the three demo tunes it uses 14.1\,KB of the 16\,KB flash of the smallest
+part. The CH32V006 build (44.4\,KB) also holds the multitrack parts of Section~\ref{sec:tunes} and the
+digital voice on the PWM DAC (Section~\ref{sec:kettle}). It runs on board 1 (Section~\ref{sec:board1}).
+Its structure follows the timing of the design:
 \begin{itemize}
   \item \textbf{TIM1 update interrupt} at \SI{46.875}{kHz}: loads the four CV compare registers with 2-bit
     sigma-delta dither (10-bit PWM, 12-bit effective) and clocks the noise LFSR. An interrupt was chosen over
     DMA bursts for simplicity; it costs a few percent of the CPU.
   \item \textbf{TIM2}: the DCO period. Channel 1 produces the \SI{3}{\micro s} active-low reset pulse,
-    channel 2 the pulse wave, and the update interrupt toggles the sub-oscillator.
+    channel 2 the pulse wave, and the update interrupt toggles the sub-oscillator. In DAC mode (CH32V006
+    only) TIM2 instead counts up and down at a fixed \SI{93.75}{kHz} with the DCO held in reset, and DMA1
+    channel~2 loads the channel-2 duty from a ring buffer on every update (Section~\ref{sec:kettle}).
   \item \textbf{Control loop} at \SI{1}{kHz} (SysTick): glide, LFO, envelopes, key tracking, the CV laws,
     the percussion pitch envelope and wave switch, and the tune player. It mirrors the firmware layer of the behavioural model. All maths is fixed
     point, because the CH32V003 has no multiplier.
   \item \textbf{Main loop}: the touch scan of all 16 pads through the multiplexers with per-pad baselines
-    and thresholds, the SHIFT/$-$/$+$ user interface, the LED and trim-DAC shift registers, MIDI input, and a
-    test console over SWIO for the verification plan (Section~\ref{sec:vv}).
+    and thresholds, the SHIFT/$-$/$+$ user interface, the LED and trim-DAC shift registers, MIDI input, a
+    test console over SWIO for the verification plan (Section~\ref{sec:vv}), and in DAC mode the DSP that
+    refills the DAC ring buffer.
 \end{itemize}
 The calibration tables, presets and demo tunes are generated from the simulation results and
 \file{tunes.py} by \file{gen\_tables.py}; nothing is copied by hand.
@@ -912,7 +968,7 @@ Piece & Source & Parts (preset) & Length \\
 \midrule
 TouchSynth Demo & original, 118\,bpm, 69 bars & kick, snare, hat, bass (acid), arp, lead, pad (sweep) & 2:24 \\
 Queen Mary's March & Purcell, Z\,860, WIMA edition for four trumpets; two passes with filter sweeps
-  & 4 trumpets (brass), 16$'$ bass (pedal), timpani & 2:41 \\
+  & 4 trumpets (brass), 16$'$ bass (pedal), timpani (kettle, PWM DAC) & 2:41 \\
 Toccata, mm.\,1--30 & Bach, BWV\,565, MusicXML; mordents and trill written out, fermatas doubled
   & 8 manual tracks (organ), pedal & 2:02 \\
 Aerosphere & original, in the style of 1970s space-synth music, 100\,bpm, 68 bars
@@ -970,6 +1026,7 @@ kick & sub + noise $\to$ sub (3\,ms) & 300 & 1.0 & 2.0 & 0.15 & .001/.012/0/.03 
 snare & pulse + noise $\to$ noise (20\,ms) & 2600 & 0 & 1.3 & 0.15 & .001/.06/0/.04 & .001/.12/0/.05 \\
 hat & noise & 8500 & 0 & 0.5 & 0.55 & .001/.015/0/.02 & .001/.018/0/.02 \\
 timpani & all four $\to$ saw + pulse (40\,ms) & 262 & 1.0 & 0 & 0.88 & -- & .004/.45/0/.4 \\
+kettle & PWM DAC: 17 modal resonators & 4000 & 0 & 0 & 0 & -- & .001/5/1/2 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -997,30 +1054,125 @@ With these the kick falls from \SI{220}{Hz} to its \SI{55}{Hz} body within about
 then only bright noise. The hat uses a high, resonant cutoff and reaches \SI{-20}{dB} after \SI{37}{ms}
 (previously \SI{75}{ms}).
 
-The timpani preset was matched to a recorded timpani. A kettledrum has little energy at its nominal pitch;
-its partials lie near 1.5, 2 and 2.5 times it, the double the strongest, with the 1.5-fold partial leading in
-the first \SI{30}{ms}. The preset locks the resonance peak onto the second harmonic by key tracking (the peak
-lies at about 2.1 times the cutoff value), and the pulse wave partly cancels the saw fundamental. For the
-first \SI{40}{ms} the sub-octave square and noise add the 1.5- and 2.5-fold partials and a mallet thud. The
-level per time window matches the recording within about \SI{3}{dB}. One periodic oscillator cannot
-produce the inharmonic partials (about 3.25-fold) or suppress the fundamental completely, which stays at
-\SI{-11}{dB} (Figure~\ref{fig:drums}b).
+The first, analog timpani preset was matched to a recorded timpani: the resonance peak is locked onto the
+second harmonic by key tracking (the peak lies at about 2.1 times the cutoff value), the pulse wave partly
+cancels the saw fundamental, and for the first \SI{40}{ms} the sub-octave square and noise add attack
+partials. It rests on a misreading of the recording by one octave (see below): its strongest partial sits an
+octave above the note. One periodic oscillator cannot produce a drum's inharmonic modes in any case; the
+kettle of Section~\ref{sec:kettle} supersedes it.
 
 On board 1 the version~4 drums behave as in the model. The kick peaks after \SI{2.6}{ms} (version 3:
 \SI{20}{ms}) and falls from \SI{108}{Hz} in the first \SIrange{10}{30}{ms} to \SI{55}{Hz}. The snare's noise
 centroid is \SI{3.1}{kHz} at \SIrange{30}{80}{ms} (version 3: \SI{0.9}{kHz}), and the snare reaches
-\SI{-20}{dB} after \SI{102}{ms} (\SI{317}{ms}). The hat reaches \SI{-20}{dB} after \SI{41}{ms}. The timpani's
-partials on the board match the model within a few dB: over 40 strokes on C3 and G2 the fundamental is at
+\SI{-20}{dB} after \SI{102}{ms} (\SI{317}{ms}). The hat reaches \SI{-20}{dB} after \SI{41}{ms}. The analog
+timpani's partials on the board match the model within a few dB: over 40 strokes on C3 and G2 the fundamental is at
 \SI{-11}{dB} and the third harmonic at \SI{-36}{dB} relative to the second, so the resonance peak lands on
 the second harmonic. The kick's body decays more slowly on the board than in the model (\SI{-20}{dB} after
 about \SI{0.4}{s}).
 
 \begin{figure}[ht]
 \centering\includegraphics[width=\textwidth]{instr_drums.pdf}
-\caption{Percussion in the behavioural model (\file{tools/instrument\_figures.py}). (a) Kick pitch after the
-attack: version 3 (constant sub square) and version 4 (pitch envelope). (b) Timpani partials in two time
-windows: a recorded timpani (C3 stroke) and the timpani preset.}\label{fig:drums}
+\caption{Percussion (\file{tools/instrument\_figures.py}). (a) Kick pitch after the attack in the
+behavioural model: version 3 (constant sub square) and version 4 (pitch envelope). (b) Kettle partials in two
+time windows, relative to the principal: a recorded timpani (C4 stroke) and the kettle preset at C4 in the
+model. (c) Kettle decay on board 1 (solid) and in the model (dashed) for C4, C3 and G2; below about
+\SI{-40}{dB} the board's noise floor takes over (\file{docs/results/hw\_board1\_kettle.csv}).}\label{fig:drums}
 \end{figure}
+
+\subsection{Kettle: a modal timpani on the PWM DAC}\label{sec:kettle}
+A drum's sound comes from the modes of its membrane: inharmonic partials, each with its own decay. The
+analog voice has one periodic oscillator and one filter, so it cannot produce them. Modal synthesis can: a
+bank of resonators, one per mode, excited by the strike. That needs an audio DAC, and the pulse output
+can serve as one without any hardware change.
+
+\paragraph{Pulse output as PWM DAC.} In DAC mode TIM2 counts up and down over 2 $\times$ 256 ticks, a
+\SI{93.75}{kHz} carrier with 8-bit duty and pulses centred in the period. Centred pulses keep the signal from
+also modulating the pulse position, which with simple up-counting PWM added a second harmonic of
+\SI{0.6}{\percent} (S8). DMA1 channel~2 loads the channel-2 duty from a ring buffer on every timer update. In
+this mode the update comes at both ends of the period, so each period's duty is stored twice, and the CPU
+only fills the buffer. The DSP produces samples at \SI{15.625}{kHz} and interpolates linearly from one
+sample to the next over the 6 carrier periods of a sample, which lowers the sampling images by about
+\SI{23}{dB}. Each period's duty is quantised with first-order error feedback, which shapes the quantisation
+noise towards the carrier, so the 8-bit DAC reaches about 10--11 bits in the audio band. The pulse pin feeds
+the passive
+mixer (\SI{470}{k\ohm} into \SI{10}{k\ohm}, then \SI{1}{\micro F}) and the ladder, which acts as the
+reconstruction filter. The ladder's input pair sees only the two PWM levels, so its tanh characteristic does
+not distort the duty-cycle code. S8 (Section~\ref{sec:s8}) checks the path in ngspice. Filter, resonance and
+VCA keep working on the digital signal. The analog oscillator is parked in reset meanwhile, so a preset is
+either analog or digital.
+
+\paragraph{Modal synthesis.} Each stroke excites a bank of two-pole resonators, one per mode:
+\[
+  y[n] = 2r\cos\omega\; y[n-1] - r^2\, y[n-2] + b\, x[n],
+\]
+with $\omega$ from the mode's frequency, $r = e^{-1/(\tau f_s)}$ from its decay time $\tau$ and
+$b = a\sin\omega$ for its level $a$. The excitation $x$ is a
+raised-cosine mallet pulse of \SI{1}{ms} (a hard mallet; a shorter contact excites the upper modes more).
+There are two banks, so two drums can ring at once. A stroke on a note that is still ringing adds to its bank,
+as on a restruck drum; a new note takes a free or the oldest bank. The sum passes a cubic soft clipper
+($1.5x - 0.5x^3$) before the encoder: rolls on a ringing drum add up, and the clipper rounds the rare peaks
+instead of cutting them.
+
+\paragraph{Fit to a recorded timpani.} The modes were fitted to a recorded F3--A3--C4 triad. In each stroke
+the principal mode at the note carries the pitch. A mode at 0.75 times the note leads the first
+\SI{30}{ms} and fades within about \SI{0.1}{s}, and a short thud lies at 0.375 times. Modes at 1.23, 1.46,
+1.62 and 1.91 times colour the tone; the F and C strokes show the same ratios. The first fit read the strong
+\SI{262}{Hz} partial of the C stroke as the octave of a C3 drum, which put every mode an octave too high.
+The identical ratios in the F stroke resolved it.
+
+The preset is deliberately harder and more metallic than the recording:
+\begin{itemize}
+  \item the \SI{1}{ms} mallet;
+  \item the upper modes louder than in the recording, but still below the principal and decaying no
+    slower, so the pitch stays on the note;
+  \item four more high modes between 2.2 and 3.3 times the note;
+  \item each strong mode doubled \SI{0.4}{\percent} higher, \SIrange{3}{8}{dB} weaker. A real membrane's
+    modes are split into such pairs, and their beating gives the shimmer.
+\end{itemize}
+That makes 17 resonators. Figure~\ref{fig:drums}b compares the partials with the recording.
+
+\paragraph{Firmware.} Signals are fixed point (Q24) with Q30 coefficients and use the CH32V006's hardware
+multiplier; the coefficients are computed in floating point once per stroke. The main loop refills
+128-sample halves of the ring, \SI{8.2}{ms} each. The CH32V003 and V002 have no multiplier or too little RAM
+and keep the analog voice only. Four problems appeared on board 1:
+\begin{itemize}
+  \item \textbf{Stack overflow.} With the DSP state and the ring buffer, only 280 bytes of the 8\,KB RAM
+    were left for the stack, which overwrote the patch and the CV values. The ring now shares the console's
+    4\,KB capture buffer (captures are refused in DAC mode); 1.4\,KB remain.
+  \item \textbf{Stalled control tick.} Selecting the kettle blocked interrupts for over \SI{1}{ms}. The
+    SysTick handler schedules the next tick by adding to the compare value, which then lay in the past, so
+    the next match came only after a counter wrap and the 1~kHz engine stopped. The handler now resynchronises
+    when it falls behind, and the soft-float set-up no longer runs with interrupts blocked.
+  \item \textbf{DSP too slow.} At first a refill took the whole half. The DSP rate was halved to
+    \SI{15.625}{kHz} (the highest kettle mode is below \SI{1}{kHz}; the 4~kHz cutoff suppresses the sampling
+    images). The excitation term is computed only during the mallet contact, and the refill loop runs from
+    SRAM instead of flash. A refill now takes at most \SI{4.7}{ms} of the \SI{8.2}{ms} half.
+  \item \textbf{Blocking console wait.} The console's \texttt{wait} command blocked the main loop and
+    starved the DAC during test sequences; it now keeps the DAC fed.
+\end{itemize}
+The console command \texttt{dac} reports the DMA position, late refills and the longest refill.
+
+\paragraph{Board 1 results.}
+\begin{itemize}
+  \item \textbf{DMA:} the transfer counter advances by 19 in \SI{100}{\micro s}, two updates per
+    \SI{93.75}{kHz} period, so the TIM2 update request is served by DMA1 channel~2 as assumed, and the pitch
+    is the same as with the first, edge-aligned version.
+  \item \textbf{Centred pulses and interpolation:} against the first version (edge-aligned PWM, samples held)
+    the share of 8 to \SI{20}{kHz} in a C3 stroke drops from $-38$ to \SI{-43.5}{dB}, and the noise in a
+    decaying tail from 2.6 to \SI{2.2}{mV} rms.
+  \item \textbf{Pitch:} C4, C3 and G2 strokes sound at 259.6, 129.9 and \SI{97.3}{Hz}: the note scaled by the
+    board's \SI{-0.8}{\percent} clock, like every other pitch. In the recorded March part, 13 of 13 G2 strokes
+    and 26 of 27 C3 strokes have their strongest partial on the note.
+  \item \textbf{Decay:} within \SIrange{1}{4}{dB} of the model down to about \SI{-40}{dB}, where the board's
+    noise floor takes over (Figure~\ref{fig:drums}c).
+  \item \textbf{Timing:} no late refill in the test sequence, and the March take fits the common clock with
+    \SI{3.3}{ms} rms, so the DSP kept up through the whole part.
+  \item \textbf{Open:} a faint line at \SI{122}{Hz}, the buffer-half rate, \SI{61}{dB} below the take's peak.
+    It is at the level of the board's noise floor and probably comes from the DSP's current bursts reaching
+    the analog supply.
+\end{itemize}
+The March recorded on board 1 uses the kettle (\file{docs/audio/pieces/march\_hw.mp3}). In the same folder,
+\file{kettle\_model.mp3} plays the triad and the March pattern in the model.
 
 % =====================================================================================================
 \section{Verification and validation plan}\label{sec:vv}
@@ -1361,6 +1513,11 @@ Power, hum & S7 & B2--B5, T12, V6 \\
       visible at up to \SI{-59}{dB}.
     \item \textbf{Not yet tested.} B12 at \SI{12}{V}, T3 (scan rate), T14 (MIDI), the on-chip
       \texttt{selftest}, hum with mains adapters (V6) and the L4 validation in general.
+    \item \textbf{DAC mode} (Section~\ref{sec:kettle}). A faint \SI{122}{Hz} line (the buffer-half rate,
+      \SI{-61}{dB} re peak), probably the DSP's current bursts on the supply; smaller buffer halves would move
+      it up and spread the load. The kettle uses up to about half of the CPU and leaves 1.4\,KB of stack, so
+      more digital voices need care. A firmware routine that blocks the main loop for more than a buffer half
+      (\SI{8.2}{ms}) would starve the DAC.
   \end{itemize}
   \item \textbf{Touch sensitivity on the 4-layer board} (resolved on board 1). Real touches give 486 to 4233
     counts against an untouched $\sigma$ of 20--43 counts. The thresholds need a floor of 200 counts and a
@@ -1387,7 +1544,7 @@ PDF is vector graphics and can be zoomed.
 \section{Reproducing the design}
 \begin{footnotesize}
 \begin{verbatim}
-cd sim/s1_dco && python s1_dco.py      # likewise s2_cv ... s7_power (order: S1, S3, S4, S6)
+cd sim/s1_dco && python s1_dco.py      # likewise s2_cv ... s8_dac (order: S1, S3, S4, S6)
 cd sim/behav && python validate.py && python examples.py
 cd hw && python gen_sch2.py && python check_netlist.py && python check_sim.py
 cd hw && <KiCad python> gen_pcb.py --route  # placement, routing, fill, stitching

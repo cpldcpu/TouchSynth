@@ -26,7 +26,8 @@ what was done in response.
 | [12. Classical and space-synth pieces](#12-classical-and-space-synth-pieces) | 2026-10-17 / 18 | `5665597` |
 | [13. Drums, timpani and the report](#13-drums-timpani-and-the-report) | 2026-10-18 | `5665597` |
 | [14. Board drum takes and clean-up](#14-board-drum-takes-and-clean-up) | 2026-10-18 | `5665597` |
-| [15. Publishing check and a MIDI rendering](#15-publishing-check-and-a-midi-rendering) | 2026-10-18 | this commit |
+| [15. Publishing check and a MIDI rendering](#15-publishing-check-and-a-midi-rendering) | 2026-10-18 | `c0a6ab6` |
+| [16. PWM DAC and the kettle drum](#16-pwm-dac-and-the-kettle-drum-branch-polyphonic_exp) | 2026-10-18 | this commit (`polyphonic_exp`) |
 
 ---
 
@@ -999,9 +1000,129 @@ milder filter waves, and the sea plain swelling noise.
 
 > ok, commit. then update the polyphonic branch and switch to thtere
 
-This commit; then `polyphonic_exp` was moved to it and checked out.
+Commit `c0a6ab6`; then `polyphonic_exp` was moved to it and checked out.
+
+## 16. PWM DAC and the kettle drum (branch polyphonic_exp)
+
+### 10:32
+
+> ok, I would like to brainstorm a bit how we can extend the synthesizer. First, it seems we should add more oscillators?
+
+Constraints first: each independent pitch needs its own timer, the CH32V003's two timers are taken, the
+CH32V006 has a third (TIM3, interrupt only), and all 18 GPIOs are in use. Options from cheap to ambitious: a
+second square oscillator from TIM3 on the sub pin (firmware only), a second analog saw DCO, an XOR ring
+modulator, a bigger MCU with more timers or a DAC, or several boards chained over MIDI for polyphony.
+
+### 10:36
+
+> a minimoog has three oscillators, right?
+
+Yes: three VCOs plus noise with a level each in the mixer. On board 1 three oscillators are possible in
+firmware (TIM2, TIM3, SysTick), but the digital outputs enter the mixer at fixed, equal levels.
+
+### 10:46
+
+> what would we need to properly generate the timpani sound?
+
+Inharmonic modes that beat, a separate decay per mode, a soft mallet and two ringing drums. Ways to get there:
+additive synthesis with oscillators and per-oscillator levels, modal synthesis with a resonator bank, or
+samples. The last two need an audio DAC.
+
+### 10:48
+
+> we could just use the pulse output for an PWM based dac, couldnt we?
+
+Yes: the pulse pin feeds the passive mixer and the ladder, which can reconstruct a PWM signal. The ladder's
+input pair sees only two levels, so its tanh does not distort the duty code. The CH32V006 has a hardware
+multiplier and a 7-channel DMA.
+
+### 10:50
+
+> sounds good, do it
+
+- **S8 (ngspice):** a PWM-encoded sine through the real netlist.
+- **Model:** `sim/behav/dsp.py`, and a PWM input path for the ladder in `behav.py`.
+- **Firmware:** DAC mode (TIM2 at a fixed carrier, DMA1 channel 2 from a ring buffer, DSP in the main loop)
+  and `dsp.c`, modal synthesis in fixed point.
+- **Kettle preset:** modes fitted to the recorded timpani.
+
+### 11:20
+
+> much better! maybe it could have more harsh metallic sound?
+
+Three variants: a hard mallet, louder and longer upper modes with four more high modes, and beating pairs of
+split modes.
+
+### 11:23
+
+> i like kettle c. but it seems to clip a little? in any case, can you render a variant of the march with it for me to listen?
+
+The DSP sum reached 8 times full scale in the March's rolls. A cubic soft clipper and a lower gain fixed it.
+
+### 11:36
+
+> the drum pitch sounds too high compared to the original. can you check that?
+
+Two causes. The recording is an F3-A3-C4 triad, and the fit had read the C4 drum as a C3 drum with a strong
+octave, so every mode was an octave too high. On top, variant C's boosted 3.23x mode outlasted the principal.
+The ratios were halved and the upper modes kept below the principal; the strongest partial is now the note
+at every timpani pitch.
+
+### 11:49
+
+> hardware is back up, you can test on hardware
+
+Four problems on board 1:
+- **Stack overflow:** only 280 bytes of stack were left; the DAC ring now shares the console's capture buffer.
+- **Stalled control tick:** a preset switch blocked interrupts for over 1 ms and SysTick waited for a counter
+  wrap; it now resynchronises.
+- **DSP too slow:** the sample rate was halved to 15.625 kHz, and the excitation term is computed only during
+  the mallet contact.
+- **Blocking console `wait`:** it starved the DAC in test sequences.
+
+### 12:02 (queued)
+
+> you can move the inner loop to sram for a speed up
+
+Done: the refill loop runs from SRAM, the longest refill dropped from 8 to 4.4 ms of the 8.2 ms half. On the
+board the kettle sounds at the note (scaled by the -0.8 % clock) and decays as in the model; the March
+timpani part was recorded and mixed.
+
+### 12:20
+
+> can you explain in the report what you did to implement the new kettle drums?
+
+New report sections: S8 (PWM DAC), the kettle on the PWM DAC (design, fit, firmware, board results), DAC mode
+in the firmware chapter, a figure with the kettle against the recording and against the model, and an open
+point for the faint 122 Hz line at the buffer-half rate.
+
+### 12:30
+
+> are you using symmetric dac and interpolation?
+
+### 12:30 (interrupted, then)
+
+> dymmatric pwm
+
+No: the DAC used edge-aligned PWM and held each sample. Centred pulses would remove the pulse-position
+modulation, and linear interpolation would lower the sampling images.
+
+### 12:31
+
+> ok, do that
+
+TIM2 now counts up and down in DAC mode, a 93.75 kHz carrier with centred pulses. The update comes twice per
+period, so each duty value is stored twice. The refill interpolates linearly between samples. S8 with three
+variants: the second harmonic drops from -45 to -68 dB, the first image from -26 to -49 dB; the carrier is
+only 28 dB down with the filter fully open, but below -74 dB at the kettle's 4 kHz cutoff. On the board the
+high band drops by 5 dB and the tail noise from 2.6 to 2.2 mV. The March timpani was recorded again.
+
+### 12:45
+
+> ok, update docs, then commit
+
+READMEs, devlog and report updated; this commit on `polyphonic_exp`.
 
 ---
 
-**Next:** hardware experiments on the `polyphonic_exp` branch: a second oscillator, a filter mode that can cut
-lows, and polyphony.
+**Next:** more digital voices on the DAC (snare, cymbals, bells), and the hardware experiments on this branch.

@@ -22,6 +22,10 @@ have not been measured. The results are in the
 [design report](docs/report/touchsynth_report.pdf), section 10. Firmware 0.1 runs on the board, including
 multitrack demo pieces and percussion presets. Calibration storage in flash is still open.
 
+The `polyphonic_exp` branch experiments with extensions. So far it turns the pulse output into a PWM DAC
+(CH32V006) for digital voices through the analog filter and VCA, starting with a modal timpani, the *kettle*
+([kettle_model.mp3](docs/audio/pieces/kettle_model.mp3); report, section 10.5).
+
 Design: cpldcpu & Claude Opus 5.5.
 
 ## Hear it
@@ -32,7 +36,7 @@ time and mixed:
 | Piece | Board 1 | Model |
 |---|---|---|
 | *TouchSynth Demo*, original, 7 parts (drums, acid bass, arp, lead, pad) | [demo_hw](docs/audio/demo/touchsynth_demo_hw.mp3) | [demo_model](docs/audio/demo/touchsynth_demo_model.mp3) |
-| Purcell, *Queen Mary's March*: 4 trumpets, bass, timpani | [march_hw](docs/audio/pieces/march_hw.mp3) | [march_model](docs/audio/pieces/march_model.mp3) |
+| Purcell, *Queen Mary's March*: 4 trumpets, bass, timpani (modal synthesis on the PWM DAC) | [march_hw](docs/audio/pieces/march_hw.mp3) | [march_model](docs/audio/pieces/march_model.mp3) |
 | Bach, Toccata BWV 565, mm. 1–30: 9 organ voices | [toccata_hw](docs/audio/pieces/toccata_hw.mp3) | [toccata_model](docs/audio/pieces/toccata_model.mp3) |
 | *Aerosphere*, original space-synth piece, 8 parts | [aero_hw](docs/audio/pieces/aero_hw.mp3) | [aero_model](docs/audio/pieces/aero_model.mp3) |
 | Suite: Aerosphere intro into the Toccata | [suite_hw](docs/audio/pieces/suite_hw.mp3) | [suite_model](docs/audio/pieces/suite_model.mp3) |

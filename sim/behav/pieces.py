@@ -348,7 +348,7 @@ _mp, _mt = _march()
 PIECES = {
     "march": dict(bpm=MARCH_BPM, total=_mt,
                   parts=_make(_mp, _mt, MARCH_BPM, dict(tpt1="brass", tpt2="brass", tpt3="brass", tpt4="brass",
-                                                        bass="pedal", timp="timpani")),
+                                                        bass="pedal", timp="kettle")),
                   mix=dict(tpt1=(-1.0, 0.3), tpt2=(-1.5, -0.3), tpt3=(-2.0, 0.45), tpt4=(-2.0, -0.45),
                            bass=(-3.0, 0.0), timp=(-4.0, -0.1)),
                   reverb=0.30),

@@ -4,22 +4,29 @@
  *   TIM1 update  46.875 kHz  dithered CV PWM (4 channels), noise LFSR     (hw.c)
  *   TIM2 update  = pitch     DCO reset / pulse, sub-oscillator toggle     (hw.c)
  *   SysTick      1 kHz       envelopes, LFO, glide, CV laws, tune player  (synth.c, control_tick)
- *   main loop                touch scan + UI + LEDs, MIDI, SWIO console
+ *   main loop                touch scan + UI + LEDs, MIDI, SWIO console, DSP voices (DAC mode)
+ *   DMA1 ch2     187.5 kHz   DAC mode: PWM duty from a ring buffer to TIM2 CH2   (hw.c, dsp.c)
  */
 #include "board.h"
 #include "hw.h"
 #include "synth.h"
 #include "ui.h"
+#include "dsp.h"
 
 void console_poll(void);
 
 #define TICK (F_CPU / 1000)
 
+volatile uint32_t tick_count;                       /* control ticks since reset (console: status) */
+
 void SysTick_Handler(void) __attribute__((interrupt));
 void SysTick_Handler(void)
 {
 	SysTick->CMP += TICK;
+	if ((int32_t)(SysTick->CMP - SysTick->CNT) <= 0)  /* interrupts were blocked for more than a tick: resync, */
+		SysTick->CMP = SysTick->CNT + TICK;         /* or the next match would only come after a counter wrap */
 	SysTick->SR = 0;
+	tick_count++;
 	synth_tick();
 	ui_tick();
 }
@@ -55,5 +62,8 @@ int main(void)
 		ui_poll();
 		midi_poll();
 		console_poll();
+#if defined(CH32V006)
+		hw_dac_poll(dsp_fill);                      /* DAC mode: refill the buffer half that has played */
+#endif
 	}
 }

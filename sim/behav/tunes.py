@@ -49,6 +49,21 @@ PRESETS = {
                     cutoff=262.0, keytrack=1.0, env_amt=0.0, res=0.88, vol=0.8,
                     fenv=("adsr", 0.001, 0.05, 0.0, 0.1), aenv=("adsr", 0.004, 0.45, 0.0, 0.4),
                     accent=dict(vol=1.0)),
+    # Kettle: the timpani as a digital voice on the PWM DAC (CH32V006, sim/behav/dsp.py): a bank of resonators
+    # per stroke, one per drum mode (ratio to the note, level dB, decay s), fitted to a recorded C4 stroke (an
+    # F3-A3-C4 triad): the principal mode at the note carries the pitch, 0.75x leads the attack and fades in
+    # 0.1 s, a short thud at 0.375x, 1.23 / 1.46 / 1.62 / 1.91 x colour it. Made harder and more metallic than the
+    # recording: a 1 ms (hard) mallet, the upper modes louder, more high modes, and the strong modes doubled 0.4 %
+    # higher (the split degenerate modes of a real membrane beat). Upper modes decay no slower than the
+    # principal, so the pitch stays on the note. The analog filter (open) and VCA (held open) follow the DAC.
+    "kettle": dict(saw=0.0, pulse=0, sub=0, noise=0, cutoff=4000.0, keytrack=0.0, env_amt=0.0, res=0.0, vol=0.8,
+                   fenv=("adsr", 0.001, 0.1, 1.0, 0.1), aenv=("adsr", 0.001, 5.0, 1.0, 2.0), accent=dict(vol=1.0),
+                   dsp=dict(kind="modal", mallet_ms=1.0, voices=2, gain=0.3,
+                            modes=[(0.375, -30, 0.04), (0.5, -14, 0.05), (0.75, 0, 0.11), (0.753, -3, 0.11),
+                                   (1.0, 0, 0.45), (1.004, -8, 0.45), (1.23, -16, 0.30), (1.46, -12, 0.30),
+                                   (1.615, -4, 0.40), (1.6215, -7, 0.40), (1.915, -7, 0.40), (1.9225, -10, 0.40),
+                                   (2.21, -14, 0.30), (2.475, -16, 0.25), (2.725, -18, 0.22), (3.025, -20, 0.20),
+                                   (3.3, -22, 0.18)])),
     "organ": dict(saw=1.0, pulse=1, sub=1, pw=0.5, cutoff=1800.0, env_amt=1.0, res=0.25, keytrack=0.7, vol=0.85,
                   fenv=("adsr", 0.005, 0.3, 0.6, 0.2), aenv=("adsr", 0.005, 0.2, 1.0, 0.15)),
     "pedal": dict(saw=1.0, cutoff=300.0, env_amt=1.5, res=0.3, keytrack=0.3, vol=0.9,

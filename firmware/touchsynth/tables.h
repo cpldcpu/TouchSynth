@@ -79,25 +79,34 @@ static const uint16_t time_step[32] = {  /* attack step per ms, Q15 level */
 #define N_TIME 32
 
 #define PRESET_TABLE \
-    { /* init */ .wave = 1, .pw = 128, .cutoff = 1783, .res = 60, .env_amt = 512, .keytrack = 128, .fenv = {3, 21, 0, 20}, .aenv = {4, 21, 204, 19}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 217, .acc_env_amt = 512, .acc_vol = 217, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* acid */ .wave = 1, .pw = 128, .cutoff = 873, .res = 160, .env_amt = 819, .keytrack = 76, .fenv = {3, 17, 0, 14}, .aenv = {3, 20, 178, 11}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 1229, .acc_vol = 255, .slide_glide = 14, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* arp */ .wave = 3, .pw = 76, .cutoff = 1396, .res = 110, .env_amt = 768, .keytrack = 128, .fenv = {0, 18, 26, 17}, .aenv = {3, 19, 102, 18}, .glide = 0, .lfo_rate = 15, .lfo_pitch = 0, .lfo_pw = 51, .vol = 204, .acc_env_amt = 768, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* lead */ .wave = 5, .pw = 128, .cutoff = 1652, .res = 70, .env_amt = 384, .keytrack = 153, .fenv = {9, 23, 102, 21}, .aenv = {9, 22, 217, 21}, .glide = 15, .lfo_rate = 520, .lfo_pitch = 18, .lfo_pw = 0, .vol = 230, .acc_env_amt = 384, .acc_vol = 230, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* kick */ .wave = 12, .pw = 128, .cutoff = 1083, .res = 30, .env_amt = 512, .keytrack = 255, .fenv = {0, 9, 0, 13}, .aenv = {0, 20, 0, 15}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 255, .acc_env_amt = 666, .acc_vol = 255, .slide_glide = 15, .penv_amt = 24, .penv_dec = 12, .wave2 = 4, .wave_ms = 3 }, \
-    { /* snare */ .wave = 10, .pw = 128, .cutoff = 1880, .res = 30, .env_amt = 333, .keytrack = 0, .fenv = {0, 15, 0, 14}, .aenv = {0, 18, 0, 15}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 255, .acc_env_amt = 333, .acc_vol = 255, .slide_glide = 15, .penv_amt = 7, .penv_dec = 10, .wave2 = 8, .wave_ms = 20 }, \
-    { /* hat */ .wave = 8, .pw = 128, .cutoff = 2318, .res = 110, .env_amt = 128, .keytrack = 0, .fenv = {0, 10, 0, 11}, .aenv = {0, 11, 0, 11}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 166, .acc_env_amt = 205, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* sweep */ .wave = 5, .pw = 128, .cutoff = 894, .res = 140, .env_amt = 1075, .keytrack = 76, .fenv = {28, 29, 64, 27}, .aenv = {21, 26, 230, 27}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 191, .acc_env_amt = 1075, .acc_vol = 191, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* brass */ .wave = 3, .pw = 102, .cutoff = 1271, .res = 60, .env_amt = 717, .keytrack = 153, .fenv = {15, 25, 89, 23}, .aenv = {13, 22, 217, 23}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 217, .acc_env_amt = 717, .acc_vol = 217, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* timpani */ .wave = 15, .pw = 128, .cutoff = 1033, .res = 176, .env_amt = 0, .keytrack = 255, .fenv = {0, 15, 0, 17}, .aenv = {5, 23, 0, 22}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 0, .acc_vol = 255, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 3, .wave_ms = 40 }, \
-    { /* organ */ .wave = 7, .pw = 128, .cutoff = 1744, .res = 50, .env_amt = 256, .keytrack = 178, .fenv = {6, 21, 153, 20}, .aenv = {6, 20, 255, 19}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 217, .acc_env_amt = 256, .acc_vol = 217, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* pedal */ .wave = 1, .pw = 128, .cutoff = 1083, .res = 60, .env_amt = 384, .keytrack = 76, .fenv = {9, 23, 102, 24}, .aenv = {9, 21, 255, 24}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 230, .acc_env_amt = 384, .acc_vol = 230, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* strings */ .wave = 3, .pw = 128, .cutoff = 1488, .res = 40, .env_amt = 256, .keytrack = 128, .fenv = {25, 27, 153, 27}, .aenv = {24, 26, 230, 27}, .glide = 0, .lfo_rate = 40, .lfo_pitch = 0, .lfo_pw = 76, .vol = 204, .acc_env_amt = 256, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* wind */ .wave = 8, .pw = 128, .cutoff = 1083, .res = 180, .env_amt = 0, .keytrack = 0, .fenv = {9, 17, 255, 17}, .aenv = {27, 26, 255, 30}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 0, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* seq */ .wave = 3, .pw = 89, .cutoff = 1189, .res = 120, .env_amt = 768, .keytrack = 128, .fenv = {0, 18, 0, 17}, .aenv = {0, 20, 76, 18}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 768, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
-    { /* theremin */ .wave = 2, .pw = 128, .cutoff = 1595, .res = 40, .env_amt = 128, .keytrack = 153, .fenv = {20, 23, 204, 24}, .aenv = {19, 23, 230, 24}, .glide = 18, .lfo_rate = 550, .lfo_pitch = 25, .lfo_pw = 0, .vol = 217, .acc_env_amt = 128, .acc_vol = 217, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0 }, \
+    { /* init */ .wave = 1, .pw = 128, .cutoff = 1783, .res = 60, .env_amt = 512, .keytrack = 128, .fenv = {3, 21, 0, 20}, .aenv = {4, 21, 204, 19}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 217, .acc_env_amt = 512, .acc_vol = 217, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* acid */ .wave = 1, .pw = 128, .cutoff = 873, .res = 160, .env_amt = 819, .keytrack = 76, .fenv = {3, 17, 0, 14}, .aenv = {3, 20, 178, 11}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 1229, .acc_vol = 255, .slide_glide = 14, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* arp */ .wave = 3, .pw = 76, .cutoff = 1396, .res = 110, .env_amt = 768, .keytrack = 128, .fenv = {0, 18, 26, 17}, .aenv = {3, 19, 102, 18}, .glide = 0, .lfo_rate = 15, .lfo_pitch = 0, .lfo_pw = 51, .vol = 204, .acc_env_amt = 768, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* lead */ .wave = 5, .pw = 128, .cutoff = 1652, .res = 70, .env_amt = 384, .keytrack = 153, .fenv = {9, 23, 102, 21}, .aenv = {9, 22, 217, 21}, .glide = 15, .lfo_rate = 520, .lfo_pitch = 18, .lfo_pw = 0, .vol = 230, .acc_env_amt = 384, .acc_vol = 230, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* kick */ .wave = 12, .pw = 128, .cutoff = 1083, .res = 30, .env_amt = 512, .keytrack = 255, .fenv = {0, 9, 0, 13}, .aenv = {0, 20, 0, 15}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 255, .acc_env_amt = 666, .acc_vol = 255, .slide_glide = 15, .penv_amt = 24, .penv_dec = 12, .wave2 = 4, .wave_ms = 3, .dsp = DSP_IDX(0) }, \
+    { /* snare */ .wave = 10, .pw = 128, .cutoff = 1880, .res = 30, .env_amt = 333, .keytrack = 0, .fenv = {0, 15, 0, 14}, .aenv = {0, 18, 0, 15}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 255, .acc_env_amt = 333, .acc_vol = 255, .slide_glide = 15, .penv_amt = 7, .penv_dec = 10, .wave2 = 8, .wave_ms = 20, .dsp = DSP_IDX(0) }, \
+    { /* hat */ .wave = 8, .pw = 128, .cutoff = 2318, .res = 110, .env_amt = 128, .keytrack = 0, .fenv = {0, 10, 0, 11}, .aenv = {0, 11, 0, 11}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 166, .acc_env_amt = 205, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* sweep */ .wave = 5, .pw = 128, .cutoff = 894, .res = 140, .env_amt = 1075, .keytrack = 76, .fenv = {28, 29, 64, 27}, .aenv = {21, 26, 230, 27}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 191, .acc_env_amt = 1075, .acc_vol = 191, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* brass */ .wave = 3, .pw = 102, .cutoff = 1271, .res = 60, .env_amt = 717, .keytrack = 153, .fenv = {15, 25, 89, 23}, .aenv = {13, 22, 217, 23}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 217, .acc_env_amt = 717, .acc_vol = 217, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* timpani */ .wave = 15, .pw = 128, .cutoff = 1033, .res = 176, .env_amt = 0, .keytrack = 255, .fenv = {0, 15, 0, 17}, .aenv = {5, 23, 0, 22}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 0, .acc_vol = 255, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 3, .wave_ms = 40, .dsp = DSP_IDX(0) }, \
+    { /* kettle */ .wave = 0, .pw = 128, .cutoff = 2039, .res = 0, .env_amt = 0, .keytrack = 0, .fenv = {0, 17, 255, 17}, .aenv = {0, 31, 255, 28}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 0, .acc_vol = 255, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(1) }, \
+    { /* organ */ .wave = 7, .pw = 128, .cutoff = 1744, .res = 50, .env_amt = 256, .keytrack = 178, .fenv = {6, 21, 153, 20}, .aenv = {6, 20, 255, 19}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 217, .acc_env_amt = 256, .acc_vol = 217, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* pedal */ .wave = 1, .pw = 128, .cutoff = 1083, .res = 60, .env_amt = 384, .keytrack = 76, .fenv = {9, 23, 102, 24}, .aenv = {9, 21, 255, 24}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 230, .acc_env_amt = 384, .acc_vol = 230, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* strings */ .wave = 3, .pw = 128, .cutoff = 1488, .res = 40, .env_amt = 256, .keytrack = 128, .fenv = {25, 27, 153, 27}, .aenv = {24, 26, 230, 27}, .glide = 0, .lfo_rate = 40, .lfo_pitch = 0, .lfo_pw = 76, .vol = 204, .acc_env_amt = 256, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* wind */ .wave = 8, .pw = 128, .cutoff = 1083, .res = 180, .env_amt = 0, .keytrack = 0, .fenv = {9, 17, 255, 17}, .aenv = {27, 26, 255, 30}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 0, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* seq */ .wave = 3, .pw = 89, .cutoff = 1189, .res = 120, .env_amt = 768, .keytrack = 128, .fenv = {0, 18, 0, 17}, .aenv = {0, 20, 76, 18}, .glide = 0, .lfo_rate = 500, .lfo_pitch = 0, .lfo_pw = 0, .vol = 204, .acc_env_amt = 768, .acc_vol = 204, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
+    { /* theremin */ .wave = 2, .pw = 128, .cutoff = 1595, .res = 40, .env_amt = 128, .keytrack = 153, .fenv = {20, 23, 204, 24}, .aenv = {19, 23, 230, 24}, .glide = 18, .lfo_rate = 550, .lfo_pitch = 25, .lfo_pw = 0, .vol = 217, .acc_env_amt = 128, .acc_vol = 217, .slide_glide = 15, .penv_amt = 0, .penv_dec = 11, .wave2 = 0, .wave_ms = 0, .dsp = DSP_IDX(0) }, \
 
-#define PRESET_NAMES "init", "acid", "arp", "lead", "kick", "snare", "hat", "sweep", "brass", "timpani", "organ", "pedal", "strings", "wind", "seq", "theremin"
-#define N_PRESETS 16
+#define PRESET_NAMES "init", "acid", "arp", "lead", "kick", "snare", "hat", "sweep", "brass", "timpani", "kettle", "organ", "pedal", "strings", "wind", "seq", "theremin"
+
+#if defined(CH32V006)
+#define DSP_IDX(n) (n)
+#define DSP_MODE_TABLE { { 0.375000f, 33954698, 1072025211 }, { 0.500000f, 214239660, 1072368314 }, { 0.750000f, 1073741824, 1073117283 }, { 0.753000f, 760150998, 1073117283 }, { 1.000000f, 1073741824, 1073589125 }, { 1.004000f, 427464319, 1073589125 }, { 1.230000f, 170176611, 1073512784 }, { 1.460000f, 269711752, 1073512784 }, { 1.615000f, 677485290, 1073570039 }, { 1.621500f, 479622855, 1073570039 }, { 1.915000f, 479622855, 1073570039 }, { 1.922500f, 339546978, 1073570039 }, { 2.210000f, 214239660, 1073512784 }, { 2.475000f, 170176611, 1073466981 }, { 2.725000f, 135176087, 1073429508 }, { 3.025000f, 107374182, 1073398282 }, { 3.300000f, 85290345, 1073360117 } }
+#define DSP_PATCH_TABLE { { 0, 17, 16, 2, 77 } }
+#else
+#define DSP_IDX(n) 0
+#endif
+#define N_PRESETS 17
 
 static const tune_step_t tune_acid_steps[160] = {
     {45, 1, 0}, {45, 1, 2}, {57, 1, 1}, {45, 1, 0}, {0, 1, 0}, {48, 1, 2}, {45, 1, 0}, {55, 1, 1},
@@ -1275,23 +1284,23 @@ static const tune_step_t tune_aero_hat_steps[390] = {
     { tune_march_tpt2_steps, 172, 250, 8 }, \
     { tune_march_tpt3_steps, 172, 250, 8 }, \
     { tune_march_tpt4_steps, 172, 250, 8 }, \
-    { tune_march_bass_steps, 30, 250, 11 }, \
-    { tune_march_timp_steps, 141, 250, 9 }, \
-    { tune_toccata_m1_steps, 627, 20, 10 }, \
-    { tune_toccata_m2_steps, 425, 20, 10 }, \
-    { tune_toccata_m3_steps, 360, 20, 10 }, \
-    { tune_toccata_m4_steps, 244, 20, 10 }, \
-    { tune_toccata_m5_steps, 139, 20, 10 }, \
-    { tune_toccata_m6_steps, 242, 20, 10 }, \
-    { tune_toccata_m7_steps, 158, 20, 10 }, \
-    { tune_toccata_m8_steps, 111, 20, 10 }, \
-    { tune_toccata_pedal_steps, 105, 20, 11 }, \
-    { tune_aero_wind_steps, 44, 150, 13 }, \
-    { tune_aero_pad1_steps, 45, 150, 12 }, \
-    { tune_aero_pad2_steps, 45, 150, 12 }, \
-    { tune_aero_seq_steps, 796, 150, 14 }, \
-    { tune_aero_bass_steps, 393, 150, 11 }, \
-    { tune_aero_lead_steps, 40, 150, 15 }, \
+    { tune_march_bass_steps, 30, 250, 12 }, \
+    { tune_march_timp_steps, 141, 250, 10 }, \
+    { tune_toccata_m1_steps, 627, 20, 11 }, \
+    { tune_toccata_m2_steps, 425, 20, 11 }, \
+    { tune_toccata_m3_steps, 360, 20, 11 }, \
+    { tune_toccata_m4_steps, 244, 20, 11 }, \
+    { tune_toccata_m5_steps, 139, 20, 11 }, \
+    { tune_toccata_m6_steps, 242, 20, 11 }, \
+    { tune_toccata_m7_steps, 158, 20, 11 }, \
+    { tune_toccata_m8_steps, 111, 20, 11 }, \
+    { tune_toccata_pedal_steps, 105, 20, 12 }, \
+    { tune_aero_wind_steps, 44, 150, 14 }, \
+    { tune_aero_pad1_steps, 45, 150, 13 }, \
+    { tune_aero_pad2_steps, 45, 150, 13 }, \
+    { tune_aero_seq_steps, 796, 150, 15 }, \
+    { tune_aero_bass_steps, 393, 150, 12 }, \
+    { tune_aero_lead_steps, 40, 150, 16 }, \
     { tune_aero_kick_steps, 102, 150, 4 }, \
     { tune_aero_hat_steps, 390, 150, 6 }, \
 

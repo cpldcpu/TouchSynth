@@ -111,6 +111,119 @@ static void dco_init(void)
 	NVIC_EnableIRQ(TIM2_IRQn);
 }
 
+/* ------------------------------------------------------------------ PWM DAC on the pulse pin (DAC mode) */
+#if defined(CH32V006)
+#define DAC_BUF (2 * DAC_HALF * DAC_EPS)
+uint16_t hw_scratch[2048];
+#define dac_buf ((uint8_t *)hw_scratch)
+_Static_assert(DAC_BUF <= sizeof hw_scratch, "DAC ring larger than the shared buffer");
+static volatile uint8_t dac_need;                   /* bit 0: first half has played, bit 1: second half */
+static uint8_t dac_on;
+static volatile uint16_t dac_overruns;              /* a half was due again before it had been refilled */
+static uint16_t dac_fill_max;                       /* longest refill, us */
+static uint16_t dac_gap_max;                        /* longest time between two polls, us */
+static uint32_t dac_last_poll;
+
+/* DMA1 channel 2 serves the TIM2 update request: half / full transfer = a buffer half to refill */
+void DMA1_Channel2_IRQHandler(void) __attribute__((interrupt));
+void DMA1_Channel2_IRQHandler(void)
+{
+	uint32_t f = DMA1->INTFR;
+	uint8_t due = ((f & DMA_HTIF2) ? 1 : 0) | ((f & DMA_TCIF2) ? 2 : 0);
+	if (dac_need & due)
+		dac_overruns++;
+	dac_need |= due;
+	DMA1->INTFCR = DMA_CHTIF2 | DMA_CTCIF2 | DMA_CGIF2;
+}
+
+void hw_dac_start(void)
+{
+	if (dac_on)
+		return;
+	for (int i = 0; i < DAC_BUF; i++)
+		dac_buf[i] = 128;
+	NVIC_DisableIRQ(TIM2_IRQn);                      /* no sub-oscillator */
+	sub_on = 0;
+	funDigitalWrite(PIN_SUB, 0);
+	TIM2->DMAINTENR = 0;
+	TIM2->CTLR1 = 0;                                 /* the counting mode may only change while stopped */
+	TIM2->PSC = 0;
+	TIM2->ATRLR = 256;                               /* up 0...256, down again: 512 ticks, 93.75 kHz */
+	TIM2->CH1CVR = 0xFFFF;                           /* CH1 (inverted) stays low: DCO held in reset */
+	TIM2->CH2CVR = 128;
+	TIM2->CNT = 0;
+	TIM2->SWEVGR = T_UG;
+	TIM2->CTLR1 = T_ARPE | T_CMS1 | T_CEN;
+	RCC->AHBPCENR |= RCC_AHBPeriph_DMA1;
+	DMA1_Channel2->CFGR = 0;
+	DMA1_Channel2->PADDR = (uint32_t)&TIM2->CH2CVR;
+	DMA1_Channel2->MADDR = (uint32_t)dac_buf;
+	DMA1_Channel2->CNTR = DAC_BUF;
+	DMA1_Channel2->CFGR = DMA_DIR_PeripheralDST | DMA_CFGR1_MINC | DMA_CFGR1_CIRC | DMA_CFGR1_PSIZE_0 |
+	                      DMA_CFGR1_PL_1 | DMA_CFGR1_HTIE | DMA_CFGR1_TCIE;   /* bytes -> 16-bit register */
+	DMA1->INTFCR = DMA_CHTIF2 | DMA_CTCIF2 | DMA_CGIF2;
+	dac_need = 0;
+	dac_overruns = dac_fill_max = dac_gap_max = 0;
+	dac_last_poll = 0;
+	NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+	DMA1_Channel2->CFGR |= DMA_CFGR1_EN;
+	TIM2->DMAINTENR = T_UDE;
+	dac_on = 1;
+}
+
+void hw_dac_stop(void)
+{
+	if (!dac_on)
+		return;
+	TIM2->DMAINTENR = 0;
+	DMA1_Channel2->CFGR &= ~DMA_CFGR1_EN;
+	NVIC_DisableIRQ(DMA1_Channel2_IRQn);
+	TIM2->CTLR1 = 0;                                 /* back to edge-aligned counting for the DCO */
+	TIM2->CH2CVR = 0;
+	TIM2->CH1CVR = RESET_TICKS;                      /* the engine sets the DCO period at the next tick */
+	TIM2->CNT = 0;
+	TIM2->CTLR1 = T_ARPE | T_CEN;
+	TIM2->INTFR = 0;
+	TIM2->DMAINTENR = T_UIE;
+	NVIC_EnableIRQ(TIM2_IRQn);
+	dac_on = 0;
+}
+
+int hw_dac_active(void) { return dac_on; }
+
+void hw_dac_poll(void (*fill)(uint8_t *dst, int n))
+{
+	if (!dac_on)
+		return;
+	uint32_t now = SysTick->CNT, gap = (now - dac_last_poll) / (F_CPU / 1000000);
+	if (dac_last_poll && gap > dac_gap_max)
+		dac_gap_max = gap > 65535 ? 65535 : gap;
+	dac_last_poll = now;
+	for (int h = 0; h < 2; h++) {
+		if (dac_need & (1 << h)) {
+			__disable_irq();
+			dac_need &= ~(1 << h);
+			__enable_irq();
+			uint32_t t0 = SysTick->CNT;
+			fill(dac_buf + h * DAC_HALF * DAC_EPS, DAC_HALF);
+			uint32_t us = (SysTick->CNT - t0) / (F_CPU / 1000000);
+			if (us > dac_fill_max)
+				dac_fill_max = us > 65535 ? 65535 : us;
+		}
+	}
+}
+
+uint16_t hw_dac_count(void) { return dac_on ? DMA1_Channel2->CNTR : 0; }
+void hw_dac_stats(uint16_t *o, uint16_t *m, uint16_t *g) { *o = dac_overruns; *m = dac_fill_max; *g = dac_gap_max; }
+#else
+void hw_dac_start(void) {}
+void hw_dac_stop(void) {}
+int hw_dac_active(void) { return 0; }
+void hw_dac_poll(void (*fill)(uint8_t *dst, int n)) { (void)fill; }
+uint16_t hw_dac_count(void) { return 0; }
+void hw_dac_stats(uint16_t *o, uint16_t *m, uint16_t *g) { *o = *m = *g = 0; }
+#endif
+
 /* ------------------------------------------------------------------ 595 chain and mux select */
 static void mux_select(int ch)
 {

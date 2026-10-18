@@ -166,6 +166,26 @@ def _ladder(u, g, kres, rsoft):
     return out
 
 
+@njit(cache=True)
+def _ladder_pwm(u_lo, u_hi, d, g, kres, rsoft):
+    """_ladder with a PWM input (duty d switching between u_lo and u_hi, carrier far above the audio band):
+    the input pair sees only the two levels, so its output averages to d*tanh(u_hi - fb) + (1-d)*tanh(u_lo - fb)
+    and the duty code passes the tanh linearly (sim/s8_dac)."""
+    n = u_lo.shape[0]
+    y1 = y2 = y3 = y4 = 0.0
+    out = np.empty(n)
+    for i in range(n):
+        fb = kres[i] / rsoft * np.tanh(rsoft * y4)
+        x = d[i] * np.tanh(u_hi[i] - fb) + (1.0 - d[i]) * np.tanh(u_lo[i] - fb)
+        t1 = np.tanh(y1); t2 = np.tanh(y2); t3 = np.tanh(y3)
+        y1 += g[i] * (x - t1)
+        y2 += g[i] * (np.tanh(y1) - t2)
+        y3 += g[i] * (np.tanh(y2) - t3)
+        y4 += g[i] * (np.tanh(y3) - np.tanh(y4))
+        out[i] = y4
+    return out
+
+
 RSOFT = 0.846   # lpf/13 at the resonance pair, normalised to 2 VT (from the circuit)
 # pole frequency = f(-3 dB) / POLE_RATIO; fitted in validate.py so the self-oscillation pitch matches ngspice
 try:
@@ -190,12 +210,24 @@ def analog(ev, cv, rsoft=None, thump=0.0):
     sub = render_edges(*ev["sub"], n) if len(ev["sub"][0]) else np.zeros(n)
     noise = render_edges(*ev["noise"], n) if len(ev["noise"][0]) else np.zeros(n)
     mix = A_SAW * saw + A_DIG * (pulse + sub + noise)
-    bin1 = hp1(mix, F_MIX_HP)
-    bin1 = bin1 + 2e-6 * np.random.default_rng(1).standard_normal(n)   # circuit noise (starts self-oscillation)
     fp = np.interp(cvc, CUT_CV, CUT_F) / POLE_RATIO
     g = 1 - np.exp(-2 * np.pi * np.minimum(fp, 0.45 * FS) / FS)
     kres = k_of_cv(cvr)
-    y4 = _ladder(bin1 / (2 * VT), g, kres, rs)
+    cn = 2e-6 * np.random.default_rng(1).standard_normal(n)        # circuit noise (starts self-oscillation)
+    if ev.get("dac") is not None:                                   # pulse pin as PWM DAC (DAC mode)
+        import dsp
+        from fractions import Fraction
+        fr = Fraction(FS / dsp.F_CAR).limit_denominator(1000)          # carrier rate -> FS, averaging
+        d = resample_poly(np.asarray(ev["dac"], float) / dsp.ARR, fr.numerator, fr.denominator)
+        d = np.clip(np.pad(d[:n], (0, max(0, n - len(d))), constant_values=0.5), 0, 1)
+        P = 5.0 * A_DIG
+        lo_mean = hp1(mix + P * d, F_MIX_HP) - (mix + P * d)      # minus the slow mean the coupling removes
+        u_lo, u_hi = (mix + lo_mean + cn) / (2 * VT), (mix + P + lo_mean + cn) / (2 * VT)
+        bin1 = u_lo * 2 * VT + P * d
+        y4 = _ladder_pwm(u_lo, u_hi, d, g, kres, rs)
+    else:
+        bin1 = hp1(mix, F_MIX_HP) + cn
+        y4 = _ladder(bin1 / (2 * VT), g, kres, rs)
     lpf = INA_G * 2 * VT * y4
     gain = np.interp(cvv, VCA_CV, VCA_LIN)
     vin = VCA_ATT * 2 * VT
@@ -326,6 +358,9 @@ def firmware(notes, patch, t_end, automation=None):
         tn += dt
     ev = dict(t_end=t_end, reset=np.array(reset), pulse=(np.array(pt), np.array(pl)),
               sub=(np.array(st), np.array(sl)), noise=(np.array(nt), np.array(nl)))
+    if p.get("dsp"):                                                 # DAC mode: digital voice on the pulse pin
+        import dsp
+        ev["dac"] = dsp.encode(dsp.render(notes, p, t_end))
     return ev, cv
 
 

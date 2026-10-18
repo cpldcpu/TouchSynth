@@ -4,6 +4,7 @@
 #include "board.h"
 #include "hw.h"
 #include "synth.h"
+#include "dsp.h"
 #include "tables.h"
 
 patch_t patch;
@@ -58,6 +59,10 @@ static void voice_trigger(uint8_t note, uint8_t flags)
 	hit_ms = 0;
 	fenv.stage = 1;
 	aenv.stage = 1;
+#if defined(CH32V006)
+	if (patch.dsp)                                  /* digital voice: strike the modal bank */
+		dsp_strike(note, (flags & STEP_ACCENT) ? patch.acc_vol : patch.vol);
+#endif
 }
 
 static void voice_legato(uint8_t note)
@@ -248,9 +253,18 @@ void synth_tick(void)
 	int32_t pw = patch.pw + (((int32_t)patch.lfo_pw * tri) >> 15);
 	if (pw < 8) pw = 8;
 	if (pw > 247) pw = 247;
-	uint32_t ticks = set_dco(pm, (wave & WAVE_PULSE) ? pw : 0);
-	hw_dco_waves(wave & WAVE_SUB, wave & WAVE_NOISE);
-	hw_cv_set(CV_AMP, (wave & WAVE_SAW) ? amp_code(ticks) : 0);
+	if (patch.dsp) {                                /* DAC mode: TIM2 is the PWM DAC, the DCO is parked */
+		if (!hw_dac_active())
+			hw_dac_start();
+		hw_dco_waves(0, wave & WAVE_NOISE);
+		hw_cv_set(CV_AMP, 0);
+	} else {
+		if (hw_dac_active())
+			hw_dac_stop();
+		uint32_t ticks = set_dco(pm, (wave & WAVE_PULSE) ? pw : 0);
+		hw_dco_waves(wave & WAVE_SUB, wave & WAVE_NOISE);
+		hw_cv_set(CV_AMP, (wave & WAVE_SAW) ? amp_code(ticks) : 0);
+	}
 
 	/* filter: base + envelope + key tracking (around C4), in 1/256 octave */
 	int32_t amt = (cur_flags & STEP_ACCENT) ? patch.acc_env_amt : patch.env_amt;
@@ -328,6 +342,9 @@ void synth_preset(int i)
 	patch = presets[i];
 	preset_i = i;
 	__enable_irq();
+#if defined(CH32V006)
+	dsp_select(patch.dsp);                          /* soft-float mallet table: not with interrupts blocked */
+#endif
 }
 
 int synth_preset_index(void) { return preset_i; }

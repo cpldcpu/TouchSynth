@@ -33,6 +33,7 @@ typedef struct {
 	uint8_t penv_dec;      /*   with this time index */
 	uint8_t wave2;         /* WAVE_* mask from wave_ms after each attack (0 ms = off), e.g. tone + noise -> noise */
 	uint8_t wave_ms;
+	uint8_t dsp;           /* digital voice on the PWM DAC (CH32V006): DSP_PATCH_TABLE entry, 0 = analog DCO */
 } patch_t;
 
 typedef struct { uint8_t note, len, flags; } tune_step_t;

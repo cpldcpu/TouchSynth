@@ -68,8 +68,10 @@
 #define T_CEN      0x0001
 #define T_UDIS     0x0002
 #define T_ARPE     0x0080
+#define T_CMS1     0x0020   /* centre-aligned mode 1 (counts up and down) */
 #define T_UIE      0x0001
 #define T_UIF      0x0001
+#define T_UDE      0x0100   /* DMAINTENR: DMA request on update */
 #define T_UG       0x0001
 #define T_MOE      0x8000
 #define T_OC_PWM1_LO  0x0068   /* OCxM = 110 (PWM1) + OCxPE, channel 1 / 3 half of CHCTLRx */

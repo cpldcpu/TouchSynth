@@ -113,6 +113,21 @@ def main():
         return (1 if p.get("saw", 1.0) > 0 else 0) | (2 if p.get("pulse", 0) else 0) | \
                (4 if p.get("sub", 0) else 0) | (8 if p.get("noise", 0) else 0)
 
+    # ---- digital voices on the PWM DAC (sim/behav/dsp.py): mode tables per DSP preset
+    dsp_modes, dsp_patches = [], []
+
+    def dsp_index(p):
+        d = p.get("dsp")
+        if not d:
+            return 0
+        assert d["kind"] == "modal"
+        first = len(dsp_modes)
+        for ratio, lvl_db, tau in d["modes"]:
+            dsp_modes.append((ratio, round(10 ** (lvl_db / 20) * 2 ** 30), round(math.exp(-1 / (tau * 15625)) * 2 ** 30)))
+        dsp_patches.append((first, len(d["modes"]), round(d.get("mallet_ms", 3.0) * 15.625), d.get("voices", 2),
+                            round(d.get("gain", 0.5) * 256)))
+        return len(dsp_patches)
+
     def patch(name, p):
         wave = wave_bits(p)
         w2 = p.get("wave2")                                     # e.g. dict(noise=1): saw defaults to off here
@@ -135,6 +150,7 @@ def main():
             f".slide_glide = {tidx(sl.get('glide', 0.06))}",
             f".penv_amt = {round(p.get('penv', 0))}", f".penv_dec = {tidx(p.get('penv_t', 0.02))}",
             f".wave2 = {wave2}", f".wave_ms = {round(p.get('wave_t', 0.0) * 1000) if w2 else 0}",
+            f".dsp = DSP_IDX({dsp_index(p)})",
         ]
         return f"    {{ /* {name} */ " + ", ".join(fields) + " },"
 
@@ -145,6 +161,14 @@ def main():
     out += [patch(n, init if n == "init" else tunes.PRESETS[n]) + " \\" for n in names]
     out.append("")
     out.append("#define PRESET_NAMES " + ", ".join(f'"{n}"' for n in names))
+    out.append("")
+    out.append("#if defined(CH32V006)")
+    out.append("#define DSP_IDX(n) (n)")
+    out.append("#define DSP_MODE_TABLE { " + (", ".join(f"{{ {r:.6f}f, {g}, {rr} }}" for r, g, rr in dsp_modes) or "{ 0 }") + " }")
+    out.append("#define DSP_PATCH_TABLE { " + (", ".join(f"{{ {a}, {b}, {c}, {d}, {e} }}" for a, b, c, d, e in dsp_patches) or "{ 0 }") + " }")
+    out.append("#else")
+    out.append("#define DSP_IDX(n) 0")
+    out.append("#endif")
     out.append(f"#define N_PRESETS {len(names)}")
     out.append("")
 
