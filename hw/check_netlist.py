@@ -4,7 +4,7 @@ import sexp as S
 import design as D
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CLI = os.path.join(S.KICAD, "bin", "kicad-cli.exe")
+CLI = S.KICAD_CLI
 
 
 def main():

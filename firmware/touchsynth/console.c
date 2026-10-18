@@ -12,7 +12,13 @@
  *  trim <0...255>           VCA offset trim DAC
  *  leds <hex> | leds auto   force the 16 LEDs / normal display
  *  touch                    raw, baseline and threshold of all pads
+ *  recal                    re-measure the touch baselines (hands off)
+ *  keys <0|1>               disable / enable the touch keys (pads still scanned; for unattended recordings)
  *  cap <n> [us]             capture n loopback samples (PD5) every us microseconds, hex dump
+ *  adc <ch>                 mean / min / max of 64 conversions of ADC channel ch (diagnostics)
+ *  latch <0|1>              hold the 595 latch line PD4 low / high (diagnostics)
+ *  wait <ms>                pause up to 5 s (settling between test steps)
+ *  capcv <ch> <code> <n> [us]   set CV ch (0 amp, 1 cut, 2 res, 3 vca) and capture at once (step response)
  */
 #include <stdio.h>
 #include <string.h>
@@ -67,8 +73,10 @@ static int starts(const char *s, const char *w, const char **rest)
 
 #if defined(CH32V003)
 #define CAP_MAX 128                 /* 2 KB RAM */
+#elif defined(CH32V006)
+#define CAP_MAX 2048                /* 4 KB of 8 KB RAM */
 #else
-#define CAP_MAX 512
+#define CAP_MAX 512                 /* CH32V002: 4 KB RAM */
 #endif
 static uint16_t cap_buf[CAP_MAX];
 
@@ -115,16 +123,59 @@ static void run(const char *s)
 	} else if (starts(s, "leds", &r)) {
 		while (*r == ' ') r++;
 		if (!strncmp(r, "auto", 4)) led_forced = 0;
-		else { led_override = parse_int(&r); led_forced = 1; }
+		else {                                      /* hex, with or without 0x (decimal parse read "e000" as 0) */
+			if (r[0] == '0' && r[1] == 'x') r += 2;
+			uint16_t v = 0;
+			for (char c; (c = *r) != 0; r++) {
+				int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 :
+				        c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+				if (d < 0) break;
+				v = (uint16_t)(v << 4 | d);
+			}
+			led_override = v; led_forced = 1;
+		}
+	} else if (starts(s, "keys", &r)) {               /* keys <0|1>: disable / enable the touch keys */
+		keys_enabled = parse_int(&r) ? 1 : 0;
+	} else if (starts(s, "recal", &r)) {
+		ui_init();                                  /* re-measure the untouched baselines */
 	} else if (starts(s, "touch", &r)) {
 		for (int i = 0; i < N_PADS; i++)
 			printf("%d %lu %lu %lu\n", i, touch_raw[i], touch_base[i], touch_thr[i]);
+	} else if (starts(s, "capcv", &r)) {              /* capcv <ch 0..3> <code> <n> [us]: CV step, then capture */
+		int ch = parse_int(&r), code = parse_int(&r), n = parse_int(&r), us = *r ? parse_int(&r) : 20;
+		if (ch < 0 || ch > 3) { printf("?ch\n"); return; }
+		if (n < 1 || n > CAP_MAX) n = CAP_MAX;
+		if (us < 5) us = 5;
+		synth_manual = 1;
+		hw_cv_set(ch, code);
+		uint32_t el = hw_capture(cap_buf, n, us);
+		printf("cap %d %d %lu\n", n, us, el);
+		for (int i = 0; i < n; i++)
+			printf("%03x%c", cap_buf[i], (i % 16 == 15 || i == n - 1) ? '\n' : ' ');
+	} else if (starts(s, "wait", &r)) {               /* wait <ms>: settling pause between test steps */
+		int ms = parse_int(&r);
+		Delay_Ms(ms > 5000 ? 5000 : ms);
+	} else if (starts(s, "latch", &r)) {              /* latch <0|1>: hold PD4 (595 RCLK, edge-triggered) - diagnostics */
+		funDigitalWrite(PIN_LATCH, parse_int(&r) ? 1 : 0);
+		Delay_Us(10);
+		printf("PD in %02lx" "%c", GPIOD->INDR & 0xff, 10);
+	} else if (starts(s, "adc", &r)) {                /* adc <ch>: mean and min/max of 64 conversions */
+		int ch = parse_int(&r);
+		if (ch < 0 || ch > 9) { printf("?ch\n"); return; }
+		hw_capture_ch(ch, cap_buf, 64, 20);
+		uint32_t sum = 0; uint16_t lo = 0xFFFF, hi = 0;
+		for (int i = 0; i < 64; i++) {
+			sum += cap_buf[i];
+			if (cap_buf[i] < lo) lo = cap_buf[i];
+			if (cap_buf[i] > hi) hi = cap_buf[i];
+		}
+		printf("adc %d mean %lu min %u max %u\n", ch, sum / 64, lo, hi);
 	} else if (starts(s, "cap", &r)) {
 		int n = parse_int(&r), us = *r ? parse_int(&r) : 20;
 		if (n < 1 || n > CAP_MAX) n = CAP_MAX;
 		if (us < 5) us = 5;
-		hw_capture(cap_buf, n, us);
-		printf("cap %d %d\n", n, us);
+		uint32_t el = hw_capture(cap_buf, n, us);
+		printf("cap %d %d %lu\n", n, us, el);       /* el: elapsed us, > n * us if the ADC could not keep up */
 		for (int i = 0; i < n; i++)
 			printf("%03x%c", cap_buf[i], (i % 16 == 15 || i == n - 1) ? '\n' : ' ');
 	} else {

@@ -16,26 +16,43 @@ about USD 3.65 of parts per board at list price. The MCU, headers and MIDI parts
 
 ![PCB top](docs/figures/pcb/render_top.png)
 
-**Status (2026-09-27):** rev 0.1 is designed, simulated and routed (DRC clean), and the boards are ordered.
-Firmware 0.1 builds but has not yet run on hardware. Bring-up and verification come next.
+**Status (2026-10-18):** board 1 (rev 0.1, CH32V006) is built and brought up. It passes the bring-up steps
+and functional tests T1, T2 and T4–T12 (noise marginal at about −55 dB); T3 (touch scan rate) and T14 (MIDI)
+have not been measured. The results are in the
+[design report](docs/report/touchsynth_report.pdf), section 10. Firmware 0.1 runs on the board, including
+multitrack demo pieces and percussion presets. Calibration storage in flash is still open.
 
 Design: cpldcpu & Claude Opus 5.5.
 
-## Hear it first
+## Hear it
 
-The behavioural model (validated against the ngspice simulations) renders every feature to audio in
-[docs/audio/features/](docs/audio/features/). Start with the demo tunes:
-[acid](docs/audio/features/tune_acid.mp3), [prelude](docs/audio/features/tune_prelude.mp3) (Bach BWV 846) and
-[ode](docs/audio/features/tune_ode.mp3) (Beethoven). The firmware plays the same tunes with SHIFT + C'.
+Recorded from board 1's line out. The synth is monophonic, so the multitrack pieces were played one part at a
+time and mixed:
+
+| Piece | Board 1 | Model |
+|---|---|---|
+| *TouchSynth Demo*, original, 7 parts (drums, acid bass, arp, lead, pad) | [demo_hw](docs/audio/demo/touchsynth_demo_hw.mp3) | [demo_model](docs/audio/demo/touchsynth_demo_model.mp3) |
+| Purcell, *Queen Mary's March*: 4 trumpets, bass, timpani | [march_hw](docs/audio/pieces/march_hw.mp3) | [march_model](docs/audio/pieces/march_model.mp3) |
+| Bach, Toccata BWV 565, mm. 1–30: 9 organ voices | [toccata_hw](docs/audio/pieces/toccata_hw.mp3) | [toccata_model](docs/audio/pieces/toccata_model.mp3) |
+| *Aerosphere*, original space-synth piece, 8 parts | [aero_hw](docs/audio/pieces/aero_hw.mp3) | [aero_model](docs/audio/pieces/aero_model.mp3) |
+| Suite: Aerosphere intro into the Toccata | [suite_hw](docs/audio/pieces/suite_hw.mp3) | [suite_model](docs/audio/pieces/suite_model.mp3) |
+
+The three built-in demo tunes (SHIFT + C' on the board), recorded from board 1:
+[acid](docs/audio/hw_board1/tune_acid.mp3), [prelude](docs/audio/hw_board1/tune_prelude.mp3) (Bach BWV 846) and
+[ode](docs/audio/hw_board1/tune_ode.mp3) (Beethoven). Also from the board: a
+[waveform tour](docs/audio/hw_board1/waveforms.mp3) and a [scale on the self-oscillating filter](docs/audio/hw_board1/selfosc_scale.mp3).
+The behavioural model renders every single feature (waveforms, filter, envelopes, glide, …) in
+[docs/audio/features/](docs/audio/features/). [docs/README.md](docs/README.md) lists all audio files.
 
 ## Documents
 
 | Document | Content |
 |---|---|
-| [docs/report/touchsynth_report.pdf](docs/report/touchsynth_report.pdf) | **design report** (rev 0.1): requirements, architecture, circuits, simulations, PCB, BOM, firmware, V&V |
+| [docs/report/touchsynth_report.pdf](docs/report/touchsynth_report.pdf) | **design report**: requirements, architecture, circuits, simulations, PCB, BOM, firmware, demo tunes and instruments, V&V with the board 1 results |
+| [docs/README.md](docs/README.md) | index of everything in `docs/`: documents, figures, result data, audio |
 | [docs/spec.md](docs/spec.md) | specification and design decisions (some pre-layout details are outdated; the report is current) |
 | [docs/sim_report.md](docs/sim_report.md) | simulation report S1–S7 and the behavioural model |
-| [docs/verification_plan.md](docs/verification_plan.md) | bring-up, functional tests, calibration and validation |
+| [docs/verification_plan.md](docs/verification_plan.md) | bring-up, functional tests, calibration and validation, board 1 results |
 | [docs/touchsynth_schematic.pdf](docs/touchsynth_schematic.pdf) | schematic (7 sheets) |
 | [firmware/touchsynth/README.md](firmware/touchsynth/README.md) | firmware build, playing instructions and test console |
 | [hw/README.md](hw/README.md) | schematic generator scripts |
@@ -49,7 +66,7 @@ hw/          design.py (single source of truth) -> KiCad schematic, PCB, routing
   touchsynth/  KiCad 10 project (generated; edit the Python sources, not the KiCad files)
 firmware/    touchsynth/ firmware 0.1, ch32fun (git submodule)
 parts/       JLCPCB Basic / Promotional Extended part lists
-tools/       Freerouting jar (downloaded, not in git)
+tools/       bench tools: hardware tests, scope recording, multitrack mixing, figures; Freerouting jar (not in git)
 ```
 
 ## Flow
@@ -69,16 +86,25 @@ PCB           hw/gen_pcb.py [--route]      placement, silkscreen art, planes, Fr
 fab           hw/fab.py                    gerbers, drill, BOM and CPL -> hw/touchsynth/production/
 report        docs/report/gen_tables.py    then: latexmk -pdf touchsynth_report.tex (WSL)
 firmware      firmware/touchsynth/gen_tables.py, check_pins.py, make
+tunes         sim/behav/tunes.py, pieces.py    demo tunes, multitrack pieces and presets (-> firmware tables)
+bench         tools/hwtest.py              functional tests over the SWIO console -> docs/results/hw_board1*
+              tools/hw_figures.py          board 1 figures for the report
+              tools/record_parts.sh        record one multitrack part per take with the scope (on the lab PC)
+              tools/mix_parts.py, suite.py align, clock-correct and mix the takes -> docs/audio/
 ```
 
-`gen_pcb.py` needs KiCad's bundled Python (`pcbnew`) and Java 17 for Freerouting 1.9.0. The other Python
+The bench tools need the lab setup (the PC with the programmer, the scope address) in `tools/lab.conf`: copy
+[tools/lab.conf.example](tools/lab.conf.example) and edit it; `lab.conf` is not in git.
+
+`gen_pcb.py` needs KiCad's bundled Python (`pcbnew`) and Java 17 for Freerouting 1.9.0. The hw scripts find KiCad 10
+in its standard install folder, or in `KICAD_DIR` if set. The other Python
 scripts use a normal Python 3 with numpy and matplotlib. ngspice, LaTeX and the RISC-V toolchain run in WSL.
 
 ## Key numbers
 
 | | |
 |---|---|
-| Supply | 9–12 V DC, about 31 mA (simulated; 25 mA measured without MCU) |
+| Supply | 9–12 V DC, about 31 mA (simulated); board 1: 25 mA, MCU running, LEDs off |
 | Pitch range | C1 … C8, saw amplitude flat within ±2.2 % |
 | Filter | 20 Hz … 20 kHz cutoff, −23 dB/oct, self-oscillation |
 | VCA | 121 dB off-attenuation, thump < 0.6 mV after trim |

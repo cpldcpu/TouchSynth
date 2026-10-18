@@ -13,7 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PRJ = os.path.join(HERE, "touchsynth")
 PCB = os.path.join(PRJ, "touchsynth.kicad_pcb")
 OUT = os.path.join(PRJ, "production")
-CLI = os.path.join(S.KICAD, "bin", "kicad-cli.exe")
+CLI = S.KICAD_CLI
 
 ROT = [(r"^SOT-23", 180), (r"^SOT-363", 180), (r"^SOT-89", 180), (r"^SOIC-", 270), (r"^TSSOP-", 270),
        (r"^SMDIP-", 270), (r"^R_Array_Convex", 90)]

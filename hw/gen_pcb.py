@@ -1,6 +1,6 @@
 """Generate the TouchSynth PCB from design.py (run with KiCad's bundled Python: pcbnew).
 
-  "C:/Users/.../KiCad/10.0/bin/python.exe" gen_pcb.py [--route]
+  <KiCad 10>/bin/python.exe gen_pcb.py [--route]      (KiCad's bundled Python, for pcbnew)
 
 Board 100 x 100 mm, 2 layers. Fixed placement for keys, LEDs, connectors, test points and mounting holes;
 functional clusters (schematic groups) are packed into an analog region (left) and a digital region (right).

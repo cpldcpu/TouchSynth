@@ -1,13 +1,14 @@
 # TouchSynth development log
 
-This log covers how TouchSynth was built in one Claude Code session with Claude Opus 5.5. It runs from the first
-question to the ordered board. Each entry quotes the prompt exactly as typed, typos included, and then summarises
+This log covers how TouchSynth was built in Claude Code sessions with Claude Opus 5.5. It runs from the first
+question to the ordered board, and then through the bring-up of the first board and its demo music. Each entry quotes the prompt exactly as typed, typos included, and then summarises
 what was done in response.
 
 - **Times:** local time (CEST).
 - **Queued:** a prompt sent while Claude was still busy with the previous request.
 - **Dialog answer:** a reply typed into one of Claude's multiple-choice question dialogs.
-- **Not listed:** background-task notifications, the two `/compact` commands and the session-limit interruption.
+- **Masked:** local user and host names in prompts are replaced by `<user>@<lab PC>`.
+- **Not listed:** background-task notifications, the `/compact` commands and the session-limit interruption.
 
 | Phase | Date | Commits |
 |---|---|---|
@@ -19,6 +20,12 @@ what was done in response.
 | [6. PCB, 4 layers and final floorplan](#6-pcb-4-layers-and-final-floorplan) | 2026-09-27 | `1c25794` |
 | [7. Design report and firmware](#7-design-report-and-firmware) | 2026-09-27 | `a490e69`, `71ef9cc` |
 | [8. Documentation](#8-documentation) | 2026-09-27 / 10-02 | — |
+| [9. Bring-up and GitHub](#9-bring-up-and-github) | 2026-10-17 | `ff98477`, `90a4c37` |
+| [10. MCU and functional tests](#10-mcu-and-functional-tests) | 2026-10-17 | not yet committed |
+| [11. Multitrack demo](#11-multitrack-demo) | 2026-10-17 | not yet committed |
+| [12. Classical and space-synth pieces](#12-classical-and-space-synth-pieces) | 2026-10-17 / 18 | not yet committed |
+| [13. Drums, timpani and the report](#13-drums-timpani-and-the-report) | 2026-10-18 | not yet committed |
+| [14. Board drum takes and clean-up](#14-board-drum-takes-and-clean-up) | 2026-10-18 | not yet committed |
 
 ---
 
@@ -522,7 +529,424 @@ flow from `design.py` to the fab files, and the key numbers.
 This file. The prompts were extracted from the session transcript, including queued messages and question-dialog
 answers.
 
+## 9. Bring-up and GitHub
+
+### 2026-10-17 15:52
+
+> ok, the boards have arrived now
+
+Sent to the first session, which ended there. The work continued two minutes later in a new session.
+
+### 15:54
+
+> The manufactured boards are now available for bring up
+
+Before the first measurement Claude checked the expected values and found a model error: the 78L05 model drew
+only its quiescent current from the input, so the current budget missed everything on +5 V. The regulator is now
+a series pass element in `sim/models/models.lib`. The expected voltage at every test point with the MCU not
+fitted was recomputed (`sim/bringup/bringup_op.py`) and became the bring-up table, with instructions for B1–B10.
+
+### 15:57
+
+> can you update the bring up section in the report? i will commence with the measurements then
+
+S7 was rerun with the corrected regulator. The report's S7 section, `docs/sim_report.md` and the README supply
+line got the new current, and the report's bring-up section the new table.
+
+### 17:17
+
+> 9V IN - all LEDs light up, no MCU mounted
+> B2 0mA
+> B3 25mA
+> B4 8.57
+> B5 5.028
+> B6 4.53
+> B6a 1.57 / 2.515
+> B7 2.39 / 4.32 / 6.28
+> B8  1.88
+> B9 4.53
+> B10 4.52 / 4.52 / 4.51
+> B10a 0 / 0 /  0
+> B10b 1.57
+> B10c 4.92
+
+Board 1 passes B1–B10. The two readings that looked wrong were errors in the expectations:
+- **Floating MCU pins:** the missing MCU had been modelled as pins driven to 0 V. In reality they float, so
+  XCUT_IN rises to VBIAS and the ladder runs at about 8 µA, which matches XCUT_IN, TAIL and VBIAS as measured.
+- **Input current:** the TL072 model drew 4 mA per amplifier instead of the datasheet's 1.4 mA. With both fixes
+  the simulation predicts 25.7 mA with all LEDs lit, against 25 mA measured; S7 became 31 / 32 mA.
+
+Two small observations went into the report: VP is 0.15 V low (the SS14 drops more than modelled), and the
+upper ladder bias taps are about 1.7 % low.
+
+### 17:30
+
+> I would like to commit this repo to: https://github.com/cpldcpu/TouchSynth
+> Can you set that up? please do not add anything.
+>
+> Also check whether gitignore is up to date and there are no temp artifacts commited
+
+Claude looked at the remote, which held only a `LICENSE` file. The request was then interrupted.
+
+### 17:31
+
+> don't commit anything yet
+
+Claude stopped. The work was then committed as `initial` (`ff98477`) outside the session.
+
+### 17:32
+
+> ok, check and publish
+
+The `initial` commit was checked: no build or temporary files, `.gitignore` complete, and the `ch32fun`
+submodule points to a commit that exists upstream. The remote's `LICENSE` commit was merged instead of
+force-pushing, the branch renamed from `main` to `master` to match GitHub, and pushed (`90a4c37`).
+
+## 10. MCU and functional tests
+
+### 18:05
+
+> ok, a CH32V006 is mounted now. The programmer is connected to a linux system on the network: <user>@<lab PC>
+
+The V006 datasheet gives the TSSOP-20 part the same pin numbers as the V003 / V002 and the V002's timer remap
+codes, so firmware 0.1 runs unchanged (PA4 is bonded to PD7 and must never be an output). The firmware was built
+for the V006. Claude asked for SSH key access to the lab PC.
+
+### 18:07
+
+> ok, you got access now
+
+`minichlink` was built on the lab PC from the project's ch32fun, the firmware flashed, and the console answered
+`id` (B11). Two firmware fixes came first: the touch thresholds, and key C sticking after reset.
+
+### 18:17
+
+> input current is approx 25mA with the current state of the LED. (all are off).
+>
+> tell me when to start touching the keys
+
+B12 passes with 25 mA. A 3-minute touch log started, with instructions to touch all 16 pads in turn.
+
+### 18:18
+
+> ok, all keys seem to work. the leds next to +,- and shift never light up though
+
+T2 passes: every pad recognised, touches 20–90 times above the noise. The three LEDs were forced on from the
+console to tell a board fault from a firmware one.
+
+### 18:25
+
+> they are not on
+
+The console had parsed `e000` as 0. With `0xe000` the LEDs lit:
+
+### 18:26 (queued)
+
+> ok, now they are on
+
+So the LEDs and their drivers are fine. The display only lit them in edit mode or as the top of a value bar.
+They now light while their pad is touched, and `leds` accepts hex with or without `0x`.
+
+### 18:30
+
+> ok continue with the bring up
+
+The analog tests use the audio loopback into the MCU, which read wrong. Claude asked for a measurement at R109.
+
+### 18:40
+
+> on R109, i got 4.5V on the left side and 5mV on the right side
+
+Two new console diagnostics, `adc` and `latch`, showed PD5 (loopback) following PD4 (595 latch): MCU pins 1
+and 2 were bridged by solder. Claude described the rework.
+
+### 18:45
+
+> check againb
+
+No answer on SWIO: the board was unpowered or the cable moved.
+
+### 18:46
+
+> power was off, should work now
+
+With the bridge removed the loopback worked. Claude wrote `tools/hwtest.py`, which runs the functional tests
+over the console, and found one more firmware bug on the way: the trim DAC lost its MSB because the shift
+clock was not low before the first bit. T1, T2 and T4–T12 pass; the opening VCA step has a ~2 % slow (thermal)
+tail and the noise floor of about −55 dB is marginal.
+
+### 18:52 (queued)
+
+> take some recordings for nice figures for the bring up report
+
+The test captures were saved as CSV in `docs/results/hw_board1*` for the report figures.
+
+### 19:10
+
+> i connected a scope to the audio output now. when i touch the keys i do not see any output?
+> you can access the scope via ethernet on the <lab PC> machine. it is a rigol mso0574. ch1 connects with 1x attention to audio out
+
+The tests had left the board in manual mode with the VCA closed, where the keys are ignored. Touching a key now
+ends manual mode. `tools/scope.py` talks SCPI to the scope; a console note showed 600 mVpp at 259 Hz on CH1.
+
+### 19:17
+
+> can you record some sound examples via the scope? you can use hires mode or oversamplnig to improve enob. (i dont have audio attached and want to hear how it sounds)
+
+The first attempt hung the scope's network socket: 16-bit transfers send more bytes than announced. Claude
+asked for a LAN reset and made the recorder use 8-bit blocks of known length.
+
+### 19:33
+
+> done
+
+Five recordings in `docs/audio/hw_board1/`: the three demo tunes, a waveform tour and a scale on the
+self-oscillating filter. HRES mode does not help (the scope stores 8 bits even then), so the recorder takes
+50 M points in normal mode and averages them down to 48 kHz; the noise floor is about −55 dB.
+
+## 11. Multitrack demo
+
+### 20:09
+
+> can you compose and arrange a multi-voice tune? you can record them one after another and then mix
+
+### 20:09 (queued)
+
+> make it a longer demo to show off the synth
+
+### 20:10 (queued)
+
+> how good are percussions?
+
+The *TouchSynth Demo*: 7 parts (kick, snare, hat, acid bass, arp, lead, pad), 118 bpm, 69 bars in six sections.
+Each part starts with a sync step, a 4 ms fully open VCA pulse, so the takes can be aligned. Each part was
+recorded as one scope take and mixed with `tools/mix_parts.py`. On the way the MCU clock was found to run
+0.8 % slow (47.62 MHz, about 14 cents flat). The percussion presets were tuned on the board: a pinged filter
+rang like a tom, so the kick became a filtered sub square.
+
+### 21:11
+
+> i see some leds flickering occasionally. maybe the tough threshold is too low?
+
+They were ghost touches: the noise estimate at power-up was sometimes very low, giving thresholds of 48–96 counts.
+The touch calibration now averages 64 scans after a warm-up, the threshold has a floor of 200 counts, and a key
+counts only after two consecutive scans.
+
+### 21:24
+
+> the c key led is blinking
+
+No ghost touch: the LEDs show the notes of the part being recorded, and the hat part plays C4. Meanwhile the
+scope triggering was fixed: at slow timebases it only started on a real trigger, so it now triggers on each
+part's sync pulse.
+
+### 21:58
+
+> status?
+
+The demo was finished: [touchsynth_demo_hw.mp3](audio/demo/touchsynth_demo_hw.mp3), 2:24, with a model
+version next to it. Each take's clock is fitted from its note onsets, because it drifts by up to 0.1 % between
+takes.
+
+## 12. Classical and space-synth pieces
+
+### 22:15
+
+> maybe we could try another demosong? how about some cool classical moog synthesizer song? also to use nice filter sweeps.
+>
+> maybe something by wendy carlos? clockwork oranga title?
+> or oxygene from jmj?
+
+Claude offered four options, without copying Carlos's or Jarre's arrangements: Bach's Toccata, an original
+Oxygène-style piece, Purcell's Queen Mary March (the piece behind the Clockwork Orange title), or a suite of a
+space-synth intro and the Toccata.
+
+### 22:17 (dialog answer)
+
+> all great ideas! lets do 1,2,4 and i will find the score for the queen mary march
+
+### 22:19 (queued)
+
+> score is in the temp folder
+
+The firmware got control steps (cutoff and resonance ramps within a tune), hold and tie flags, and eight new
+presets. The March came from the WIMA edition's PMX source (four trumpets, C minor), checked against the PDF.
+The Toccata was first written from memory, Aerosphere composed as an original piece. Recording started.
+
+### 22:36
+
+> why dont you just deactivate the keys for the session?
+
+New console command `keys 0`: the pads are still scanned but play nothing, so no touch can stop a recording.
+
+### 22:49
+
+> in the march there is a strange pumping background noise. is this from the original sheet?
+
+Not the score: the tom preset self-oscillated at 84 Hz between hits, and the pedal's sub-oscillator played
+33 Hz. The pedal lost its sub, the tom was rebuilt from noise, and the March was remixed.
+
+### 23:13 (queued)
+
+> soimething is wrong with the toccata. i found a midi file and the sheet musing, they are in temp
+
+The Toccata from memory was wrong. It was rebuilt from the MusicXML score (measures 1–30, up to the Fugue) with a
+small reader (`sim/behav/musicxml.py`): mordents and the trill written out, fermatas doubled, up to nine voices
+allocated by nearest pitch to eight manual tracks plus pedal. Tunes now store a step time in ms, so the fast
+runs fit a 20 ms grid.
+
+### 2026-10-18 00:31
+
+> status?
+
+Aerosphere was mixed. Two of its takes had been captured without their sync pulse, so `mix_parts.py` now also
+aligns each take to the model render of its part. A bug in that alignment, which could not look back far
+enough, was fixed afterwards. The Toccata takes were recording.
+
+### 00:59 (queued)
+
+> how much is still left? can i turn off the hardware?
+
+Everything was recorded: the March, the Toccata, Aerosphere and the suite, each as a board and a model version.
+The opening wind of Aerosphere had been lost and was re-recorded first.
+
+## 13. Drums, timpani and the report
+
+### 01:10
+
+> the drums do not really sound like drums
+
+### 01:11 (queued)
+
+> but the oscillator is software controlled, right? so the pitch envolope could be added by software
+
+Measured on the board takes: a constant 41 Hz kick without attack, a snare tone ringing for 300 ms, a tom that
+was a filter ring. The engine got a **pitch envelope** (the DCO timer is retuned every ms), a **wave switch**
+(tone and noise separated in time) and **source muting** below −66 dB (the closed VCA leaks at about −40 dB).
+New kick, snare and hat presets, at first in the model only, since the hardware was off.
+
+### 01:25
+
+> what is the drum used in the march? it sounds still off
+
+### 01:26 (queued)
+
+> its rather the sound of the drum
+
+Purcell's score has no drum part; the tom was an addition and, now clearly pitched, sat on D3 against C minor.
+It became timpani on C and G that follow the harmony bar by bar.
+
+### 01:27 (queued)
+
+> btw, did you already write a bring up report?
+
+### 01:28 (queued)
+
+> you can use a subagent for the report
+
+The report had only B1–B10. A subagent added B11 / B12, the T1–T14 results with four figures from the
+measurement data (`tools/hw_figures.py`), the defects found and the open points. T3 (touch scan rate) and T14
+(MIDI) had never been measured and are marked so.
+
+### 01:31
+
+> i found a timpani recording and it sounds quite different. i put it into temp
+
+A kettledrum has little energy at its nominal pitch; its partials sit near 1.5, 2 and 2.5 times it, the double
+the strongest. The new timpani locks the filter resonance onto the second harmonic, and for the first 40 ms adds
+the sub-octave and noise for the 1.5- and 2.5-fold partials. It matches the recording's level per time window
+within about 3 dB; the inharmonic partials remain out of reach of one oscillator.
+
+### 01:33 (queued)
+
+> tex is available in wsl
+
+Passed on to the report subagent.
+
+### 01:43 (queued)
+
+> also add a section about the demotunes and how the instruments are implemented
+
+New report section *Demo tunes and instruments*: the tune format, the demos, the multitrack pieces and how they
+are recorded, a table of all presets, the percussion engine and a drum figure (`tools/instrument_figures.py`).
+
+### 01:45 (queued)
+
+> gitignore temp/
+
+Done.
+
+## 14. Board drum takes and clean-up
+
+### 08:39
+
+> the hardware is available again
+
+The new firmware was flashed and the six drum parts recorded. On the board the timpani's partials match the
+model, so the resonance lands on the second harmonic.
+
+### 08:48
+
+> what exactly is missing in the hardware to make the timpani sound better?
+
+In order of importance: a second, independent oscillator for inharmonic partials (or the self-oscillating
+filter used as one), a band- or high-pass mode to remove the fundamental, separate decays per partial, and
+polyphony, since each stroke cuts off the previous one.
+
+### 09:03
+
+> status?
+
+The new drums measured on the board: the kick falls from 108 to 55 Hz and peaks after 2.6 ms, the snare is
+bright and short, the hat reaches −20 dB after 41 ms.
+
+### 09:04
+
+> can you add readme.md to the docs folder explaining all the content that is there now?
+
+`docs/README.md` indexes the documents, figures, result data and audio. Meanwhile all pieces were remixed with
+the new drums, after a fix to the clock fit: dense hats had locked it onto a neighbouring grid.
+
+### 09:26
+
+> can you create a fork where we can experiment with more modified hardware to improve sound quality? Lets call it polyphonic_exp
+
+Interrupted.
+
+### 09:27
+
+> sorry, a branch, not a fork
+
+Branch `polyphonic_exp` created at `90a4c37`, without switching to it, since the work since then is not yet
+committed.
+
+### 09:27
+
+> check whether anything needs to be cleaned up
+
+Found: stale READMEs and devlog, lab-specific hosts and paths in the bench tools, the recording script only on
+the lab PC, and about 45 MB of new MP3s.
+
+### 09:34
+
+> ok, update readme and devlog
+
+### 09:34 (queued)
+
+> regarding environment specific - can you fix that? maybe a config file that is gitignored
+
+### 09:35 (queued)
+
+> also update the pdf report. link it and the examples from the main readme
+
+The README now gives the board 1 status and links the report, the board recordings and the model versions;
+the firmware README has the current sizes, presets and console commands. The bench settings (lab PC, its
+directory, `minichlink`, scope address) moved to `tools/lab.conf`, which is gitignored, with
+`tools/lab.conf.example` as the template; `tools/record_parts.sh` is the recording script from the lab PC.
+The report got corrected firmware sizes and the bench steps under *Reproducing the design*. This log was
+extended from the transcripts.
+
 ---
 
-**Next:** the boards arrive in about three weeks. Bring-up and verification will follow
-[docs/verification_plan.md](docs/verification_plan.md).
+**Next:** hardware experiments on the `polyphonic_exp` branch: a second oscillator, a filter mode that can cut
+lows, and polyphony.

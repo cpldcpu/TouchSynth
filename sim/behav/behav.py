@@ -279,9 +279,15 @@ def firmware(notes, patch, t_end, automation=None):
             pitch = target
         lfo = 2 * abs(2 * ((t * q["lfo_rate"]) % 1) - 1) - 1          # triangle -1..1
         pm = pitch + q["lfo_pitch"] / 100 * lfo
+        if q.get("penv"):                                            # percussion: pitch envelope from the attack
+            pm += q["penv"] * np.exp(-(t - t_on) / q.get("penv_t", 0.02))
+        if q.get("wave2") and t - t_on >= q.get("wave_t", 0.0):     # wave switch after the attack
+            q.update(dict(saw=0.0, pulse=0, sub=0, noise=0), **q["wave2"])
         f = float(mtof(pm)); T = timer_period(f)
         pitch_track[i] = 1 / T
         fenv = q["fenv"](t, t_on, t_off); aenv = q["aenv"](t, t_on, t_off)
+        if aenv < 16 / 32767 and t - t_on > q["aenv"].a:         # sources off below -66 dB (firmware: else they
+            q.update(saw=0.0, pulse=0, sub=0, noise=0)              # leak through the closed VCA at ~-40 dB)
         fc = q["cutoff"] * 2 ** (q["env_amt"] * fenv + q["lfo_cut"] * lfo + q["keytrack"] * (pm - 60) / 12)
         cv["amp"][i] = cv_amp_for(1 / T) * q["saw"]
         cv["cut"][i] = cv_cut_for(fc)

@@ -130,6 +130,9 @@ static void sr_byte(uint8_t b)
 /* chain: MCU -> U7 (LEDs 0-7) -> U8 (LEDs 8-15) -> U9 (trim DAC): the DAC byte goes first */
 void hw_leds_dac(uint16_t leds, uint8_t dac)
 {
+	/* SRCLK is shared with mux select S1: a touch scan ends on channel 7 and leaves it high, so the first rising
+	   edge would be missing and the first bit (DAC MSB) lost. Start from a low clock. */
+	GPIOC->BSHR = 1 << (4 + 16);
 	sr_byte(dac);
 	sr_byte(leds >> 8);
 	sr_byte(leds & 0xFF);
@@ -150,20 +153,33 @@ void hw_touch_scan(uint32_t raw[16], int iterations)
 }
 
 /* ------------------------------------------------------------------ audio loopback capture */
-void hw_capture(uint16_t *buf, int n, int period_us)
+uint32_t hw_capture(uint16_t *buf, int n, int period_us)
 {
-	ADC1->RSQR3 = ADC_CH_AUDIO;
-	ADC1->SAMPTR2 = (ADC1->SAMPTR2 & ~ADC_SMP5) | (ADC_SMP5 & (7 << (3 * ADC_CH_AUDIO)));
-	uint32_t t = SysTick->CNT;
+	return hw_capture_ch(ADC_CH_AUDIO, buf, n, period_us);
+}
+
+/* Sample time code 3 (~30 ADC clocks): the longest code (7) made one conversion ~11.8 us on the V006, so captures
+   requested at 10 us ran slow. The 1 nF loopback capacitor supplies the sampling charge. */
+#define CAP_SMP 3u
+uint32_t hw_capture_ch(int ch, uint16_t *buf, int n, int period_us)
+{
+	ADC1->RSQR3 = ch;
+	ADC1->SAMPTR2 = (ADC1->SAMPTR2 & ~(7u << (3 * ch))) | (CAP_SMP << (3 * ch));
+	uint32_t t = SysTick->CNT, t0 = t;
 	for (int i = 0; i < n; i++) {
 		while ((int32_t)(SysTick->CNT - t) < 0)
 			;
 		t += (uint32_t)period_us * (F_CPU / 1000000);
-		ADC1->CTLR2 = ADC_SWSTART | ADC_ADON | ADC_EXTSEL;   /* same start sequence as the touch library */
-		while (!(ADC1->STATR & ADC_EOC))
+#if defined(CH32V00x)
+		ADC1->CTLR2 = ADC_ADON | ADC_EXTSEL;               /* V00x: re-arm before every software start, as the */
+#endif                                                     /* touch library does (without it the V006 hung here) */
+		ADC1->CTLR2 = ADC_SWSTART | ADC_ADON | ADC_EXTSEL;
+		uint32_t guard = 10000;
+		while (!(ADC1->STATR & ADC_EOC) && --guard)
 			;
-		buf[i] = ADC1->RDATAR;
+		buf[i] = guard ? ADC1->RDATAR : 0xFFFF;            /* 0xFFFF marks a conversion that never finished */
 	}
+	return (SysTick->CNT - t0) / (F_CPU / 1000000);       /* > n * period_us if the loop could not keep up */
 }
 
 /* ------------------------------------------------------------------ MIDI (USART1 RX on PD6, 31250 Bd) */

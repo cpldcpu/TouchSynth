@@ -23,7 +23,8 @@ void hw_leds_dac(uint16_t leds, uint8_t dac);
 void hw_touch_scan(uint32_t raw[16], int iterations);
 
 /* audio loopback: n ADC samples of PD5, one every period_us microseconds */
-void hw_capture(uint16_t *buf, int n, int period_us);
+uint32_t hw_capture(uint16_t *buf, int n, int period_us);       /* returns the elapsed time of n periods in us */
+uint32_t hw_capture_ch(int ch, uint16_t *buf, int n, int period_us);   /* any ADC channel (diagnostics) */
 
 /* MIDI input: returns a received byte or -1 */
 int hw_midi_read(void);
