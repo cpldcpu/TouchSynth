@@ -12,11 +12,13 @@ Variants:
   dual94     93.75 kHz carrier, dual PWM (16 bit, 1 % ratio error), one sample per carrier period
 The sum of three oscillators is scaled so its worst-case peak fits the DAC (each oscillator at 1/3).
 The quantiser takes the full-resolution sum (an unlimited accumulator) and feeds its error back, so the
-oscillators' own resolution does not matter. What remains is the 8-bit quantiser's noise; at 93.75 kHz (oversampling
-ratio 2.3 for a 20 kHz band) first-order shaping lowers it by only ~2.6 dB, and it lies mostly at high
-frequencies, so it shows with an open filter (-55 to -58 dB) and hides behind a closed one (-68 dB). At 187.5 kHz
-(ratio 4.7) second-order shaping works: 7 bit reach -67 to -89 dB. An ideal DAC reaches -73 to -93 dB at 93.75 kHz
-(sampling images) and -83 to -100 dB at 187.5 kHz.
+oscillators' own resolution does not matter. At a 93.75 kHz carrier the PWM's sample-and-hold images (73 - 93 kHz
+for a 20 kHz band) pass the filter; the model then shows -22 to -38 dB, whatever the resolution (the mechanism is
+unclear: images at ~-68 dB cannot make in-band products of that size in a real differential pair; most likely the
+192 kHz model ladder, with the images near its Nyquist rate, creates them; see docs/devlog.md, section 2) (until 2026-10-18 the model band-limited the per-period values to half the carrier rate and hid these
+images; behav.analog now holds each period's value). At 187.5 kHz the images lie above 167 kHz: 7 bit with
+second-order shaping reach -67 to -87 dB; dual PWM (14 bit) at 187.5 kHz samples -82 to -92 dB; dual PWM at
+93.75 kHz samples on the 187.5 kHz carrier (linear interpolation) -57 to -63 dB.
 Metric: the residual of each variant after the best linear fit from ref (quantisation noise, images and their
 intermodulation; not delay or small response differences), re the ref level, 20 Hz - 20 kHz, per segment.
 

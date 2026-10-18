@@ -26,7 +26,8 @@ Design: cpldcpu & Claude Opus 5.5.
 
 ```
 docs/        specification, devlog, results (CSV), figures, audio examples
-sim/         ngspice studies (S8 PWM DAC, S9 oscillators, S10 5 V analog core) and the behavioural model
+sim/         ngspice studies (S8 PWM DAC, S9 oscillators, S10 5 V analog core, S11 reconstruction filter) and the
+             behavioural model
 firmware/    voice/: CH32V006 voice firmware (from TouchSynth rev 0.1); ch32fun (git submodule)
 hw/          schematic / PCB generator scripts (still the rev 0.1 description, to be replaced by the new boards)
 parts/       JLCPCB Basic / Promotional Extended part lists

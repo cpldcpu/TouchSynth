@@ -14,7 +14,8 @@ The same notes and patches play through several oscillator sources; filter, VCA 
   h_dac_188k_rc  g plus the 2-pole filter
 Quantisation is not the limit (6 or 7 bit with second-order noise shaping equal an ideal DAC within 1 dB here);
 the sampling images are: they intermodulate in the ladder and VCA into the audio band. Linear interpolation at
-46.875 kHz samples leaves a floor of about -45 dB, at 93.75 kHz about -50 to -60 dB; one sample per carrier period
+46.875 kHz samples leaves a floor of about -45 dB, at 93.75 kHz about -46 to -60 dB (with the carrier's own
+sample-and-hold images, which the model shows since 2026-10-18); one sample per carrier period
 at 187.5 kHz comes within a few dB of the DCO.
 The digital saw is the DCO's own waveform, ideally band-limited to the DAC's Nyquist frequency (the best a
 mip-mapped wavetable can do; a real one adds a little interpolation error). All DAC variants have the saw's level

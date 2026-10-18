@@ -219,9 +219,12 @@ def analog(ev, cv, rsoft=None, thump=0.0):
         from fractions import Fraction
         cfg = ev.get("dac_cfg", {})                                 # variants (sim/s9_osc); defaults = firmware
         f_car = cfg.get("f_car", dsp.F_CAR)
-        fr = Fraction(FS / f_car).limit_denominator(1000)              # carrier rate -> FS, averaging
-        d = resample_poly(np.asarray(ev["dac"], float) / cfg.get("levels", dsp.ARR), fr.numerator, fr.denominator,
-                          window=("kaiser", 10.0))                # stopband ~-100 dB (images of the carrier rate)
+        # each carrier period holds its average (zero-order hold): repeat to >= 4 x FS first, so the images of the
+        # per-period values (around multiples of the carrier) stay in the signal up to FS / 2, as on the pin
+        hold = max(1, int(np.ceil(4 * FS / f_car)))
+        fr = Fraction(FS / (f_car * hold)).limit_denominator(1000)
+        d = resample_poly(np.repeat(np.asarray(ev["dac"], float) / cfg.get("levels", dsp.ARR), hold),
+                          fr.numerator, fr.denominator, window=("kaiser", 10.0))   # stopband ~-100 dB
         d = np.clip(np.pad(d[:n], (0, max(0, n - len(d))), constant_values=0.5), 0, 1)
         P = cfg.get("p", 5.0 * A_DIG)                               # DAC swing at the mixer node
         if cfg.get("recon_fc"):                                     # reconstruction filter before the mixer: the

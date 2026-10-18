@@ -13,6 +13,7 @@
 | `s9_osc.csv` | S9: inharmonic content of an open-filter saw, analog DCO against DAC variants (model) |
 | `s9_moog.csv` | S9b: three-oscillator voice, residual against an ideal DAC (model) |
 | `s10_5v.csv` | S10: the analog voice core at 5 V against rev 0.1 (headroom, cutoff, resonance, THD, noise, supply rejection) |
+| `s11_recon.csv` | S11: the DAC's reconstruction filter and mixer resistor on the 5 V core (carrier at the line out, droop) |
 | `hw_board1_dco_vs_dac.csv` | board 1: saw C2–C7 from the DCO and from the DAC, level and inharmonic content |
 | `hw_board1_hsitrim.csv` | board 1: CH32V006 HSITRIM step and range |
 | `hw_board1_hsi_jitter.csv` | board 1: HSI period jitter, Allan deviation, LDO settings |
