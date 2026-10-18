@@ -56,3 +56,5 @@ docs/report/*.toc
 
 # Local scratch material (scores, reference recordings)
 temp/
+# Local arrangements of copyrighted music and their renders (not for publication)
+private/

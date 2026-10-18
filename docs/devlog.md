@@ -21,11 +21,12 @@ what was done in response.
 | [7. Design report and firmware](#7-design-report-and-firmware) | 2026-09-27 | `a490e69`, `71ef9cc` |
 | [8. Documentation](#8-documentation) | 2026-09-27 / 10-02 | — |
 | [9. Bring-up and GitHub](#9-bring-up-and-github) | 2026-10-17 | `ff98477`, `90a4c37` |
-| [10. MCU and functional tests](#10-mcu-and-functional-tests) | 2026-10-17 | not yet committed |
-| [11. Multitrack demo](#11-multitrack-demo) | 2026-10-17 | not yet committed |
-| [12. Classical and space-synth pieces](#12-classical-and-space-synth-pieces) | 2026-10-17 / 18 | not yet committed |
-| [13. Drums, timpani and the report](#13-drums-timpani-and-the-report) | 2026-10-18 | not yet committed |
-| [14. Board drum takes and clean-up](#14-board-drum-takes-and-clean-up) | 2026-10-18 | not yet committed |
+| [10. MCU and functional tests](#10-mcu-and-functional-tests) | 2026-10-17 | `5665597` |
+| [11. Multitrack demo](#11-multitrack-demo) | 2026-10-17 | `5665597` |
+| [12. Classical and space-synth pieces](#12-classical-and-space-synth-pieces) | 2026-10-17 / 18 | `5665597` |
+| [13. Drums, timpani and the report](#13-drums-timpani-and-the-report) | 2026-10-18 | `5665597` |
+| [14. Board drum takes and clean-up](#14-board-drum-takes-and-clean-up) | 2026-10-18 | `5665597` |
+| [15. Publishing check and a MIDI rendering](#15-publishing-check-and-a-midi-rendering) | 2026-10-18 | this commit |
 
 ---
 
@@ -945,6 +946,60 @@ directory, `minichlink`, scope address) moved to `tools/lab.conf`, which is giti
 `tools/lab.conf.example` as the template; `tools/record_parts.sh` is the recording script from the lab PC.
 The report got corrected firmware sizes and the bench steps under *Reproducing the design*. This log was
 extended from the transcripts.
+
+## 15. Publishing check and a MIDI rendering
+
+### 09:47
+
+> is there any personally identifiable information or anthing else that i should not publish in the repo and logs?
+
+A scan of all files to be published, the PDF metadata and the git history found no secrets, keys or private
+addresses. Findings: a Windows user path in `hw/sexp.py` (also in the history), the lab login and host name in
+two quoted prompts, the WCH datasheets, and the unknown licence of the timpani recording behind one figure.
+
+### 09:53
+
+> gitignore the wch datasheets.
+> move the devlog to docs/. no need to link it from the main, but link from docs readme
+
+### 09:53 (queued)
+
+> yes, and remove the windows paths from future commits
+
+`docs/datasheets/` is ignored and the two tracked datasheets untracked. This log moved to `docs/` and is linked
+from `docs/README.md`; the host names in the quoted prompts are masked. `hw/sexp.py` finds KiCad through
+`KICAD_DIR` or the standard install folders, and provides `kicad-cli` to `check_netlist.py` and `fab.py`.
+
+### 09:57
+
+> ok, commit
+
+Commit `5665597` on `master`: board 1 bring-up, the demo pieces, the percussion engine, docs and tools.
+
+### 09:58
+
+> i put a midi of oxygene into the temp folder. can you implement this using the emulator first?
+
+The piece is under copyright, so everything derived from the MIDI stays in a new gitignored folder, `private/`;
+only a generic Standard MIDI File reader (`sim/behav/midifile.py`) is part of the repository. The arrangement
+maps the 13 MIDI channels onto 19 monophonic parts on a 41 ms grid (triplets and 16ths), splits the pad chords
+into voices by nearest pitch, and renders and mixes them with the behavioural model. Part levels were balanced
+from measurements.
+
+### 10:19
+
+> the instrument starting at ~0:06 sounds very off
+
+Pitches and timing were right; the sounds were not. The intro blips (a marimba in the MIDI) had been put on a
+resonant sequencer patch, the sequence itself was squelchy instead of round, and the sea noise whistled through
+a near-self-oscillating filter. The blips got a soft mallet patch of their own, the sequence a rounder one with
+milder filter waves, and the sea plain swelling noise.
+
+### 10:25
+
+> ok, commit. then update the polyphonic branch and switch to thtere
+
+This commit; then `polyphonic_exp` was moved to it and checked out.
 
 ---
 
