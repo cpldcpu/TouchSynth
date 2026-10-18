@@ -19,8 +19,8 @@ sim/**/out/
 sim/**/*.raw
 sim/**/*.wav
 
-# Datasheet text extracts
-docs/datasheets/*.txt
+# WCH datasheets and their text extracts (WCH copyright; download from wch-ic.com)
+docs/datasheets/
 
 # Python
 __pycache__/
@@ -43,6 +43,7 @@ hw/touchsynth/*.ses
 hw/touchsynth/route.log
 hw/logs/
 tools/logs/
+tools/lab.conf
 hw/touchsynth/*.log
 
 # LaTeX build files
@@ -52,3 +53,8 @@ docs/report/*.fls
 docs/report/*.fdb_latexmk
 docs/report/*.out
 docs/report/*.toc
+
+# Local scratch material (scores, reference recordings)
+temp/
+# Local arrangements of copyrighted music and their renders (not for publication)
+private/

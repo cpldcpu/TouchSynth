@@ -20,8 +20,11 @@ static uint16_t played;             /* keys that started a note (only those send
 static int key_note(int k) { return 48 + 12 * octave + k; }
 volatile uint16_t led_override;
 volatile uint8_t led_forced;
+volatile uint8_t keys_enabled = 1;
 
 #define TOUCH_ITER 4                /* x 3 samples per pad and scan */
+#define TOUCH_MIN_THR 200           /* counts; see ui_init */
+static uint8_t touch_cnt[N_PADS];
 
 static int8_t sel = -1;             /* selected parameter, -1 = octave */
 static uint8_t shift_used;
@@ -83,6 +86,7 @@ static void show(int v)
 static void key_down(int k, uint16_t held)
 {
 	int shift = held & (1 << PAD_SHIFT);
+	synth_manual = 0;                               /* any touch ends a console test session (manual mode) */
 	if (k == PAD_SHIFT) {
 		shift_used = 0;
 		return;
@@ -95,7 +99,7 @@ static void key_down(int k, uint16_t held)
 			played |= 1 << k;
 		} else if (k == 12) {                       /* SHIFT + C': demo tune */
 			synth_tune_play(next_tune);
-			next_tune = (next_tune + 1) % synth_n_tunes;
+			next_tune = (next_tune + 1) % synth_n_demos;   /* the multitrack parts only via the console */
 		} else {                                    /* SHIFT + key: select parameter */
 			sel = k;
 			show(param_get(k));
@@ -129,23 +133,35 @@ static void key_up(int k)
 /* ------------------------------------------------------------------ touch processing */
 void ui_init(void)
 {
-	uint32_t sum[N_PADS] = { 0 }, sq[N_PADS] = { 0 };
-	const int n = 16;
+	/* statistics of the deviation from the first scan (small, signed): no unsigned wrap-around when the noise
+	   is small (the first version computed E[x^2] - m^2 in uint32_t and could underflow) */
+	uint32_t ref[N_PADS];
+	int32_t sum[N_PADS] = { 0 }, sq[N_PADS] = { 0 };
+	const int n = 64;
+	for (int w = 0; w < 300; w++) {                 /* warm-up: board 1 read pad 0 ~550 counts low right after reset */
+		hw_touch_scan(touch_raw, TOUCH_ITER);
+		Delay_Ms(1);
+	}
+	hw_touch_scan(ref, TOUCH_ITER);
 	for (int s = 0; s < n; s++) {
 		hw_touch_scan(touch_raw, TOUCH_ITER);
 		for (int i = 0; i < N_PADS; i++) {
-			sum[i] += touch_raw[i];
-			sq[i] += (touch_raw[i] >> 2) * (touch_raw[i] >> 2);
+			int32_t d = (int32_t)(touch_raw[i] - ref[i]);
+			if (d > 2000) d = 2000;                 /* keep d^2 * n inside int32 if a pad is touched */
+			if (d < -2000) d = -2000;
+			sum[i] += d;
+			sq[i] += d * d;
 		}
 	}
 	for (int i = 0; i < N_PADS; i++) {
-		touch_base[i] = sum[i] / n;
-		uint32_t m = touch_base[i] >> 2;
-		uint32_t var = sq[i] / n - m * m;           /* variance of raw/4 */
+		touch_base[i] = (uint32_t)((int32_t)ref[i] + sum[i] / n);
+		int32_t var = (sq[i] - (int32_t)(((int64_t)sum[i] * sum[i]) / n)) / (n - 1);
 		uint32_t sd = 1;
-		while (sd * sd < var) sd++;
-		/* threshold: 8 sigma, at least 3 LSB per sample (S5: a 5 pF touch gives >= 14.8 LSB/sample on V003) */
-		uint32_t thr = 8 * 4 * sd, min = 3 * 3 * TOUCH_ITER;
+		while ((int32_t)(sd * sd) < var) sd++;
+		/* threshold: 8 sigma, at least TOUCH_MIN_THR. Board 1: untouched sigma 12...45 counts, but the noise
+		   estimate came out as low as 48 on some boots and ghost touches followed; every real touch gave >= 490
+		   (mostly 1000...4000) counts. raw is the sum of 3 samples x TOUCH_ITER */
+		uint32_t thr = 8 * sd, min = TOUCH_MIN_THR;
 		touch_thr[i] = thr > min ? thr : min;
 	}
 }
@@ -157,15 +173,22 @@ void ui_poll(void)
 	for (int i = 0; i < N_PADS; i++) {
 		int32_t d = (int32_t)(touch_raw[i] - touch_base[i]);
 		if (st & (1 << i)) {
-			if (d < (int32_t)touch_thr[i] / 2)      /* hysteresis */
+			if (d < (int32_t)touch_thr[i] / 2) {    /* hysteresis */
 				st &= ~(1 << i);
+				touch_cnt[i] = 0;
+			}
 		} else {
-			if (d > (int32_t)touch_thr[i])
-				st |= 1 << i;
-			else                                    /* track slow drift while untouched */
+			if (d > (int32_t)touch_thr[i]) {
+				if (++touch_cnt[i] >= 2)            /* debounce: two consecutive scans above threshold */
+					st |= 1 << i;
+			} else {                                /* track slow drift while untouched */
+				touch_cnt[i] = 0;
 				touch_base[i] += d / 64;
+			}
 		}
 	}
+	if (!keys_enabled)                              /* console 'keys 0': scan, but no key events */
+		st = 0;
 	uint16_t chg = st ^ touch_state;
 	for (int i = 0; i < N_PADS; i++) {
 		if (!(chg & (1 << i)))
@@ -177,7 +200,8 @@ void ui_poll(void)
 	}
 	touch_state = st;
 
-	/* LEDs: value bar while editing, otherwise held notes; selected parameter blinks; SHIFT LED in edit mode */
+	/* LEDs: value bar while editing, otherwise held notes and touched function pads; selected parameter blinks;
+	   SHIFT LED in edit mode */
 	uint16_t leds;
 	if (led_forced)
 		leds = led_override;
@@ -185,6 +209,7 @@ void ui_poll(void)
 		leds = (uint16_t)((2u << show_val) - 1);
 	else {
 		leds = synth_held_mask(key_note(0));
+		leds |= st & ((1 << PAD_SHIFT) | (1 << PAD_MINUS) | (1 << PAD_PLUS));   /* function pads: lit while touched */
 		if (sel >= 0 && (blink_ms & 256))
 			leds |= 1 << sel;
 		if (sel >= 0)

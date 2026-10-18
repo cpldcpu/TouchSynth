@@ -5,7 +5,7 @@ all : build
 TARGET:=touchsynth
 TARGET_MCU?=CH32V003
 PREFIX:=riscv64-unknown-elf
-ADDITIONAL_C_FILES:=hw.c synth.c ui.c console.c
+ADDITIONAL_C_FILES:=hw.c synth.c ui.c console.c dsp.c
 include ../ch32fun/ch32fun/ch32fun.mk
 
 tables.h : gen_tables.py ../../docs/results/s1_cal.csv ../../docs/results/s3_cutoff.csv ../../sim/behav/tunes.py

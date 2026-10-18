@@ -1,0 +1,116 @@
+> wave 0
+ok
+> cv amp 0
+ok
+> cv res 0
+ok
+> cv cut 2000
+ok
+> trim 0
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2206 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2282 min 2280 max 2286
+ok
+> trim 32
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2206 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2260 min 2258 max 2264
+ok
+> trim 64
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2206 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2237 min 2235 max 2242
+ok
+> trim 96
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2206 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2215 min 2213 max 2219
+ok
+> trim 128
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2206 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2193 min 2190 max 2196
+ok
+> trim 160
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2206 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2170 min 2168 max 2173
+ok
+> trim 192
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2206 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2148 min 2145 max 2151
+ok
+> trim 224
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2207 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2125 min 2122 max 2129
+ok
+> trim 255
+ok
+> cv vca 0
+ok
+> adc 5
+adc 5 mean 2209 min 2207 max 2213
+ok
+> cv vca 4095
+ok
+> adc 5
+adc 5 mean 2103 min 2101 max 2106
+ok

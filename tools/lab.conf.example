@@ -1,0 +1,13 @@
+# Bench setup for the hardware tools (hwtest.py, scope.py, synthtest.py, record_parts.sh).
+# Copy to lab.conf (gitignored) and edit. Environment variables of the same name override these values.
+# Copy synthtest.py, scope.py, labconf.py, record_parts.sh and lab.conf to LAB_DIR on the lab PC as well.
+
+# Linux PC with the WCH-LinkE programmer (SSH target, key login) and its working directory
+LAB_HOST=user@labpc
+LAB_DIR=~/touchsynth
+
+# minichlink on the lab PC, relative to LAB_DIR (build it from ch32fun/minichlink)
+MINICHLINK=ch32fun/minichlink/minichlink
+
+# oscilloscope (Rigol MSO5000, SCPI over LAN, port 5555) as reached from the lab PC; CH1 on the line out
+SCOPE_HOST=192.168.0.10

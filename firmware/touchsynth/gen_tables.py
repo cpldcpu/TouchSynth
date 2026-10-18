@@ -109,9 +109,29 @@ def main():
         return round(math.log2(hz / CUT_F0) * 256)
 
     # ---- presets (engine units, see synth.h patch_t)
-    def patch(name, p):
-        wave = (1 if p.get("saw", 1.0) > 0 else 0) | (2 if p.get("pulse", 0) else 0) | \
+    def wave_bits(p):
+        return (1 if p.get("saw", 1.0) > 0 else 0) | (2 if p.get("pulse", 0) else 0) | \
                (4 if p.get("sub", 0) else 0) | (8 if p.get("noise", 0) else 0)
+
+    # ---- digital voices on the PWM DAC (sim/behav/dsp.py): mode tables per DSP preset
+    dsp_modes, dsp_patches = [], []
+
+    def dsp_index(p):
+        d = p.get("dsp")
+        if not d:
+            return 0
+        assert d["kind"] == "modal"
+        first = len(dsp_modes)
+        for ratio, lvl_db, tau in d["modes"]:
+            dsp_modes.append((ratio, round(10 ** (lvl_db / 20) * 2 ** 30), round(math.exp(-1 / (tau * 15625)) * 2 ** 30)))
+        dsp_patches.append((first, len(d["modes"]), round(d.get("mallet_ms", 3.0) * 15.625), d.get("voices", 2),
+                            round(d.get("gain", 0.5) * 256)))
+        return len(dsp_patches)
+
+    def patch(name, p):
+        wave = wave_bits(p)
+        w2 = p.get("wave2")                                     # e.g. dict(noise=1): saw defaults to off here
+        wave2 = wave_bits(dict(dict(saw=0), **w2)) if w2 else 0
         f = p.get("fenv", ("adsr", 0.002, 0.3, 0.0, 0.2))
         a = p.get("aenv", ("adsr", 0.003, 0.3, 1.0, 0.1))
         acc = p.get("accent", {})
@@ -128,6 +148,9 @@ def main():
             f".acc_env_amt = {round(acc.get('env_amt', p.get('env_amt', 0.0)) * 256)}",
             f".acc_vol = {round(acc.get('vol', p.get('vol', 0.9)) * 255)}",
             f".slide_glide = {tidx(sl.get('glide', 0.06))}",
+            f".penv_amt = {round(p.get('penv', 0))}", f".penv_dec = {tidx(p.get('penv_t', 0.02))}",
+            f".wave2 = {wave2}", f".wave_ms = {round(p.get('wave_t', 0.0) * 1000) if w2 else 0}",
+            f".dsp = DSP_IDX({dsp_index(p)})",
         ]
         return f"    {{ /* {name} */ " + ", ".join(fields) + " },"
 
@@ -138,22 +161,65 @@ def main():
     out += [patch(n, init if n == "init" else tunes.PRESETS[n]) + " \\" for n in names]
     out.append("")
     out.append("#define PRESET_NAMES " + ", ".join(f'"{n}"' for n in names))
+    out.append("")
+    out.append("#if defined(CH32V006)")
+    out.append("#define DSP_IDX(n) (n)")
+    out.append("#define DSP_MODE_TABLE { " + (", ".join(f"{{ {r:.6f}f, {g}, {rr} }}" for r, g, rr in dsp_modes) or "{ 0 }") + " }")
+    out.append("#define DSP_PATCH_TABLE { " + (", ".join(f"{{ {a}, {b}, {c}, {d}, {e} }}" for a, b, c, d, e in dsp_patches) or "{ 0 }") + " }")
+    out.append("#else")
+    out.append("#define DSP_IDX(n) 0")
+    out.append("#endif")
     out.append(f"#define N_PRESETS {len(names)}")
     out.append("")
 
-    # ---- demo tunes: {note, length in 16ths, flags (1 slide, 2 accent)}
-    for name, t in tunes.TUNES.items():
+    # ---- demo tunes and multitrack parts: {note, length in 16ths, flags (1 slide, 2 accent)}
+    # Parts (tunes.PARTS) follow the demos and are compiled only where flash allows (CH32V006, 62 KB).
+    def steps(name, t):
         vals = []
         for n, ln, fl in t["steps"]:
-            vals.append(f"{{{n}, {ln}, {(1 if 'S' in fl else 0) | (2 if 'A' in fl else 0)}}}")
+            assert n == 0 or n >= 128 or ln <= 255, (name, n, ln)  # long notes are split into ties in tunes.py
+            while ln > 255:                                      # len is uint8_t: split long rests
+                vals.append(f"{{0, 255, 0}}")
+                ln -= 255
+            f = {"S": 1, "A": 2, "Y": 4, "H": 8, "T": 16}
+            vals.append(f"{{{n}, {ln}, {sum(v for k, v in f.items() if k in fl)}}}")
         body = ",\n    ".join(", ".join(vals[i:i + 8]) for i in range(0, len(vals), 8))
-        out.append(f"static const tune_step_t tune_{name}_steps[{len(vals)}] = {{\n    {body}\n}};")
-    out.append("#define TUNE_TABLE \\")
+        return f"static const tune_step_t tune_{name}_steps[{len(vals)}] = {{\n    {body}\n}};", len(vals)
+
+    def entry(name, t, n):
+        ms = t.get("step_ms") or 15000 // t["bpm"]                    # ms per step (a 16th at bpm)
+        return f"    {{ tune_{name}_steps, {n}, {ms}, {names.index(t['preset'])} }}, \\"
+
+    import pieces                                                # multitrack pieces (sim/behav/pieces.py)
+    parts = dict(getattr(tunes, "PARTS", {}))
+    parts.update(pieces.all_parts())
+    lens = {}
     for name, t in tunes.TUNES.items():
-        out.append(f"    {{ tune_{name}_steps, {len(t['steps'])}, {t['bpm']}, {names.index(t['preset'])} }}, \\")
+        src, lens[name] = steps(name, t)
+        out.append(src)
+    out.append("#if defined(CH32V006)")
+    for name, t in parts.items():
+        src, lens[name] = steps(name, t)
+        out.append(src)
+    out.append("#endif")
+    out.append("#define DEMO_TABLE \\")
+    out += [entry(n, t, lens[n]) for n, t in tunes.TUNES.items()]
     out.append("")
-    out.append("#define TUNE_NAMES " + ", ".join(f'"{n}"' for n in tunes.TUNES))
+    out.append("#define PART_TABLE \\")
+    out += [entry(n, t, lens[n]) for n, t in parts.items()]
+    out.append("")
+    out.append("#define DEMO_NAMES " + " ".join(f'"{n}",' for n in tunes.TUNES))
+    out.append("#define PART_NAMES " + " ".join(f'"{n}",' for n in parts))
+    out.append(f"#define N_DEMOS {len(tunes.TUNES)}")
+    out.append("#if !defined(CH32V006)")
+    out.append("#define TUNE_TABLE DEMO_TABLE")
+    out.append("#define TUNE_NAMES DEMO_NAMES")
     out.append(f"#define N_TUNES {len(tunes.TUNES)}")
+    out.append("#else")
+    out.append("#define TUNE_TABLE DEMO_TABLE PART_TABLE")
+    out.append("#define TUNE_NAMES DEMO_NAMES PART_NAMES")
+    out.append(f"#define N_TUNES {len(tunes.TUNES) + len(parts)}")
+    out.append("#endif")
     out.append("")
     out.append("#endif")
     open(os.path.join(HERE, "tables.h"), "w", encoding="utf-8", newline="\n").write("\n".join(out) + "\n")

@@ -4,7 +4,8 @@ and against the timer / ADC functions of both chip families under the chosen rem
   python check_pins.py
 
 Remap tables: CH32V003 from ch32fun/ch32v003hw.h (AFIO_PCFR1_TIM1/2_REMAP_PARTIALREMAP1 comments);
-CH32V002/V00x from the CH32V002 datasheet V1.7, table 2-1 (suffix _n = AFIO remap value n).
+CH32V002/V00x from the CH32V002 datasheet V1.7, table 2-1 (suffix _n = AFIO remap value n); the CH32V006
+datasheet V2.0, table 2-1-1 (V006F8P7, TSSOP-20) gives the same pin numbers and remap functions.
 """
 import os
 import re

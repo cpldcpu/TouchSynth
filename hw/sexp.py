@@ -1,9 +1,27 @@
 """Minimal S-expression reader/writer for KiCad files, plus symbol-library helpers."""
-import os, re
+import os, re, shutil
 
-KICAD = r"C:\Users\tboes\AppData\Local\Programs\KiCad\10.0"
-SYMDIR = os.path.join(KICAD, "share", "kicad", "symbols")
-FPDIR = os.path.join(KICAD, "share", "kicad", "footprints")
+def _kicad():
+    """(install folder or None, shared library folder) of KiCad 10: KICAD_DIR (the install folder) if set, else
+    the standard install locations (Windows per-user / system-wide, Linux, macOS)."""
+    roots = [os.environ.get("KICAD_DIR"),
+             os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "KiCad", "10.0"),
+             os.path.join(os.environ.get("ProgramFiles", ""), "KiCad", "10.0")]
+    for r in filter(None, roots):
+        if os.path.isdir(os.path.join(r, "share", "kicad", "symbols")):
+            return r, os.path.join(r, "share", "kicad")
+    for share in ("/usr/share/kicad", "/usr/local/share/kicad",
+                  "/Applications/KiCad/KiCad.app/Contents/SharedSupport"):
+        if os.path.isdir(os.path.join(share, "symbols")):
+            return None, share
+    raise SystemExit("KiCad 10 libraries not found: set KICAD_DIR to the KiCad install folder")
+
+
+KICAD, KICAD_SHARE = _kicad()
+SYMDIR = os.path.join(KICAD_SHARE, "symbols")
+FPDIR = os.path.join(KICAD_SHARE, "footprints")
+_cli = os.path.join(KICAD, "bin", "kicad-cli.exe") if KICAD else None
+KICAD_CLI = _cli if _cli and os.path.exists(_cli) else (shutil.which("kicad-cli") or "kicad-cli")
 
 _tok = re.compile(r'\(|\)|"(?:\\.|[^"\\])*"|[^\s()]+')
 

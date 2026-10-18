@@ -4,6 +4,7 @@
 #include "board.h"
 #include "hw.h"
 #include "synth.h"
+#include "dsp.h"
 #include "tables.h"
 
 patch_t patch;
@@ -14,7 +15,7 @@ static const char *const preset_names[N_PRESETS] = { PRESET_NAMES };
 static const tune_t tunes[N_TUNES] = { TUNE_TABLE };
 static const char *const tune_names[N_TUNES] = { TUNE_NAMES };
 static int8_t preset_i;
-const uint8_t synth_n_presets = N_PRESETS, synth_n_tunes = N_TUNES;
+const uint8_t synth_n_presets = N_PRESETS, synth_n_tunes = N_TUNES, synth_n_demos = N_DEMOS;
 
 /* ------------------------------------------------------------------ envelopes (Q15 level) */
 typedef struct { uint8_t stage; int32_t level; } env_t;   /* stage: 0 idle, 1 attack, 2 decay/sustain, 3 release */
@@ -41,6 +42,8 @@ static void env_tick(env_t *e, const uint8_t *p)
 /* ------------------------------------------------------------------ voice state */
 static int32_t pitch = -1, target;      /* 1/256 semitone (MIDI * 256) */
 static uint8_t cur_flags, glide_idx;
+static int32_t penv;                    /* pitch envelope offset, 1/256 semitone */
+static uint8_t hit_ms;                  /* ms since the last attack (saturates), for the wave switch */
 static uint32_t lfo_phase;
 static uint16_t boot_ms;
 static uint8_t stack[8], n_stack;
@@ -52,8 +55,14 @@ static void voice_trigger(uint8_t note, uint8_t flags)
 		pitch = target;
 	cur_flags = flags;
 	glide_idx = (flags & STEP_SLIDE) ? patch.slide_glide : patch.glide;
+	penv = (int32_t)patch.penv_amt << 8;
+	hit_ms = 0;
 	fenv.stage = 1;
 	aenv.stage = 1;
+#if defined(CH32V006)
+	if (patch.dsp)                                  /* digital voice: strike the modal bank */
+		dsp_strike(note, (flags & STEP_ACCENT) ? patch.acc_vol : patch.vol);
+#endif
 }
 
 static void voice_legato(uint8_t note)
@@ -112,24 +121,71 @@ void synth_dco_note(uint16_t pitch256)
 static int8_t tune_i = -1;
 static uint16_t step_i, step_t, step_len, step_gate;
 
+static uint8_t sync_ms;
+
+/* control steps (note >= CTRL_BASE): take no time, set a parameter; cutoff and resonance glide to their target
+   over the ramp length set by CTRL_RAMP (in 16ths of the tune) */
+static uint16_t ramp_16th;
+static int32_t cut_fp, cut_inc, res_fp, res_inc;    /* 1/256 octave and res units, << 8 */
+static uint16_t cut_ms, res_ms;
+
+static void ramps_reset(void)
+{
+	ramp_16th = 0;
+	cut_ms = res_ms = 0;
+}
+
+static void ctrl(uint8_t c, uint8_t v, const tune_t *t)
+{
+	uint32_t ms = (uint32_t)ramp_16th * t->step_ms;
+	switch (c) {
+	case CTRL_CUT:
+		cut_fp = (int32_t)patch.cutoff << 8;
+		if (ms) { cut_inc = (((int32_t)v * 16 << 8) - cut_fp) / (int32_t)ms; cut_ms = ms; }
+		else { patch.cutoff = v * 16; cut_ms = 0; }
+		break;
+	case CTRL_RAMP: ramp_16th = v; break;
+	case CTRL_RES:
+		res_fp = (int32_t)patch.res << 8;
+		if (ms) { res_inc = (((int32_t)v << 8) - res_fp) / (int32_t)ms; res_ms = ms; }
+		else { patch.res = v; res_ms = 0; }
+		break;
+	case CTRL_ENV: patch.env_amt = patch.acc_env_amt = v * 16; break;
+	case CTRL_WAVE: patch.wave = v; break;
+	case CTRL_VOL: patch.vol = patch.acc_vol = v; break;
+	}
+}
+
+static void ramps_tick(void)
+{
+	if (cut_ms) { cut_fp += cut_inc; cut_ms--; patch.cutoff = cut_fp >> 8; }
+	if (res_ms) { res_fp += res_inc; res_ms--; patch.res = res_fp >> 8; }
+}
+
 static void tune_tick(void)
 {
 	if (tune_i < 0)
 		return;
 	const tune_t *t = &tunes[tune_i];
 	if (step_t == 0) {
+		while (step_i < t->n && t->steps[step_i].note >= CTRL_BASE) {     /* control steps: no time */
+			ctrl(t->steps[step_i].note, t->steps[step_i].len, t);
+			step_i++;
+		}
 		if (step_i >= t->n) {                       /* end of tune */
 			voice_release();
 			tune_i = -1;
 			return;
 		}
 		const tune_step_t *s = &t->steps[step_i];
-		step_len = (15000 / t->bpm) * s->len;       /* ms per 16th = 60000 / bpm / 4 */
+		step_len = t->step_ms * s->len;
 		step_gate = (s->flags & STEP_SLIDE) ? step_len : step_len * 4 / 5;
-		if (s->note)
+		if (s->flags & STEP_SYNC)
+			sync_ms = 4;
+		if (s->note && !(s->flags & STEP_TIE))
 			voice_trigger(s->note, s->flags);
 	}
-	if (++step_t == step_gate && t->steps[step_i].note)
+	if (++step_t == step_gate && t->steps[step_i].note && !(t->steps[step_i].flags & STEP_HOLD))
 		voice_release();
 	if (step_t >= step_len) {
 		step_t = 0;
@@ -142,6 +198,7 @@ void synth_tune_play(int i)
 	__disable_irq();
 	if (i >= 0 && i < N_TUNES) {
 		synth_preset(tunes[i].preset);
+		ramps_reset();
 		tune_i = i;
 		step_i = step_t = 0;
 	} else {
@@ -160,10 +217,18 @@ void synth_tick(void)
 	if (boot_ms < 1000)
 		boot_ms++;
 	tune_tick();
+	ramps_tick();
 	env_tick(&fenv, patch.fenv);
 	env_tick(&aenv, patch.aenv);
-	if (synth_manual || pitch < 0)
+	if (synth_manual)
 		return;
+	if (pitch < 0) {                                /* no note yet: only the sync marker can open the VCA */
+		if (sync_ms) {
+			sync_ms--;
+			hw_cv_set(CV_VCA, (sync_ms && boot_ms >= 500) ? 4095 : 0);
+		}
+		return;
+	}
 
 	/* pitch: glide, vibrato */
 	if (glide_idx) {
@@ -176,15 +241,30 @@ void synth_tick(void)
 	lfo_phase += (uint32_t)patch.lfo_rate * 42950u;  /* 2^32 / 100 000 per 0.01 Hz and ms */
 	uint16_t ph = lfo_phase >> 16;
 	int32_t tri = ph < 32768 ? (int32_t)ph * 2 - 32768 : 32767 - ((int32_t)ph - 32768) * 2;   /* Q15 */
-	int32_t pm = pitch + (((int32_t)patch.lfo_pitch * tri / 100) * 256 >> 15);
+	int32_t pm = pitch + (((int32_t)patch.lfo_pitch * tri / 100) * 256 >> 15) + penv;
+	penv = (penv * (int32_t)time_coef[patch.penv_dec]) >> 16;    /* the DCO is a timer: pitch sweeps are free */
+	if (hit_ms < 255)
+		hit_ms++;
+	uint8_t wave = (patch.wave_ms && hit_ms > patch.wave_ms) ? patch.wave2 : patch.wave;
+	if (aenv.stage != 1 && aenv.level < 16)          /* envelope below -66 dB: sources off, or they leak through */
+		wave = 0;                                   /* the closed VCA at ~-40 dB (drum tails, rests) */
 
 	/* oscillator */
 	int32_t pw = patch.pw + (((int32_t)patch.lfo_pw * tri) >> 15);
 	if (pw < 8) pw = 8;
 	if (pw > 247) pw = 247;
-	uint32_t ticks = set_dco(pm, (patch.wave & WAVE_PULSE) ? pw : 0);
-	hw_dco_waves(patch.wave & WAVE_SUB, patch.wave & WAVE_NOISE);
-	hw_cv_set(CV_AMP, (patch.wave & WAVE_SAW) ? amp_code(ticks) : 0);
+	if (patch.dsp) {                                /* DAC mode: TIM2 is the PWM DAC, the DCO is parked */
+		if (!hw_dac_active())
+			hw_dac_start();
+		hw_dco_waves(0, wave & WAVE_NOISE);
+		hw_cv_set(CV_AMP, 0);
+	} else {
+		if (hw_dac_active())
+			hw_dac_stop();
+		uint32_t ticks = set_dco(pm, (wave & WAVE_PULSE) ? pw : 0);
+		hw_dco_waves(wave & WAVE_SUB, wave & WAVE_NOISE);
+		hw_cv_set(CV_AMP, (wave & WAVE_SAW) ? amp_code(ticks) : 0);
+	}
 
 	/* filter: base + envelope + key tracking (around C4), in 1/256 octave */
 	int32_t amt = (cur_flags & STEP_ACCENT) ? patch.acc_env_amt : patch.env_amt;
@@ -202,6 +282,10 @@ void synth_tick(void)
 	int32_t a = (vol * aenv.level) >> 11;           /* 0...4079 */
 	i = a >> 6; f = a & 63;
 	uint16_t vc = vca_code[i] + (((int32_t)(vca_code[i + 1] - vca_code[i]) * f) >> 6);
+	if (sync_ms) {                                  /* alignment marker: the VCA offset step shows at any setting */
+		sync_ms--;
+		vc = 4095;
+	}
 	hw_cv_set(CV_VCA, boot_ms < 500 ? 0 : vc);
 }
 
@@ -258,6 +342,9 @@ void synth_preset(int i)
 	patch = presets[i];
 	preset_i = i;
 	__enable_irq();
+#if defined(CH32V006)
+	dsp_select(patch.dsp);                          /* soft-float mallet table: not with interrupts blocked */
+#endif
 }
 
 int synth_preset_index(void) { return preset_i; }

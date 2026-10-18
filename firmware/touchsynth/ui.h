@@ -13,6 +13,7 @@ extern uint8_t trim_dac;            /* VCA offset trim (74HC595 #3) */
 extern int8_t octave;               /* keyboard transpose -2 ... +2 octaves (C = C3 + 12 * octave) */
 extern volatile uint16_t led_override;   /* console: LEDs forced (0 = normal display) */
 extern volatile uint8_t led_forced;
+extern volatile uint8_t keys_enabled;   /* 0: touch pads are scanned but play nothing (unattended recordings) */
 
 void ui_init(void);                 /* measures the untouched baselines: keep hands off at power-up */
 void ui_poll(void);                 /* scan, handle keys, refresh LEDs; call from the main loop */

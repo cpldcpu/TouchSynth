@@ -77,8 +77,8 @@ point of the netlist with the MCU pins floating ([sim/bringup/bringup_op.py](../
 | B10a | XAMP / XRES / XVCA | 0 V | < 50 mV | 0 / 0 / 0 |
 | B10b | XCUT_IN (= VBIAS) | 1.56 V | ±3 % | 1.57 V |
 | B10c | VTRIM | 0.4…4.96 V (random) | — | 4.92 V (code 255) |
-| B11 | fit MCU, flash `firmware/touchsynth`, `id` answers | — | — | |
-| B12 | input current with MCU, firmware idle | 20…31 mA (1…16 LEDs) | < 40 mA | |
+| B11 | fit MCU, flash `firmware/touchsynth`, `id` answers | — | — | pass: `touchsynth 0.1 CH32V006` |
+| B12 | input current with MCU, firmware idle | 20…31 mA (1…16 LEDs) | < 40 mA | 25 mA (all LEDs off; 12 V not recorded) |
 
 At 12 V in: VP 11.72 V, VB0/2/4 3.28/6.00/8.72 V, TAIL 2.79 V, input current 15.9…26.8 mA without the MCU.
 
@@ -90,6 +90,24 @@ amplifier instead of 1.4 mA.
 
 After B11 the firmware drives the LEDs, sets the trim DAC to mid-scale (VTRIM ≈ 2.7 V) and drives the cutoff PWM
 low (XCUT_IN ≈ 0.2 V).
+
+**Board 1, MCU fitted (CH32V006):** flashed with firmware 0.1 via WCH-LinkE and `minichlink` on a Linux host; the
+console runs over SWIO (`tools/synthtest.py`). B11 and B12 pass. 25 mA with all LEDs off is about 5 mA above the
+expected 20 mA, which suggests the MCU draws about 10 mA rather than the assumed 5 mA. Defects found and fixed:
+
+- **PD4/PD5 solder bridge** (MCU pins 1–2). The loopback input read 0 V (4.5 V / 5 mV across R109). Located with the
+  console diagnostics `adc <ch>` and `latch <0|1>`: with the latch line (PD4) high, PD5 read 4089 counts. After
+  rework the loopback sits at 2209 counts (VCAOUT 4.52 V).
+- **Trim DAC MSB lost** (firmware): SRCLK is shared with mux select S1, and a touch scan left it high, so the first
+  bit shifted out (DAC MSB) was lost. `hw_leds_dac` now pulls the clock low first (found in T1).
+- **Loopback ADC on V00x** (firmware): the ADC must be re-armed before every conversion, otherwise the capture hung.
+  Also: shorter sample time for fast captures, 2048-sample capture buffer on the V006.
+- **Touch** (firmware): the noise estimate underflowed (unsigned), now a signed deviation statistic over 64 scans;
+  pad 0 reads ~550 counts low right after reset, so a 300 ms warm-up precedes the calibration. Ghost touches during
+  long sessions (estimate as low as 48–96 counts on some boots) were removed with a threshold floor
+  (`TOUCH_MIN_THR` = 200 counts; weakest real touch 486 counts) and a 2-scan debounce.
+- **LEDs next to SHIFT, −, +:** not driven in normal playing by design (edit mode / value bar only). Hardware
+  confirmed with `leds 0xe000`; these LEDs now light while their pad is touched.
 
 ## 4. L2 — Functional tests (automated, `selftest`)
 
@@ -110,6 +128,59 @@ Default conditions: 9 V in, room temperature, CV codes from the calibration defa
 | T11 | CV settling | VCA step response seen at loopback | 1 % in < 2.5 ms | S2: 1.3 ms |
 | T12 | Hum / noise | VCA open, DCO off, 1 s capture, spectrum | 100 Hz < sim + 6 dB; broadband < −60 dB re 1.33 Vpp | S7 |
 | T14 | MIDI in | external MIDI keyboard: note on/off, pitch bend, CC | all received | — |
+
+### 4.1 Board 1 results (2026-10-17)
+
+Run from the PC with `tools/hwtest.py` over the SWIO console (the on-chip `selftest` is not implemented yet). Loopback:
+12-bit ADC at PD5 = 0.6 × VCAOUT, referenced to +5V (5.028 V), so 1 count = 2.05 mV at VCAOUT; 2048-sample captures
+at 5–100 µs. All analog tests at trim code 104. Data: `docs/results/hw_board1_*.csv`, raw captures and logs in
+`docs/results/hw_board1/`; figures `docs/figures/hw_board1_{dco,vcf,vca,hum}` from `tools/hw_figures.py`.
+
+| ID | Board 1 result | Limit (sim) | Verdict |
+|---|---|---|---|
+| T1 | all 16 LEDs light; trim walk 0–255 moves the VCA-open level at VCAOUT monotonically over 366 mV | monotonic, > 20 mV | pass |
+| T2 | untouched σ 20–28 counts (C–G) / 35–43 counts (G#–+); touches 486–4233 counts (20–90 σ); no ghost touch in a 180 s log ¹ | Δ > 10 σ | pass |
+| T3 | not recorded | ≥ 200 Hz | — |
+| T4 | −0.28 … +0.26 cent at 11 notes C2–C7, relative to the MCU clock ² | < 1 cent | pass |
+| T5 | saw 1.495 Vpp at VCAOUT, −0.9 / +1.2 % over C2–C7, uncalibrated | ±5 % | pass |
+| T6 | onset between 3.05 and 3.17 V (cutoff code 2211), oscillation at 2.0 kHz | 2.7…3.5 V (3.1 V) | pass |
+| T7 | 2.01 oct/V over CV_CUT 0.49–4.02 V (89 Hz – 12.1 kHz), ≤ 45 cent from a straight line | 2.05 ± 0.2 oct/V | pass |
+| T8 | harmonic 10 at −3.7 dB re harmonic 1; 4-pole fit f_p = 2077 Hz | ±3 dB of sim ³ | pass |
+| T9 | gain law within −0.23 … +0.05 dB of S4 (CV 0.25–5 V); off ≥ 81 dB (measurement floor) ⁴ | ±2 dB | pass |
+| T10 | thump at VCAOUT −33 mV at trim 128 (default), 0 ± 2 mV at trim 104 | < 3 mV after cal | pass |
+| T11 | closing step: 1 % in 1.17 ms; opening step: ~2 % left after 1.5 ms, 1 % after 12.8 ms | 1 % < 2.5 ms (1.3 ms) | pass ⁵ |
+| T12 | 50 Hz −82 dB, 100 Hz −79 dB; broadband 20 Hz–5 kHz −54 dB (VCA open) / −55 dB (closed) re 1.33 Vpp | 100 Hz < −75 dB; broadband < −60 dB | hum pass, noise marginal |
+| T14 | not tested | all received | — |
+
+¹ a raw reading is the sum of 12 conversions, so the per-conversion σ limit was not evaluated.
+² DCO timer and capture share the HSI clock; absolute pitch is 14 cent flat (below).
+³ an ideal 4-pole low-pass at the S3 cutoff of this code (1.0 kHz at −3 dB) gives −3.5 dB at 1.1 kHz.
+⁴ relative to full gain; the absolute maximum gain (S4: +7.4 dB) was not measured separately.
+⁵ for the CV network (closing step); the opening step has an additional slow component (below).
+
+**Findings:**
+
+- **Clock:** from the scope recordings of the demo tunes (232 kick hits against the scope timebase) the HSI runs at
+  47.62 MHz (−0.80 %), so all pitches are ~14 cent flat and tunes 0.8 % slow until a clock trim is calibrated.
+  Takes up to an hour apart differed by up to 0.1 % (RC oscillator drift).
+- **Filter:** self-oscillation at 1611 Hz at CV_CUT 2.55 V vs S3 1606 Hz at 2.5 V (about 0.1 octave lower at equal CV);
+  no sustained oscillation at 0 and 0.24 V. The low ladder bias seen in B7 has no visible effect.
+- **VCA:** thump linear in the trim code (−1.4 mV/code), null at 104; the firmware still boots at 128 (−33 mV) until
+  the calibration store exists. The opening step has a ~2 % tail over 10–15 ms that a linear RC network would not
+  show in only one direction, most likely thermal (VCA pair warming when its current jumps from zero). 1 ADC count is
+  0.9 % of the 220 mV test step, so the tail is resolved only coarsely.
+- **Noise:** total 1.19–1.29 mV rms at VCAOUT (−52 dB) including discrete lines, broadband about −55 dB, nearly the
+  same with the VCA closed. The loopback quantisation alone (0.59 mV rms) is −58 dB, so −60 dB cannot be verified
+  here: measure at the line out with an audio interface. Discrete lines: the running DCO with all waveforms off and
+  CV_AMP = 0 (feed-through, up to −59 dB), and 3125 Hz in every capture (46.875 kHz PWM/interrupt rate aliased by the
+  10 kS/s capture).
+- **Hum:** 100 Hz at the floor with a lab supply; hum with mains adapters (V6) still open.
+
+Sound examples recorded from the line out with the scope: `docs/audio/hw_board1/` (demo tunes, waveform switching,
+self-oscillation scale).
+
+**Still open on board 1:** calibration store (trim 104, clock, cutoff offset), noise measurement with an audio
+interface, B12 at 12 V, T3, T14, the on-chip `selftest`, V1–V8.
 
 ## 5. L3 — Calibration constants (stored in the 256 B user flash area)
 
