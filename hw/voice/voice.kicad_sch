@@ -1,0 +1,349 @@
+(kicad_sch
+	(version 20250114)
+	(generator "touchsynth_gen")
+	(generator_version "10.0")
+	(uuid "c42cd0d4-93b1-5178-97ee-fdd3025be2c6")
+	(paper "A4")
+	(title_block
+		(title "TouchSynth Poly voice card")
+		(date "2026-10-18")
+		(rev "0.1")
+	)
+	(lib_symbols)
+	(sheet
+		(at 20 40)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "76816264-039e-56e3-93df-cb80e947fd10")
+		(property "Sheetname" "power"
+			(at 20 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "power.kicad_sch"
+			(at 20 85.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "voice"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "2")
+				)
+			)
+		)
+	)
+	(text "Supply, references and ladder bias"
+		(exclude_from_sim no)
+		(at 23 62 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "aa8af97b-f7e8-4c8c-9d08-bb7b1b90fa20")
+	)
+	(sheet
+		(at 115 40)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "459cd1ac-5cc8-57d9-a087-d7ee7e1fbcf4")
+		(property "Sheetname" "mcu"
+			(at 115 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "mcu.kicad_sch"
+			(at 115 85.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "voice"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "3")
+				)
+			)
+		)
+	)
+	(text "MCU, backplane, programming, LEDs"
+		(exclude_from_sim no)
+		(at 118 62 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "9909462e-8580-482a-afec-cb9597549d7e")
+	)
+	(sheet
+		(at 210 40)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "a49d18ae-2334-5fb8-96fb-167a36665e17")
+		(property "Sheetname" "dac"
+			(at 210 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "dac.kicad_sch"
+			(at 210 85.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "voice"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "4")
+				)
+			)
+		)
+	)
+	(text "PWM DAC reconstruction filter and mixer"
+		(exclude_from_sim no)
+		(at 213 62 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "8c3ff40d-ff9d-48e1-b4cb-0a05babc82f8")
+	)
+	(sheet
+		(at 305 40)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "52d1c793-861a-5f85-89b7-e3423668fc78")
+		(property "Sheetname" "vcf"
+			(at 305 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "vcf.kicad_sch"
+			(at 305 85.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "voice"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "5")
+				)
+			)
+		)
+	)
+	(text "CV_CUT, expo converter, ladder filter"
+		(exclude_from_sim no)
+		(at 308 62 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "ccec5b2e-adb6-4b6e-8c0b-583c25b9f21d")
+	)
+	(sheet
+		(at 20 110)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "c508aaa6-80f8-5132-b5bc-e1743a61f494")
+		(property "Sheetname" "resonance"
+			(at 20 109.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "resonance.kicad_sch"
+			(at 20 155.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "voice"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "6")
+				)
+			)
+		)
+	)
+	(text "CV_RES and resonance VCA"
+		(exclude_from_sim no)
+		(at 23 132 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "b45f2482-86a4-4c64-be85-b8eaa318d33d")
+	)
+	(sheet
+		(at 115 110)
+		(size 80 45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "dd8b73cc-ac1d-5e58-853a-b645944ed5f9")
+		(property "Sheetname" "vca"
+			(at 115 109.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "vca.kicad_sch"
+			(at 115 155.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "voice"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "7")
+				)
+			)
+		)
+	)
+	(text "CV_VCA, VCA trim, VCA, output and loopback"
+		(exclude_from_sim no)
+		(at 118 132 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "7f62bc58-8429-480e-9f20-c7fa11d6f5ea")
+	)
+	(text "TouchSynth Poly voice card"
+		(exclude_from_sim no)
+		(at 20 25 0)
+		(effects
+			(font
+				(size 4 4)
+				(thickness 0.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "1c8b62c0-cb25-45cb-9484-8ef02d4f63f0")
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+)

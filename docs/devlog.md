@@ -92,3 +92,44 @@ The rev 0.1 tree (report, S1–S7, KiCad project, tools for the report) is kept 
   model's −57 to −67 dB stays unexplained but has no counterpart on the hardware. Full rate stays the default.
   Short buffer halves underran because board 1's main loop stalls for 4–10 ms: the new firmware renders in the DMA
   interrupt.
+- **Voice card schematic:** `hw/voice.py` describes the card; the rev 0.1 generator now takes the board as a parameter
+  (`hw/board.py`). Making it buildable from the JLCPCB lists changed a few values: the Sallen-Key became 11k / 11k with
+  C1 = 2 × 330 pF and C2 = 330 pF (the only C0G values near the range: 100 pF, 330 pF, 2.2 nF), 31 kHz; the
+  low-byte resistor 1M + 330k; the 220 µF rail capacitor (not on the lists) three 100 µF X5R ceramics with 22 Ω.
+  Also settled: the VCA trim from a PWM pin (680k), 33k from both VCA difference-amp inputs to ground (inputs now
+  2.44–3.13 V, below the MCP6002's transition), a 10k / 10 µF filter behind the CJ431, 100 Ω output isolation,
+  the programmer's 5 V through a Schottky diode, 100 Ω bus series resistors with a SYNC pull-down for standalone
+  detection. The CJ431's SOT-23 pinout is the TL432's (1 REF, 2 K, 3 A), not KiCad's TL431DBZ. S10 variant v5c is
+  the card's netlist: within 1 dB of v5m everywhere, 8 dB better supply rejection at 100 Hz, and fully working at
+  4.6 V; `hw/check_sim.py` checks all 134 simulated elements against the schematic. The vendor op-amp model's DC
+  solution became marginal with seven instances; S10 now retries with other solver settings.
+- **Voice firmware phase 1 (board 1):** the DAC loads once per period (format 4, DMA ch1; dual PWM as a build
+  option), from 256-period halves rendered in the DMA interrupt at the low preemption level, so main-loop stalls
+  no longer matter and the control tick still enters within 28 cycles. Touch UI removed. 0 overruns over the test
+  tunes, 175 cycles per period for 3 oscillators, worst render 87 % of a half: about 13 % CPU remains for bus and
+  sync (the CV DMA burst will add about 9 %). 6.9 KB static RAM, 540 B of stack never used; level and inharmonic
+  content as before. Found on the way: a kettle strike blocks the DAC for 8.5 ms (soft-float coefficients in the
+  tick); and the half-rate experiment build played high notes at half level, so its comparison holds only up to
+  C5 (half rate: −51 against −56 dB aliasing at C5).
+- **S12, backplane mixer:** two MCP6002 summing amplifiers on a CJ431 VREF, constant-power pan over the 8 slots at
+  0.35 per card; 8 cards in phase reach 4.05 Vpp, 1.7 dB below clipping. The pseudo-differential input mirrors each
+  slot's network from AUDIO_GND onto the + input (45 dB ground rejection typical, 29 dB worst case with 1 %
+  resistors). Two surprises: the card's 100 kΩ line-out bleeder would pull the 2.5 V summing nodes (a 10 µF input
+  capacitor per slot fixes it), and the MCP6002 alone rejects supply noise poorly at a noise gain of 3.8 (a
+  47 Ω / 22 µF rail filter). USB audio: ADCs at 384 kHz, where the DAC carrier does not alias into the band.
+- **MIDI and patches (midi.md):** multitimbral, as the more flexible choice: up to 8 parts, each with a MIDI channel,
+  key range, a mask of card slots (which also sets its stereo place), a mode (poly, mono, legato, unison, drum kit)
+  and a patch. Patches are 64 16-bit parameters plus a name, stored on the controller (library in flash, working
+  copies in SRAM); every card keeps 4 patch slots, so parts sharing cards and drum kits switch sounds with a timed
+  PATCH_SELECT instead of resending 150 bytes. Standard CCs for the common controls, NRPN for every parameter,
+  SysEx and CDC for librarians. A first set of 23 programs, mostly the rev 0.1 presets ported from the analog DCO
+  to the DAC oscillators.
+- **Voice card sheets drawn:** all six sheets hand-laid out (`hw/layouts_voice.py`), checks unchanged (ERC clean,
+  netlist and simulation cross-check). The review against the firmware found that the voice firmware still drives
+  board 1's pins: PD4 and PC4 are push-pull outputs there but SYNC_IN and the loopback ADC input on the card, so
+  the card needs its own board definition before its first power-up.
+- **One op-amp package less:** the VBIAS buffer moved to the LM324's spare unit (1.0 V is well inside its input
+  range; the buffer itself is needed, the expo divider's CV current would move a bare divider by up to 0.6 V),
+  so the filter op-amp shares the VREF buffer's MCP6002: three MCP6002 instead of four. VREF keeps its buffer
+  (behind the CJ431's noise filter; the difference amps need a low-impedance reference). The net V25 (VREF / 2,
+  the expo reference transistor's collector voltage, named after rev 0.1's 2.5 V) is now VEXP_REF.

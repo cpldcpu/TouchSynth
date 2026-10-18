@@ -4,7 +4,7 @@
  * with a raised-cosine mallet pulse. A stroke on a note that is still ringing adds to its bank (a restruck drum);
  * a new note takes a free or the oldest bank. Fixed point: signals Q24, coefficients Q30.
  * Output: 15.625 kHz samples through a cubic soft clipper, linearly interpolated over the DSP_UPS = 12 carrier
- * periods of a sample, each period's 7-bit duty code with second-order error feedback (stored twice, hw.h).
+ * periods of a sample, one duty code per period (hw.h).
  *
  * Oscillators: up to three saw or pulse oscillators (pitch offsets, levels), one sample per period of the
  * 187.5 kHz carrier (no interpolation: its images would intermodulate in the ladder, sim/s9_osc), band-limited with
@@ -12,7 +12,8 @@
  *
  * Both end in the same output stage: 7-bit duty code (129 levels) with second-order error feedback, NTF
  * (1 - z^-1)^2; the oversampling ratio 4.7 makes 7 bit as clean as an ideal DAC at this rate
- * (sim/s9_osc/s9_moog.py). */
+ * (sim/s9_osc/s9_moog.py). Dual-PWM build (DAC_DUAL): 7 + 7 bit, high = v >> 8, low = round((v & 255) k / 256)
+ * with k = DSP_DUAL_K / 256 low codes per high step (spec.md 3.5), no error feedback. */
 #include "board.h"
 #include "dsp.h"
 #include "hw.h"
@@ -36,7 +37,7 @@ typedef struct {
 static const dsp_mode_t modes[] = DSP_MODE_TABLE;
 static const dsp_osc_t osc_tab[] = DSP_OSC_TABLE;
 static const dsp_patch_t patches[] = DSP_PATCH_TABLE;
-static const dsp_patch_t *cur;
+static const dsp_patch_t *cur;                      /* 0 while a patch is being set up: the renderer is silent */
 static voice_t voices[MAXV];
 static uint16_t mallet[MAXMALLET];                  /* Q20, unit sum */
 static uint32_t age;
@@ -58,8 +59,28 @@ __attribute__((always_inline)) static inline uint8_t sdm2(int32_t v, int32_t *e1
 	return (uint8_t)q;
 }
 
+/* one carrier period into the ring (hw.h): v = target code 0...DSP_ARR in 1/256 */
+__attribute__((always_inline)) static inline uint8_t *dac_out(uint8_t *dst, int32_t v, int32_t *e1, int32_t *e2)
+{
+#if DAC_DUAL
+	(void)e1; (void)e2;
+	uint32_t h, l;
+	if (v <= 0) h = l = 0;
+	else if (v >= DSP_ARR << 8) { h = DSP_ARR; l = 0; }
+	else { h = (uint32_t)v >> 8; l = (((uint32_t)v & 255) * DSP_DUAL_K + 32768) >> 16; }
+	dst[0] = h;
+	dst[1] = DSP_ARR / 2;                           /* CH3: the DMA request compare */
+	dst[2] = l;
+	return dst + 3;
+#else
+	*dst = sdm2(v, e1, e2);
+	return dst + 1;
+#endif
+}
+
 static inline int32_t mulh(int32_t a, int32_t b) { return (int32_t)(((int64_t)a * b) >> 32); }
-static void osc_init(void);
+static void osc_init(const dsp_patch_t *p);
+static void mallet_init(const dsp_patch_t *p);
 
 static float cos_poly(float w)                      /* |w| <= 1.2 rad: error < 1e-7 */
 {
@@ -73,18 +94,27 @@ static float sin_poly(float w)
 	return w * (1.0f - w2 * (1.0f / 6 - w2 * (1.0f / 120 - w2 * (1.0f / 5040 - w2 * (1.0f / 362880)))));
 }
 
+/* called from the main loop while the renderer (DMA interrupt) may run: cur stays 0 until the patch is set up */
 void dsp_select(int p)
 {
+	const dsp_patch_t *np = (p > 0 && p <= (int)(sizeof patches / sizeof patches[0])) ? &patches[p - 1] : 0;
+	cur = 0;
+	__asm volatile("" ::: "memory");
 	for (int i = 0; i < MAXV; i++)
 		voices[i].on = 0;
-	cur = (p > 0 && p <= (int)(sizeof patches / sizeof patches[0])) ? &patches[p - 1] : 0;
-	if (!cur)
+	if (!np)
 		return;
-	if (cur->kind == DSP_OSC) {
-		osc_init();
-		return;
-	}
-	int L = cur->mallet < MAXMALLET ? cur->mallet : MAXMALLET;
+	if (np->kind == DSP_OSC)
+		osc_init(np);
+	else
+		mallet_init(np);
+	__asm volatile("" ::: "memory");
+	cur = np;
+}
+
+static void mallet_init(const dsp_patch_t *p)
+{
+	int L = p->mallet < MAXMALLET ? p->mallet : MAXMALLET;
 	float sum = 0;
 	for (int pass = 0; pass < 2; pass++)            /* raised cosine 0.5 - 0.5 cos(x) = sin^2(x / 2), unit sum */
 		for (int k = 0; k < L; k++) {
@@ -181,9 +211,7 @@ __attribute__((noinline, section(".srodata"))) static void modal_fill(uint8_t *d
 		int32_t v = c_prev;
 		for (int u = 0; u < DSP_UPS; u++) {
 			v = (u == DSP_UPS - 1) ? c : v + step;
-			uint8_t q = sdm2(v, &e1, &e2);
-			*dst++ = q;                             /* twice: the update event comes at both ends of the */
-			*dst++ = q;                             /* centre-aligned period, the pulse stays symmetric */
+			dst = dac_out(dst, v, &e1, &e2);
 		}
 		c_prev = c;
 	}
@@ -199,18 +227,18 @@ static uint8_t n_osc;
 static volatile uint8_t osc_gate;
 static uint32_t pw_off;                             /* pulse width as a phase offset */
 
-static void osc_init(void)
+static void osc_init(const dsp_patch_t *p)
 {
-	n_osc = cur->n_modes < MAXO ? cur->n_modes : MAXO;
+	n_osc = p->n_modes < MAXO ? p->n_modes : MAXO;
 	for (int i = 0; i < n_osc; i++) {
-		const dsp_osc_t *t = &osc_tab[cur->first + i];
+		const dsp_osc_t *t = &osc_tab[p->first + i];
 		osc[i].wave = t->wave;
 		osc[i].lvl = t->level;
 		osc[i].ph = (uint32_t)i * 0x55555555u;      /* spread start phases */
 		osc[i].inc = 0;
 		osc[i].inv = 0;
 	}
-	pw_off = (uint32_t)cur->mallet << 24;
+	pw_off = (uint32_t)p->mallet << 24;
 	osc_gate = 0;
 	sd1 = sd2 = 0;
 }
@@ -290,11 +318,8 @@ __attribute__((noinline, section(".srodata"))) static void osc_fill(uint8_t *dst
 			}
 			o->ph = ph;
 		}
-		for (int k = 0; k < m; k++) {
-			uint8_t q = sdm2(16384 + (acc[k] >> 16), &e1, &e2);   /* Q30 -> code 0...128 in 1/256 */
-			*dst++ = q;                             /* twice: both update events of the centre-aligned period */
-			*dst++ = q;
-		}
+		for (int k = 0; k < m; k++)
+			dst = dac_out(dst, 16384 + (acc[k] >> 16), &e1, &e2);   /* Q30 -> code 0...128 in 1/256 */
 		n -= m;
 	}
 	sd1 = e1;
@@ -307,15 +332,19 @@ int dsp_kind(void) { return cur ? cur->kind : -1; }
 void dsp_carrier(uint16_t *arr, uint16_t *half)
 {
 	*arr = DSP_ARR;                                 /* 187.5 kHz, 7 bit */
-	*half = (cur && cur->kind == DSP_OSC) ? 1024 : 80 * DSP_UPS;   /* 5.5 ms; modal: 80 samples, 5.1 ms */
+	*half = (cur && cur->kind == DSP_OSC) ? DAC_HALF : DAC_HALF / DSP_UPS * DSP_UPS;   /* modal: 21 samples */
 }
 
 void dsp_fill(uint8_t *dst, int n)
 {
-	if (cur && cur->kind == DSP_OSC)
+	if (cur && cur->kind == DSP_OSC) {
 		osc_fill(dst, n);
-	else
+	} else if (cur) {
 		modal_fill(dst, n / DSP_UPS);
+	} else {                                        /* no patch (being set up): mid-scale */
+		for (int k = 0; k < n; k++)
+			dst = dac_out(dst, DSP_ARR << 7, &sd1, &sd2);
+	}
 }
 
 #endif

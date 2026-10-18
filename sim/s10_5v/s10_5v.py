@@ -20,12 +20,23 @@ line out), run through the same tests:
         Licensed for use with Microchip parts, so not in the repository: unzip MCP6001_MM_G.zip (microchip.com,
         MCP6002, simulation models) to temp/mcp6001_model/; runs in PSpice compatibility mode (out/mcp).
         Without it, v5m is skipped. The model has one NMOS input pair: no input crossover, no distortion detail.
+  v5c   the voice card as built (hw/voice.py is checked against this netlist): v5m (v5r without the vendor model)
+        with the DAC instead of the DCO mixer inputs (the source sits on the DAC pin at 1.65 V, through the S11
+        Sallen-Key in available C0G values, 11k / 11k, C1 = 2 x 330p, C2 = 330p: Butterworth at 31 kHz, and 240k
+        into the mixer node), the analog rail through 22 R and 3 x 100 uF X5R (modelled at 35 uF each, their
+        capacitance at 5 V bias; no 220 uF part on the JLCPCB lists), the CJ431 behind a 10k / 10 uF filter, VBIAS buffered by the LM324's spare unit,
+        the VCA trim from a PWM pin (2 x 10k / 1 uF, 680k into vin2), matched 33k from both VCA difference-amp
+        inputs to ground (keeps them below the MCP6002's input transition), 100 R output isolation, the
+        loopback divider and the line-out bleeder. Drive levels in the THD test are saw equivalents (2 Vpp =
+        full DAC scale, 3.3 Vpp).
+  v5c46 v5c at 4.6 V (powered from the programmer through a Schottky diode)
 CV values below are fractions of the PWM full scale (5 V, or 3.3 V for v5r and v5m).
 Tests: DC headroom (worst V_CE per transistor over the CV corners), cutoff vs CV_CUT, resonance peaks and the
 self-oscillation threshold, THD vs drive at the line out, output noise (op-amps as behavioural models with their
 input noise as a series resistor, in both variants), supply rejection, supply current.
 
   python s10_5v.py            results: docs/results/s10_5v.csv, docs/figures/s10_5v.(pdf|png)
+  python s10_5v.py v5c ...    only these variants; their rows replace the old ones in the CSV, no figure
 """
 import os, re, sys
 import numpy as np
@@ -77,6 +88,10 @@ V5M = dict(V5R, oa="MCP6001", oa_noise="MCP6001", vendor=True)
 VARIANTS = {"v12": V12, "v5": V5, "v5r": V5R}
 if os.path.exists(MCP_LIB):
     VARIANTS["v5m"] = V5M
+V5C = dict(VARIANTS.get("v5m", V5R), card=True)
+VARIANTS["v5c"] = V5C
+VARIANTS["v5c46"] = dict(V5C, vp=4.6)
+DAC_MID = 1.65                                             # DAC pin at mid scale (3.3 V MCU supply)
 
 
 def core(v, noise=False, cvcut=2.5, cvres=0.0, cvvca=5.0, saw="DC 0 AC 1", vp_ac=0, vref_ac=False):
@@ -85,14 +100,17 @@ def core(v, noise=False, cvcut=2.5, cvres=0.0, cvvca=5.0, saw="DC 0 AC 1", vp_ac
     rnz = f"{rn(v['en']):.0f}" if noise and not v.get("vendor") else "1m"   # vendor model: own noise
     oa_inst = oa                                           # 'OPB gbw=.. sr=..': parameters follow the name
     ra, rm, r0 = v["rb"]
-    if v.get("railfilt"):                                  # analog rail: 10 R + 220 uF from the 5 V input
+    if v.get("card"):                                      # 22 R + 3 x 100 uF X5R 1206 (about 35 uF each at 5 V)
+        s = f"VPLUS vin 0 DC {v['vp']} AC {vp_ac}\nRFILT vin vp 22\n" + "".join(
+            f"CFILT{k} vp 0 35u\n" for k in (1, 2, 3))
+    elif v.get("railfilt"):                                # analog rail: 10 R + 220 uF from the 5 V input
         s = f"VPLUS vin 0 DC {v['vp']} AC {vp_ac}\nRFILT vin vp 10\nCFILT vp 0 220u\n"
     else:
         s = f"VPLUS vp 0 DC {v['vp']} AC {vp_ac}\n"
     if v.get("ref431"):                                    # CJ431 2.5 V, buffered; V25 and VBIAS from it
         s += """VLINK v5 vp 0
 BREF vr431 0 V=2.5+2e-4*(v(vp)-5)
-RNZREF vr431 vrdn {rnz}
+{reff}RNZREF {refn} vrdn {rnz}
 XVREF vrdn vref vp 0 vref {oa}
 RBA vref vbd 15k
 RBB vbd 0 10k
@@ -101,7 +119,8 @@ XVB vbd vbias vp 0 vbias {oa}
 R25A vref v25 10k
 R25B v25 0 10k
 C25 v25 0 1u
-""".format(rnz=rnz, oa=oa_inst)
+""".format(rnz=rnz, oa=oa_inst, reff="RFREF vr431 vrf 10k\nCFREF vrf 0 10u\n" if v.get("card") else "",
+           refn="vrf" if v.get("card") else "vr431")
     elif v["shared5"]:                                       # one 5 V rail: references derived from it
         s += """VLINK v5 vp 0
 RR1 vp vrd 10k
@@ -118,6 +137,8 @@ C25 v25 0 1u
 """.format(rnz=rnz, oa=oa_inst)
     else:                                                  # rev 0.1: references from the regulated 5 V
         s += f"V5 v5 0 5\nVREF vref 0 {v['vref']}\nVBIAS vbias 0 1.5\nV25 v25 0 2.5\n"
+    if v.get("card"):                                      # VBIAS buffer: the LM324's fourth unit
+        s = s.replace(f"XVB vbd vbias vp 0 vbias {oa_inst}", "XVB vbd vbias vp 0 vbias LM324")
     s += f"""RB5 vp vb4 {ra}
 RB4 vb4 vb3 {rm}
 RB3 vb3 vb2 {rm}
@@ -145,12 +166,26 @@ VVCA cvv 0 {cvvca}
     lad = lad.replace("XINA1 n4a ia vp 0 oa TL072", f"RNZ1 n4a n4az {rnz}\nXINA1 n4az ia vp 0 oa {oa_inst}")
     lad = lad.replace("XINA2 n4b ib vp 0 lpf TL072", f"RNZ2 n4b n4bz {rnz}\nXINA2 n4bz ib vp 0 lpf {oa_inst}")
     s += lad
-    s += f"""VSAW saw 0 {saw}
+    if v.get("card"):                                      # DAC pin -> Sallen-Key (S11) -> 240k -> mixer node
+        s += f"""VSAW saw dacoff {saw}
+VDOFF dacoff 0 {DAC_MID}
+RSK1 saw sk1 11k
+RSK2 sk1 sk2 11k
+CSK1A sk1 skout 330p
+CSK1B sk1 skout 330p
+CSK2 sk2 0 330p
+XSK sk2 skout vp 0 skout {oa_inst}
+RMIX skout mx 240k
+RMX mx vb0 10k
+CMX mx bin1 1u
+"""
+    else:
+        s += f"""VSAW saw 0 {saw}
 VPUL pulse 0 2.5
 VSUB sub 0 2.5
 VNOI noise 0 2.5
 """
-    s += voice.MIXER.format(saw="saw", pulse="pulse", sub="sub", noise="noise")
+        s += voice.MIXER.format(saw="saw", pulse="pulse", sub="sub", noise="noise")
     s += voice.VI.format(n="R", x="xres", col="rtail", re=v["reres"])
     res = voice.RESVCA.format(fbneg="rc1", fbpos="rc2", rfb="22k")
     res = res.replace("XRDIF rdp rdm vp 0 resout TL072", f"RNZ3 rdp rdpz {rnz}\nXRDIF rdpz rdm vp 0 resout {oa_inst}")
@@ -160,7 +195,22 @@ VNOI noise 0 2.5
     if v.get("ref431"):                                    # anti-offset current from VREF (same 10 uA at CV 0)
         vca = vca.replace("ROFFV v5 veV 470k", "ROFFV vref veV 240k")
     vca = vca.replace("XDIF dp dm vp 0 vcaout TL072", f"RNZ4 dp dpz {rnz}\nXDIF dpz dm vp 0 vcaout {oa_inst}")
-    s += vca + "RDAC vref vtrim 100k\n"                    # trim DAC at mid code
+    if not v.get("card"):
+        return s + vca + "RDAC vref vtrim 100k\n"          # trim DAC at mid code
+    vca = vca.replace("RTRM vtrim vin2 1Meg", "RTRM vtrim vin2 680k")
+    vca = vca.replace("COUT vcaout lineout 10u", "RISO vcaout vco 100\nCOUT vco lineout 10u")
+    s += vca + f"""RD5 dp 0 33k
+RD6 dm 0 33k
+VTRP trp 0 {DAC_MID}
+RTR1 trp tra 10k
+CTR1 tra 0 1u
+RTR2 tra vtrim 10k
+CTR2 vtrim 0 1u
+RBL lineout 0 100k
+RLB1 vcaout adca 10k
+RLB2 adca 0 15k
+CLB adca 0 1n
+"""
     return s
 
 
@@ -179,9 +229,23 @@ def head(v):
                                    if v.get("vendor") else "")
 
 
+# The vendor model's DC solution is marginal with seven instances (v5c): some operating points fail at random
+# (any small netlist change moves the failures). Retry with other solver settings; the circuit stays the same.
+RETRY = ("", ".options noopiter\n", ".options rshunt=1e10\n", ".nodeset v(vref)=2.5 v(vrdn)=2.5 v(vbias)=1.0\n")
+
+
+def srun(net, v, name):
+    """spice.run with solver retries (netlist text without the leading title line)."""
+    for k, opt in enumerate(RETRY if v.get("vendor") else ("",)):
+        try:
+            return spice.run(f"* S10 {name}\n{opt}{net}", wdir(v), name)
+        except RuntimeError:
+            if k == len(RETRY) - 1 or not v.get("vendor"):
+                raise
+
+
 def run(name, v, analysis, **kw):
-    net = f"* S10 {name}\n{head(v)}\n{core(v, **kw)}\n{spice.CTRL_HEAD}\n{analysis}\n.endc\n.end\n"
-    return spice.run(net, wdir(v), name)
+    return srun(f"{head(v)}\n{core(v, **kw)}\n{spice.CTRL_HEAD}\n{analysis}\n.endc\n.end\n", v, name)
 
 
 # ------------------------------------------------------------------ DC headroom
@@ -238,10 +302,13 @@ def f3db(f, g):
 # ------------------------------------------------------------------ transients
 def selfosc_net(tag, v, cvres):
     name = f"so_{tag}_r{cvres}".replace(".", "p")
-    net = core(v, cvcut=2.5 * fs(v), cvres=cvres * fs(v), saw="DC 0").replace("VNOI noise 0 2.5",
-                                                               "VNOI noise 0 PULSE(2.5 5 1m 1u 1u 20u 1)")
-    spice.run(f"* S10 {name}\n{head(v)}\n{net}\n{spice.CTRL_HEAD}\ntran 2u 80m 0 2u\n"
-              f"wrdata {{OUT}}/{name}.dat v(lpf)\n.endc\n.end\n", wdir(v), name)
+    net = core(v, cvcut=2.5 * fs(v), cvres=cvres * fs(v), saw="DC 0")
+    if v.get("card"):                                      # kick: a 20 us step on the DAC pin
+        net = net.replace(f"VDOFF dacoff 0 {DAC_MID}", f"VDOFF dacoff 0 PULSE({DAC_MID} 3.3 1m 1u 1u 20u 1)")
+    else:
+        net = net.replace("VNOI noise 0 2.5", "VNOI noise 0 PULSE(2.5 5 1m 1u 1u 20u 1)")
+    srun(f"{head(v)}\n{net}\n{spice.CTRL_HEAD}\ntran 2u 80m 0 2u\nwrdata {{OUT}}/{name}.dat v(lpf)\n.endc\n.end\n",
+         v, name)
     d = spice.load(os.path.join(wdir(v), name + ".dat"))
     t, y = d["time"], d["v(lpf)"]
     a1 = np.ptp(y[(t > 0.010) & (t < 0.015)])
@@ -254,7 +321,7 @@ def thd(tag, v, amp):
     name = f"thd_{tag}_a{amp}".replace(".", "p")
     log = run(name, v, "tran 2u 40m 0 2u\nfourier 1k v(lineout)\nmeas tran vpp PP v(lineout) from=30m to=40m\n"
                        "meas tran lpp PP v(lpf) from=30m to=40m", cvcut=5.0 * fs(v), cvres=0.0, cvvca=5.0 * fs(v),
-              saw=f"SIN(0 {amp / 2} 1k)")
+              saw=f"SIN(0 {amp / 2 * (DAC_MID if v.get('card') else 1)} 1k)")
     t = float(re.search(r"THD:\s*([\d.e+-]+)", log).group(1))
     vpp = float(re.search(r"vpp\s*=\s*([\d.e+-]+)", log).group(1))
     lpp = float(re.search(r"lpp\s*=\s*([\d.e+-]+)", log).group(1))
@@ -272,12 +339,21 @@ def noise(tag, v, cvcut):
 def main():
     os.makedirs(OUT, exist_ok=True)
     rows, res = [], {}
+    only = sys.argv[1:]
     for tag, v in VARIANTS.items():
+        if only and tag not in only:
+            continue
         print(f"===== {tag}")
         worst, i_max = headroom(tag, v)
         for k, (d, at) in worst.items():
             print(f"  {k:15s} min V_CE {d:6.3f} V at CV cut/res/vca {at}")
             rows.append([tag, "vce_min_" + k.split()[0], round(d, 3)])
+        dp = []
+        for cv in (0.0, 5.0 * fs(v)):                     # VCA difference-amp inputs (MCP6002 input transition)
+            log = run(f"op_{tag}_dp{cv}".replace(".", "p"), v, "op\nprint v(dp) v(dm)", cvvca=cv)
+            dp += [float(x) for x in re.findall(r"v\(d[pm]\)\s*=\s*([-\d.e+]+)", log)]
+        print(f"  VCA difference-amp inputs {min(dp):.2f} ... {max(dp):.2f} V")
+        rows += [[tag, "vca_dp_min_v", round(min(dp), 3)], [tag, "vca_dp_max_v", round(max(dp), 3)]]
         print(f"  supply current max {i_max * 1e3:.1f} mA")
         rows.append([tag, "i_supply_max_ma", round(i_max * 1e3, 2)])
         cuts = np.arange(0.0, 5.01, 0.5)
@@ -305,7 +381,7 @@ def main():
         print(f"  self-oscillation amplitude at CV_RES 5 V: {so[1] * 1e3:.0f} mVpp at lpf")
         rows.append([tag, "selfosc_vpp_lpf_res5", round(so[1], 3)])
         th = []
-        for a in (1.0, 2.0, 4.0, 8.0):
+        for a in ((1.0, 2.0) if v.get("card") else (1.0, 2.0, 4.0, 8.0)):   # the DAC's full scale is 2
             t, vpp, lpp = thd(tag, v, a)
             th.append((a, t, vpp, lpp))
             print(f"  THD drive {a} Vpp: lpf {lpp:.2f} Vpp, line out {vpp:.2f} Vpp, THD {t:.2f} %")
@@ -320,7 +396,13 @@ def main():
         print("  supply -> line out (100 Hz, 1 kHz, 10 kHz):", " ".join(f"{p:.1f}" for p in ps_db), "dB")
         rows += [[tag, f"psrr_db_{x}hz", round(p, 1)] for x, p in zip((100, 1000, 10000), ps_db)]
         res[tag] = dict(cuts=cuts, fc=fc, th=th)
+    if only:                                               # merge: keep the other variants' rows
+        with open(os.path.join(ps.DATADIR, "s10_5v.csv"), encoding="utf-8") as fh:
+            keep = [ln.rstrip("\n").split(",") for ln in fh.readlines()[1:]]
+        rows = [r for r in keep if r[0] not in only] + rows
     ps.save_csv("s10_5v", ["variant", "quantity", "value"], rows)
+    if only:
+        return
 
     import matplotlib.pyplot as plt
     f, ax = ps.fig(2, 1, aspect=0.75)

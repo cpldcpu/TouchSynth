@@ -30,21 +30,28 @@ docs/audio/features/*.wav
 
 # KiCad generated / local files
 hw/touchsynth/*.net
+hw/voice/*.net
 hw/touchsynth/*.pdf
+hw/voice/*.pdf
 hw/touchsynth/erc.rpt
 hw/touchsynth/*-backups/
+hw/voice/*-backups/
 hw/touchsynth/*.kicad_prl
 
 # downloaded tools
 tools/*.jar
 hw/touchsynth/*.rpt
+hw/voice/*.rpt
 hw/touchsynth/*.dsn
+hw/voice/*.dsn
 hw/touchsynth/*.ses
+hw/voice/*.ses
 hw/touchsynth/route.log
 hw/logs/
 tools/logs/
 tools/lab.conf
 hw/touchsynth/*.log
+hw/voice/*.log
 
 # LaTeX build files
 docs/report/*.aux

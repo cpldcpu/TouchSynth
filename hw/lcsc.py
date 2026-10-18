@@ -30,12 +30,15 @@ def pick_r(value, pkg="0603"):
     return c[0]["lcsc"], pkg
 
 
-def pick_c(value, vmin, pkgs=("0603", "0805", "1206")):
-    """value like '100n', '4.7u'; vmin = minimum voltage rating (use >= 2x working voltage)."""
+def pick_c(value, vmin, pkgs=("0603", "0805", "1206"), tc=None):
+    """value like '100n', '4.7u'; vmin = minimum voltage rating (use >= 2x working voltage);
+    tc = required temperature coefficient (e.g. 'C0G' for capacitors in the audio path)."""
     want = value.replace("u", "uF").replace("n", "nF").replace("p", "pF")
+    ok_tc = (lambda a: a.get("Temperature Coefficient") in ("C0G", "NP0")) if tc == "C0G" else (lambda a: True)
     for pkg in pkgs:
         c = [r for r in _rows if r["subcategory"].startswith("Multilayer") and r["package"] == pkg
-             and _attrs(r).get("Capacitance") == want and _volts(_attrs(r).get("Voltage Rating")) >= vmin]
+             and _attrs(r).get("Capacitance") == want and _volts(_attrs(r).get("Voltage Rating")) >= vmin
+             and ok_tc(_attrs(r))]
         c.sort(key=lambda r: (r["library"] != "basic", -int(r["stock"] or 0)))
         if c:
             return c[0]["lcsc"], pkg

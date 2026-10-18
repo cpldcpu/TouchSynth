@@ -97,9 +97,10 @@ static uint16_t amp_code(uint32_t ticks)
 	return c > 4095 ? 4095 : c;
 }
 
+static uint32_t last_counts;                        /* timer state of the DCO, 0 = to be set */
+
 static uint32_t set_dco(int32_t p, uint8_t pw)
 {
-	static uint32_t last_counts;
 	static uint16_t psc, arr;
 	static uint8_t last_pw;
 	uint32_t counts = pitch_counts(p);
@@ -260,15 +261,16 @@ void synth_tick(void)
 #if defined(CH32V006)
 		uint16_t arr, half;
 		dsp_carrier(&arr, &half);
-		if (hw_dac_active() != arr)
-			hw_dac_start(arr, half);
+		hw_dac_start(arr, half, dsp_fill);          /* no-op while it runs with these settings */
 		dsp_pitch(pm, !quiet);
 #endif
 		hw_dco_waves(0, wave & WAVE_NOISE);
 		hw_cv_set(CV_AMP, 0);
 	} else {
-		if (hw_dac_active())
-			hw_dac_stop();
+		if (hw_dac_active()) {
+			hw_dac_stop();                          /* TIM2 back in DCO mode from its reset state */
+			last_counts = 0;
+		}
 		uint32_t ticks = set_dco(pm, (wave & WAVE_PULSE) ? pw : 0);
 		hw_dco_waves(wave & WAVE_SUB, wave & WAVE_NOISE);
 		hw_cv_set(CV_AMP, (wave & WAVE_SAW) ? amp_code(ticks) : 0);
@@ -330,16 +332,6 @@ void synth_all_off(void)
 	tune_i = -1;
 	voice_release();
 	__enable_irq();
-}
-
-uint16_t synth_held_mask(int base)
-{
-	uint16_t m = 0;
-	for (int k = 0; k < n_stack; k++) {
-		int b = stack[k] - base;
-		if (b >= 0 && b < 13) m |= 1 << b;
-	}
-	return m;
 }
 
 void synth_preset(int i)

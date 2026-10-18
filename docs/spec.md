@@ -27,7 +27,7 @@ connectors hand-soldered.
 | Card format | about 60 × 45 mm, 4 layers; backplane connector on one long edge, LEDs and debug connectors (SWIO, line out) on the opposite edge; 10 mm slot pitch, backplane within 100 × 100 mm | section 3.3 |
 | Controls | none on the instrument (no touch UI, no knobs): played and edited only over USB, from the computer or a USB-MIDI keyboard | |
 | Voice MCU | CH32V006F8P7 (TSSOP-20, hand-soldered); the board 1 pin map carries over unchanged | section 3.2 |
-| DAC variants | standard: one PWM, 187.5 kHz, 7 bit, second-order error feedback (−67 to −87 dB in the three-oscillator model); assembly option: dual PWM (high + low byte, 7 + 7 bit, 128:1) at 187.5 kHz: −82 to −92 dB, near an ideal DAC, at about the same CPU; a half-rate firmware mode (oscillators at 93.75 kHz, interpolated on the 187.5 kHz carrier) saves 28 % of the CPU per sample (board 1: 136 instead of 189 cycles); its cost is the polyBLEP saw's aliasing at the lower rate, −48.5 to −51 dB re the fundamental at C5–C7 (4–11 dB above board 1's floor), nothing measurable below C5 or in the three-oscillator tunes: full rate by default, half rate as a CPU reserve. The carrier stays at 187.5 kHz: a 93.75 kHz carrier reaches the line out at −39 dB through the 30 kHz filter (S11) | S9b, board 1 (docs/results/hw_board1_half_rate.csv) |
+| DAC variants | standard: one PWM, 187.5 kHz, 7 bit, second-order error feedback (−67 to −87 dB in the three-oscillator model); assembly option: dual PWM (high + low byte, 7 + 7 bit, 128:1) at 187.5 kHz: −82 to −92 dB, near an ideal DAC, at about the same CPU; a half-rate firmware mode (oscillators at 93.75 kHz, interpolated on the 187.5 kHz carrier) saves 28 % of the CPU per sample (board 1: 136 instead of 189 cycles); its cost is the polyBLEP saw's aliasing at the lower rate, −51 dB re the fundamental at C5 against −56 dB at full rate, nothing measurable below C5 (the C6/C7 and three-oscillator comparisons came from an experiment build that played those notes at half level; not repeated, as the voice firmware has no half-rate mode yet): full rate by default, half rate as a CPU reserve. The carrier stays at 187.5 kHz: a 93.75 kHz carrier reaches the line out at −39 dB through the 30 kHz filter (S11) | S9b, board 1 (docs/results/hw_board1_half_rate.csv) |
 | Slot addresses | by enumeration over the per-slot NRST lines; no ID pins on the card | section 5 |
 | Not used | the V006's internal op-amp, a temperature sensor for the expo pair, a separate UART console | |
 
@@ -38,7 +38,7 @@ connectors hand-soldered.
  ───────────────────────────────────────────────            ───────────────────────────────────────────────────
  USB-C 5 V ─► fuse/TVS ─► 5V ──────────────────────────────► 5V ─► 10 R / 220 u ─► analog rail (ladder, op-amps)
                           └► 3.3 V LDO (controller)                 ├► XC6206 3.3 V ─► MCU (PWM reference)
-                                                                     └► CJ431 2.5 V ─► VREF, V25, VBIAS
+                                                                     └► CJ431 2.5 V ─► VREF, VEXP_REF, VBIAS
  CH32V203 (crystal, 144 MHz)                                voice CH32V006 (3.3 V, synchronised HSI)
    USB FS device: MIDI + CDC (+ audio in, option)             TIM2 CH2 ─► PWM DAC ─► 2-pole filter ─► mixer
    voice allocation, parameters, presets                      TIM1 CH1..4 ─► VCA trim, CV_CUT, CV_RES, CV_VCA
@@ -59,18 +59,18 @@ connectors hand-soldered.
 | Block | Design | Against rev 0.1 |
 |---|---|---|
 | Oscillators | firmware: up to 3 saw / pulse oscillators (polyBLEP), modal drums, noise; 184 cycles per sample for 3 oscillators (board 1) | replaces DCO, sub, pulse, noise GPIOs |
-| PWM DAC | TIM2 CH2, 187.5 kHz, 7 bit, error feedback (dsp.c); option: dual PWM with TIM2 CH4 as low byte (two resistors into the filter input, 10k and ~1.2M, calibrated in firmware, section 3.5) on the same carrier | was the pulse output |
-| Reconstruction filter | unity-gain 2-pole Sallen-Key (Butterworth), MCP6002 half: 10k / 10k, C1 750 pF (feedback), C2 390 pF, fc 30 kHz. S11: the 187.5 kHz carrier at −74 dB re full scale at the line out (without: −42 dB), droop 0.04 dB at 10 kHz, 0.8 dB at 20 kHz. The dual-PWM option runs on the same 187.5 kHz carrier and uses the same filter. Fixed cutoff, not voltage-controlled: the firmware shapes everything below Nyquist, the filter only removes carrier and images | new (rev 0.1 earmark: carrier crosstalk) |
+| PWM DAC | TIM2 CH2, 187.5 kHz, 7 bit, error feedback (dsp.c); option: dual PWM with TIM2 CH4 as low byte (into the filter input through 1M + 330k = 1.33 MΩ next to the filter's 11k, calibrated in firmware, section 3.5) on the same carrier | was the pulse output |
+| Reconstruction filter | unity-gain 2-pole Sallen-Key (Butterworth), MCP6002 half: 11k / 11k, C1 2 × 330 pF (feedback), C2 330 pF, all C0G (the C0G values on the JLCPCB lists near this range are 100 pF, 330 pF and 2.2 nF), fc 31 kHz. S11 (10k, 750 pF, 375 pF, 30 kHz): the 187.5 kHz carrier at −74 dB re full scale at the line out (without: −42 dB), droop 0.04 dB at 10 kHz, 0.8 dB at 20 kHz. The dual-PWM option runs on the same 187.5 kHz carrier and uses the same filter. Fixed cutoff, not voltage-controlled: the firmware shapes everything below Nyquist, the filter only removes carrier and images | new (rev 0.1 earmark: carrier crosstalk) |
 | Mixer into the ladder | the filtered DAC (0–3.3 V full scale) through 240 kΩ: the drive of rev 0.1's saw (2 Vpp through 150 kΩ), S11 (on board 1 the DAC came through 470 kΩ, 3–10 dB less signal-to-noise) | |
-| Expo converter | as rev 0.1, VBIAS 1.0 V (buffered), V25 1.25 V, RREF 470 kΩ from VREF, divider 18k / 1k5 | S10 v5r |
+| Expo converter | as rev 0.1, VBIAS 1.0 V (buffered), VEXP_REF 1.25 V (VREF / 2: the expo op-amp holds the reference transistor's collector there; rev 0.1: V25 = 2.5 V), RREF 470 kΩ from VREF, divider 18k / 1k5 | S10 v5r |
 | Ladder | 4 poles, 10 nF, bias chain 620 Ω / 4 × 1.5 kΩ / 3.3 kΩ from the analog rail (VB0 1.66 V, spacing 0.76 V) | 33 nF; 2k2 / 4 × 1k / 2k4 |
-| INA, difference amps, references | MCP6002 (rail-to-rail) in all TL072 positions: VREF and VBIAS buffers, INA (2), resonance and VCA difference amps, reconstruction filter = 7 units, 4 × MCP6002 | 3 × TL072 |
-| V→I converters | LM324 (expo, resonance, VCA; 1 unit spare); resonance R4 12k / R_E 3k6, VCA R4 7k5 / R_E 2k2; VCA anti-offset 240k from VREF | 4 units used |
-| VCA trim | TIM1 CH1 (the former CV_AMP channel) + 2-pole RC into the 1 MΩ injection | R-2R DAC + 74HC595 |
+| INA, difference amps, references | MCP6002 (rail-to-rail): VREF buffer, INA (2), resonance and VCA difference amps, reconstruction filter = 6 units, 3 × MCP6002 (VREF + filter, INA, difference amps) | 3 × TL072 |
+| V→I converters, VBIAS | LM324: expo, resonance and VCA converters, and the VBIAS buffer (1.0 V, inside the LM324's input range; it must stay buffered, the expo divider's CV current would move a bare divider by up to 0.6 V); resonance R4 12k / R_E 3k6, VCA R4 7k5 / R_E 2k2; VCA anti-offset 240k from VREF | 4 units used |
+| VCA trim | TIM1 CH1 (the former CV_AMP channel) through 2 × (10k, 1 µF) and 680k into vin2, 2M from vin1 to ground: ±2.4 mV at the pair's input around mid scale | R-2R DAC + 74HC595, 1M |
 | CV PWM | TIM1, 46.9 kHz, 10 bit + 2-bit dither, 0–3.3 V; dither by DMA burst (16-halfword circular table, 4 phases × 4 channels, into TIM1->DMAADR) instead of the 46.9 kHz interrupt: board 1 frees ~9 % of the CPU (the interrupt cost ~90 cycles per call), DAC refill −8 %, and 164 B of RAM | interrupt, 0–5 V |
 | Audio loopback | divider to the 3.3 V ADC (PC4) | 5 V ADC, PD5 |
 | Self-test (option) | dividers from the analog rail and the ladder bias VB0 to free ADC pins: assembly faults show at power-up | |
-| Supply | 5 V in; analog rail through 10 Ω + 220 µF; XC6206 3.3 V for the MCU (the PWM outputs are duty × VDD); CJ431 2.5 V VREF | 9–12 V, SS14, 78L05 |
+| Supply | 5 V in; analog rail VA through 22 Ω + 3 × 100 µF X5R 1206 (about 35 µF each at 5 V; no 220 µF part on the JLCPCB lists, ceramics instead of tantalums at 79 % of their rating); XC6206 3.3 V for the MCU (the PWM outputs are duty × VDD); CJ431 2.5 V VREF (1k feed, 10k / 10 µF filter before the buffer); the programmer's 5 V through a B5819W (no back-feeding into the backplane; the card then runs at about 4.6 V, simulated) | 9–12 V, SS14, 78L05 |
 | LEDs | power (from 3.3 V), "playing", status (bus, errors), on the debug edge | 16 + UI |
 
 Simulated performance of the analog core at 5 V (S10, variant v5m with Microchip's MCP6002 model, against rev 0.1
@@ -78,6 +78,12 @@ at 8.6 V): cutoff 19 Hz – 31 kHz (rev 0.1: 20 Hz – 20 kHz; trim with the exp
 same resonance CV, THD 0.44 % at full drive (0.58 %), signal-to-noise 68–69 dB (70 dB), supply rejection
 −61 / −65 / −78 dB at 100 Hz / 1 kHz / 10 kHz (−80 / −84 / −71 dB), smallest V_CE 0.51 V, 3.6 mA analog current
 (9.1 mA). Supply per card about 10 mA at 5 V (analog 3.6 mA, MCU ~5 mA, LEDs).
+
+The card as built (S10 variant v5c: the DAC chain, the supply and reference filters, the VCA trim and the
+difference-amp resistors above; hw/check_sim.py checks the schematic against this netlist): cutoff 19 Hz –
+30.5 kHz, resonance and self-oscillation unchanged, THD 0.47 %, signal-to-noise 68.8–69.4 dB, supply rejection
+−69 / −66 / −77 dB (the CJ431 filter gains 8 dB at 100 Hz), smallest V_CE 0.50 V, VCA difference-amp inputs
+2.44–3.13 V, 3.9 mA. At 4.6 V (programmer power) the same figures, smallest V_CE 0.37 V.
 
 ### 3.2 MCU pin map (CH32V006F8P7, TSSOP-20, 3.3 V)
 
@@ -107,7 +113,7 @@ rev 0.1) fit without a custom symbol. Hand-soldered.
 | Channel | Requests (V006) | Use |
 |---|---|---|
 | ch1 | ADC1, TIM2_CH3 | PWM DAC: TIM2 CC3 request once per carrier period (CMS = 10), 1 byte per period into CH2CVR; dual option: a TIM2 DMA burst from the same request (CH2, CH3, CH4: 3 bytes per period) |
-| ch2 | SPI1_RX, TIM1_CH1, TIM2_UP | free (rev 0.1 and board 1: the DAC on TIM2_UP, two requests per period) |
+| ch2 | SPI1_RX, TIM1_CH1, TIM2_UP | free (rev 0.1: the DAC on TIM2_UP, two requests per period) |
 | ch4 | USART1_TX, TIM1_CH4/TRIG/COM | USART1 TX (return line), if by DMA |
 | ch5 | **USART1_RX, TIM1_UP**, TIM2_CH1 | USART1 RX ring (voice bus) |
 | ch6 | USART2_TX, I2C1_TX, TIM1_CH3 | CV dither burst: TIM1 with CCDS = 1 and CC3DE (request on the update event) |
@@ -125,18 +131,23 @@ UART errors, no DAC overruns, CV pattern intact. The noise LFSR that lived in th
 
 | Format | Mechanism | Bytes per period | Transfers/s | Cycles per period (3 osc, one build) |
 |---|---|---|---|---|
-| 0 (board 1 now) | TIM2_UP on ch2 → CH2CVR, each code twice | 2 | 375 000 | 189 |
-| 4 (proposed) | CMS = 10, CC3 at 64 → ch1 → CH2CVR: written on the up-count, loaded at the top, the pulse around the bottom stays symmetric | 1 | 187 500 | 184 |
-| 3 (proposed, dual) | as 4, a TIM2 burst (DMACFGR, DBA = CH2CVR, 3 transfers) writes [hi, 64, lo] | 3 | 562 500 | 190 |
+| 0 (rev 0.1, removed from the voice firmware) | TIM2_UP on ch2 → CH2CVR, each code twice | 2 | 375 000 | 189 |
+| 4 (voice firmware) | CMS = 10, CC3 at 64 → ch1 → CH2CVR: written on the up-count, loaded at the top, the pulse around the bottom stays symmetric | 1 | 187 500 | 184 |
+| 3 (voice firmware, `DAC_DUAL=1`) | as 4, a TIM2 burst (DMACFGR, DBA = CH2CVR, 3 transfers) writes [hi, 64, lo] | 3 | 562 500 | 190 |
 | 2 (dual) | ch2 TIM2_UP → CH2CVR and ch7 TIM2_CH4 (CCDS = 1) → CH4CVR, started in one DMAINTENR write | 4 | 750 000 | 187 |
 | 1 (dual) | TIM2 burst on TIM2_UP: [hi, 64, lo] twice per period | 6 | 1 125 000 | 196 |
 
 With CMS = 01 the request falls on the down-count and every pulse comes out asymmetric; CMS = 11 requests twice per
 period. The dual split is high = v >> 8, low = round((v & 255) × k / 256), one multiply. Format 0 has a start-up
 dependency: its pulses are symmetric only if the first request falls on a bottom update, which the current code
-reaches by chance (more than 128 cycles between CEN and UDE); waiting for CTLR1.DIR = 1 before UDE fixes it. One
-early format 4 start transferred 49 bytes at once and rotated the registers (not reproduced in more than 36
-starts): the start sequence must clear a pending CC3 request before enabling the DMA.
+reaches by chance (more than 128 cycles between CEN and UDE); waiting for CTLR1.DIR = 1 before UDE fixes it. The
+voice firmware uses format 4 (dual: format 3); in its build the 3 oscillators take 175 cycles per period (dual PWM:
+141, its split has no error feedback). Start sequence (hw_dac_start): TIM2 reset through RCC, configured while
+stopped, preloads loaded with UG, flags cleared; the DMA channel armed and CC3DE set with the counter at 0; CEN
+last. On board 1, 1000 starts (format 4) and 470 (format 3), after DCO mode, an ADC conversion or a running DAC: no
+transfer before the first compare, exactly one entry at the first request, read-back exact over 2.0 M and 0.96 M
+requests (an early experiment once transferred 49 bytes at start; the reset removes any stale request). The
+format 3 burst is complete by CNT 82 (request at 64, top at 128).
 
 ### 3.3 Connectors
 
@@ -163,12 +174,11 @@ console works over SWIO as on rev 0.1.
 
 **Card format:** about 60 × 45 mm, 4 layers, plugged into the backplane edge-on at 10 mm pitch. The backplane
 connector (2×8 right-angle male header) sits centred on one long edge and plugs into a vertical 2×8 socket on the
-backplane; the opposite edge carries the two LEDs, the programming header and the line-out header, so they stay
+backplane; the opposite edge carries the three LEDs, the programming header and the line-out header, so they stay
 reachable with all 8 cards plugged in. The 10 mm pitch sets the mechanics: all parts on the top side, at most about
 6 mm high (1.6 mm board + 6 mm leaves about 2 mm to the next card's bare underside); the debug-edge headers are
-right-angle types pointing out of the edge. The 220 µF bulk capacitor is the tallest part: a 6.3 × 5.4 mm
-electrolytic just fits, otherwise two 100 µF tantalums (B case, 2.1 mm, JLCPCB Basic C16133; 6.3 V at 5 V is little
-margin) or a 10 V type. The analog part sits next to the backplane
+right-angle types pointing out of the edge. The bulk capacitance is three 100 µF 1206 ceramics (1.6 mm), so the
+tallest parts are the headers and the SOIC op-amps. The analog part sits next to the backplane
 connector (short audio path, away from the debug edge); the MCU and the PWM outputs sit between them, with the
 reconstruction filter right at the DAC pin.
 
@@ -180,16 +190,16 @@ console like board 1 (notes, tunes, patches, calibration via the loopback). The 
 
 ### 3.5 Dual-PWM option: weighting and calibration
 
-The high byte (TIM2 CH2) enters the reconstruction filter's input through 10 kΩ, the low byte (TIM2 CH4) through
-~1.2 MΩ: 7 + 7 bit on the 187.5 kHz carrier. Error sources of the weight ratio: resistor tolerance (1 %) and the
-pins' output resistance (tens of Ω, 0.25–0.5 % of 10 kΩ); both pins share VDD and the timer, so the supply and the
+The high byte (TIM2 CH2) enters the reconstruction filter's input through its 11 kΩ, the low byte (TIM2 CH4)
+through 1 MΩ + 330 kΩ = 1.33 MΩ: 7 + 7 bit on the 187.5 kHz carrier. Error sources of the weight ratio: resistor
+tolerance (1 %) and the pins' output resistance (tens of Ω, 0.25–0.5 % of 11 kΩ); both pins share VDD and the timer, so the supply and the
 pulse timing cancel. A ratio error ε gives a step error of ε × one high-byte step at every high-byte transition:
 1 % = 1/12 800 of full scale, about −82 dB, at the option's noise floor (S9b already ran with a 1 % error). So
 calibration only matters beyond ~2 %, but it is cheap:
 
-1. **Overlap, not precision:** 1.2 MΩ instead of 128 × 10 kΩ = 1.28 MΩ makes the low byte's span ~5 % larger
+1. **Overlap, not precision:** 1.33 MΩ instead of 128 × 11 kΩ = 1.41 MΩ makes the low byte's span ~6 % larger
    than one high-byte step, so no tolerance leaves a gap. The firmware splits each value with the measured ratio
-   k (low codes per high step, e.g. 122.3): high = floor(q / k), low = round(q − high × k); one multiply and
+   k (low codes per high step, e.g. 120.9): high = floor(q / k), low = round(q − high × k); one multiply and
    shift per sample.
 2. **Measuring k with the card's own loopback (null method):** filter and VCA open, alternate at ~100 Hz between
    two nominally equal codes (h, 0) and (h − 1, n); the loopback ADC sees a 100 Hz square of amplitude
@@ -228,9 +238,26 @@ impedance is not critical at that rate and length.
   WCH-LinkE does); the host sends the voice firmware over CDC. Until that exists: a header with all SWIO lines.
 - **Power:** USB-C 5 V (sink, 5.1 kΩ on CC), polyfuse, TVS; 8 cards × ~10 mA + controller ~30 mA ≈ 110 mA,
   well inside 500 mA. 3.3 V LDO for the controller; the cards have their own.
-- **Mixer:** stereo, MCP6002 inverting summing amplifiers on a CJ431 2.5 V reference, 5 V; each card to L and R
-  through two resistors (fixed pan positions), gain about 0.35 per card (8 cards in phase stay inside the rail);
-  AC-coupled line out (3.5 mm jack), and an anti-alias RC into the ADCs for USB audio.
+- **Mixer** (S12, docs/results/s12_mixer.csv): stereo, two MCP6002 inverting summing amplifiers on VREF 2.5 V
+  (CJ431 from the 5 V through 2.2 kΩ, 10 kΩ / 10 µF, MCP6002 follower; second half spare), op-amp rail through
+  47 Ω / 22 µF.
+  - Each slot: AUDIO_OUT → 10 µF (keeps the card's 100 kΩ line-out bleeder off the 2.5 V summing nodes; without it
+    8 cards pull the output to 4.05 V) → R_kL / R_kR into L / R; Rf = 20 kΩ ∥ 47 pF C0G.
+  - Fixed pan positions, constant power: slots 1–4 39k/200k, 39k/110k, 43k/75k, 51k/56k (L − R +14.2, +9.0,
+    +4.8, +0.8 dB), slots 5–8 mirrored; 0.35 per card (Σ 2.79).
+  - Pseudo-differential input: the + inputs see the same network from AUDIO_GND (4.7 µF = the card's 10 µF in
+    series with the input 10 µF, the same R_kL / R_kR, 20 kΩ ∥ 47 pF to VREF), so out = VREF − Σ g_k (AUDIO_OUT_k −
+    AUDIO_GND_k) for any set of populated slots.
+  - Line out: 220 Ω + 10 µF to the 3.5 mm jack, 100 kΩ bleeder. ADC tap: 15k / 27k (0–5 V → 0–3.2 V) with 330 pF
+    C0G into ADC1 / ADC2, dual mode at 384 kHz (8 × 48 kHz; the 187.5 kHz carrier does not fold into the band),
+    decimated by 8 in firmware.
+  - Simulated: 8 cards in phase at full level 4.05 Vpp, 1.7 dB below clipping (Rf 18k would give 2.6 dB); flat
+    20 Hz – 20 kHz (−0.1 dB); mixer noise 13–17 µV (+0.1 dB on one card's noise); ground rejection 45 dB typical,
+    29 dB worst case with 1 % resistors (without the mirror network: none); L/R crosstalk −88 dB at 1 kHz (with
+    empty slots down to −63 dB at 1 kHz and −37 dB at 20 kHz: their pan resistors link the summing nodes, a
+    slightly narrower stereo image at high frequencies); supply rejection −69 dB; 1.7 mA. USB audio: one card at
+    −16.7 dBFS, 65 dB signal-to-noise with an ideal 12-bit ADC (the V203's real ADC noise is not specified).
+  - About 6 parts per slot (48) plus 30; the 3.5 mm jack is hand-soldered.
 - **USB host for MIDI keyboards:** USB-A, full-speed host on USBFS (PB6/PB7, LQFP-48 pins 42/43; the V203
   datasheet's LQFP-48 pin table: USBD on PA11/PA12, USBFS on PB6/PB7, so both run at the same time). Class-
   compliant USB-MIDI keyboards and controllers play the synth without a computer; through the computer any
@@ -310,7 +337,9 @@ switches it to that external clock (PA1, 3–32 MHz).
 | 5 V analog core | simulated (S10, docs/results/s10_5v.csv); Microchip's model has no input crossover or distortion detail |
 | HSITRIM, HSI jitter | measured on board 1 |
 | Kettle on the 187.5 kHz carrier | board 1 |
-| DAC loading formats (single and dual PWM, once or twice per period), half rate | board 1: all formats exact in read-back and on the pins; half rate measurable only as polyBLEP aliasing at C5–C7 (docs/results/hw_board1_half_rate.csv) |
+| Voice card schematic (hw/voice.py, hand-laid out in hw/layouts_voice.py) | ERC clean; KiCad netlist = design (104 nets); all 134 simulated elements match S10 v5c |
+| DAC loading formats (single and dual PWM, once or twice per period), half rate | board 1: all formats exact in read-back and on the pins; half rate: polyBLEP aliasing at C5 (−51 against −56 dB re the fundamental); the takes above C5 came from a faulty experiment build (docs/results/hw_board1_half_rate.csv) |
+| Voice firmware phase 1: format 4, 256-period halves rendered in the DMA interrupt, touch UI removed | board 1: 0 overruns over tunes 33–40, worst render 87 % of a half, control tick enters within 28 cycles during a render, 6.9 KB static RAM, same level and inharmonic content as the committed firmware (docs/results/hw_board1_fw_phase1.csv) |
 | CV dither by TIM1 DMA burst; DMA request table | board 1: burst works (all request variants), CV pattern exact (register read-back), DAC + CV burst + USART1 RX ring together without errors or overruns |
 
 ## 8. Open points
@@ -320,7 +349,8 @@ switches it to that external clock (PA1, 3–32 MHz).
   cutoff range (VB4 − Vbe), always above the transition: keep the bias (lowering it would move them into it).
   Resonance difference amp: 3.2–3.75 V, below. VCA difference amp: its inputs move from 4.22 V (VCA closed) to
   ~3.2 V (open) and cross the transition during attacks (an offset step of ~1.6 mV at the VCA output, ≈ −56 dB);
-  fix: matched resistors from both inputs to GND, so they stay below ~3.5 V. Bench check on the first card.
+  fixed in the card: 33k from both inputs to GND (matched, so the gain stays), inputs now 2.44–3.13 V (S10 v5c).
+  Bench check on the first card.
 - DAC formats 4 and 3 (once per period, ch1): a start sequence that cannot pick up a stale request; the ADC
   without DMA.
 - Dual PWM's audio benefit is still unmeasured (board 1 has no low-byte resistor): first card.

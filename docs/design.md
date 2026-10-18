@@ -29,7 +29,7 @@ the design, to be confirmed on hardware).
 | F3 | Played from a class-compliant USB-MIDI keyboard on a USB host port, without a computer | open |
 | F4 | Configuration, presets and firmware updates over USB (CDC), voice cards included (SWIO from the controller) | open |
 | F5 | Per voice: 3 oscillators (saw, pulse with width, detune, octave), noise, modal drums; 4-pole ladder filter with resonance up to self-oscillation; VCA; envelopes and modulation in firmware | met: oscillators, drums and filter on board 1 |
-| F6 | Voice allocation on the controller: poly, unison, split / layer | open |
+| F6 | Multitimbral: up to 8 parts on MIDI channels, each with key range, voices, mode (poly, mono, legato, unison, drum kit) and patch; patches stored on the controller ([midi.md](midi.md)) | open |
 | F7 | Stereo line out; each slot at a fixed pan position | design |
 | F8 | Each card runs on its own: powered and programmed by a WCH-LinkE, played from the SWIO console, with its own line out | design (as board 1) |
 | F9 | Each card calibrates itself through its audio loopback (cutoff, resonance, VCA trim; the dual-PWM weight if fitted) | met on board 1 (rev 0.1 calibration), to redo for 5 V |
@@ -123,10 +123,10 @@ matter if carrier residue from several cards meets a nonlinearity, which the fil
 
 | Resource | Available | Used | Basis |
 |---|---|---|---|
-| CPU | 48 MHz | 3 oscillators: 184 cycles per sample at 187.5 kHz = 72 %; a 5.5 ms buffer half took 4.3 ms (78 %) with the CV interrupt, about 9 % less with the CV DMA burst, so roughly 30 % remains for envelopes, modulation, bus and sync | board 1 |
-| CPU, half-rate mode | | 136 instead of 189 cycles per sample (−28 %); audible cost only at high notes (saw aliasing −48.5 to −51 dB at C5–C7) | board 1 |
-| RAM | 8 KB | DAC ring 4 KB now; with 256-period buffer halves (bus.md 3.1) and once-per-period loading 0.5 KB (single PWM) or 1.5 KB (dual); bus: about 0.6 KB; test builds with the rev 0.1 touch UI and tunes kept 320–430 B of stack (320 B crashed) | board 1 |
-| Flash | 62 KB | rev 0.1 firmware with tunes; the voice firmware drops the touch UI and tunes | |
+| CPU | 48 MHz | 3 oscillators: 175 cycles per sample (format 4) = 68 %; a 1.37 ms half including the CV interrupt and the control tick took up to 87 %, so about 13 % remains for the bus and sync; the CV DMA burst (not yet in the voice firmware) wins back about 9 %; dual PWM 141 cycles | board 1 (fw phase 1) |
+| CPU, half-rate mode | | 136 instead of 189 cycles per sample (−28 %, experiment build); cost: saw aliasing −51 dB at C5 | board 1 |
+| RAM | 8 KB | 6.94 KB static (.data 1.46 KB, of it 1.37 KB code in RAM; .bss 5.48 KB including the 4 KB console capture buffer that also holds the 0.5 KB / 1.5 KB DAC ring); 1.25 KB stack region, at least 540 B never used; shrinking the capture buffer to 1 KB frees 3 KB for the bus (about 0.6 KB) | board 1 (fw phase 1) |
+| Flash | 62 KB | 50.1 KB with all tunes; touch UI removed | board 1 (fw phase 1) |
 | Pins | 18 GPIO | 17 used or reserved (PC5 spare) | spec 3.2 |
 | DMA | 7 channels | ch1 DAC (once per period, single or dual PWM), ch5 USART1 RX, ch6 CV burst; ch4 for TX if needed; the ADC without DMA | board 1, spec 3.2 |
 | Supply | | about 10 mA at 5 V (analog 3.6 mA, MCU about 5 mA, LEDs) | S10 |
@@ -138,7 +138,7 @@ matter if carrier residue from several cards meets a nonlinearity, which the fil
 | Supply | 8 cards × 10 mA + controller about 30 mA ≈ 110 mA; keyboard on the host port 50–200 mA through a current-limited switch; inside 500 mA |
 | Voice bus | 1 Mbaud 8N1 = 100 bytes per 1 ms SYNC period; a note-on with pitch and velocity is a few bytes, a full parameter set per voice a few tens; 8 voices at 1 kHz control rate fit with room |
 | Controller pins | USB device 2, USB host 2, bus 3 (TX, RX, SYNC), NRST 8, SWIO 8, MCO 1, ADC 2 (USB audio), crystal 2, SWD 2: about 30 of the LQFP-48's 37 GPIO |
-| Mixer headroom | gain about 0.35 per card, so 8 cards in phase stay inside the 5 V rail |
+| Mixer headroom | 0.35 per card: 8 cards in phase at full level 4.05 Vpp, 1.7 dB below clipping (S12) |
 
 ## 5. Interfaces
 
@@ -194,8 +194,9 @@ keyboards. Stack: ch32fun USB examples or a TinyUSB port (open).
 
 ### 7.2 Not ready
 
-- **Schematics:** not started. `hw/` still holds the rev 0.1 generator; the voice card and the backplane need
-  new descriptions (the generator, the KiCad 10 output and the netlist checks against the simulations carry over).
+- **Voice card PCB:** the schematic is done (`hw/voice.py`, sheets drawn in `hw/layouts_voice.py`, ERC clean,
+  netlist and simulation cross-check pass); the PCB generator (`hw/gen_pcb.py`) still has to be adapted.
+- **Backplane schematic:** not started.
 - **Calibration tables for 5 V:** the firmware and the behavioural model still use rev 0.1's measured data;
   new tables come from the first card.
 
@@ -204,18 +205,21 @@ keyboards. Stack: ch32fun USB examples or a TinyUSB port (open).
 | Topic | Question | Proposal |
 |---|---|---|
 | Card holding | header only, card guides, or an enclosure with slots | header only for the first build |
-| Bulk capacitor | 220 µF within the 6 mm height limit (spec 3.3) | low-profile electrolytic, else 2 × 100 µF tantalum |
 | Pan positions | fixed per slot (resistor values), or all centre | spread from left to right over the 8 slots |
 | CH32V203 assembly | own stock, hand-soldered, or JLCPCB assembly | own stock, hand-soldered (as the voice MCUs) |
 
 Decided (2026-10-18): cards about 60 × 45 mm with 4 layers, 10 mm slot pitch, backplane 2 layers within
-100 × 100 mm, no controls on the instrument (USB only).
+100 × 100 mm, no controls on the instrument (USB only); multitimbral (the more flexible option); a compact
+first program set, extended later; patches as parameter sets stored on the controller (midi.md).
 
 ### 7.4 Design and firmware work
 
-- Voice card schematic and layout (`hw/voice.py`), then one card built (V2).
-- Voice firmware: drop the touch UI and the tunes (RAM), bus receiver, SYNC measurement and HSITRIM, standalone
-  fallback, calibration for the 5 V core.
+- Voice card: PCB (`hw/gen_pcb.py` to adapt), then one card built (V2).
+- Voice firmware: a voice card board definition before the first card is powered. The firmware still uses
+  board 1's pin map, which drives PD4 (SYNC_IN on the card) and PC4 (ADC_AUDIO, loading the loopback) push-pull,
+  reads the loopback on PD5 (the card's TX) and runs USART1 receive-only (spec 3.2 pin map; found in the schematic
+  review). Then: tunes as a build option, the DCO code out, fixed-point kettle, bus receiver, SYNC measurement and
+  HSITRIM, standalone fallback, calibration for the 5 V core, the patch parameters of midi.md.
 - Bus protocol: proposal in bus.md; to implement on board 1 first (a second board or a V203 dev board as
   controller), with the 256-period buffer halves.
 - DAC loading once per period (format 4, dual: format 3; spec 3.2) in the voice firmware, with a safe start
@@ -228,7 +232,8 @@ Decided (2026-10-18): cards about 60 × 45 mm with 4 layers, 10 mm slot pitch, b
 | Risk | Effect | Mitigation |
 |---|---|---|
 | CPU left after the oscillators (about 30 %) is not enough for envelopes, modulation and the bus | fewer oscillators or lower control rate | half-rate mode (−28 %, measured); measure early on board 1 with the bus receiver running |
-| Short buffer halves underrun when the main loop stalls (board 1: gaps of 4–10 ms, from the console and UI) | clicks | render from the DMA half-transfer interrupt at low priority instead of the main loop (bus.md 3.1) |
+| Short buffer halves underrun when the main loop stalls (board 1: gaps of 4–10 ms, from the console and UI) | clicks | done: rendering in the DMA interrupt, 0 overruns (bus.md 3.1) |
+| A modal (kettle) strike computes its coefficients in soft float in the tick (8.5 ms) | DAC dropouts at each strike | fixed-point coefficients, or computed outside the tick |
 | RAM (8 KB) with a 4 KB DAC ring | no room for the bus buffers or the dual-PWM format | 256-period buffer halves (1 KB, also sets the latency); remove the rev 0.1 UI |
 | HSI wander between voices audible on unison patches | slight beating | it resembles analog VCOs; the shared-clock fallback (CLK_IN) removes it |
 | 5 V core differs from the simulation (Microchip's model lacks the input transition and distortion detail) | resonance, THD or offsets off | bench check on the first card before building more |

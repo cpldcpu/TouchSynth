@@ -1,21 +1,18 @@
 /* Test console over the SWIO debug channel (minichlink -T), for the verification plan (docs/verification_plan.md).
  *
- *  id                       chip, firmware version
- *  status                   preset, octave, CV codes, touch state
+ *  id                       chip, firmware version, DAC format (single / dual PWM)
+ *  status                   preset, tune, control ticks, stack low-water mark, CV codes
  *  note <midi> | off        play / release a note through the engine
  *  wave <mask> [pw]         waveforms: 1 saw, 2 pulse, 4 sub, 8 noise; pulse width 0...255
  *  preset <i> | tune <i>    load a preset / play a demo tune (-1 stops)
- *  param <k> <v>            UI parameter k (0...11) to value v (0...15)
  *  cv <amp|cut|res|vca> <code>   manual mode: set a 12-bit CV directly (the engine pauses)
  *  dco <midi>               manual mode: set the DCO pitch (and CV_AMP) directly
  *  auto                     leave manual mode
  *  trim <0...255>           VCA offset trim DAC
- *  leds <hex> | leds auto   force the 16 LEDs / normal display
- *  touch                    raw, baseline and threshold of all pads
- *  recal                    re-measure the touch baselines (hands off)
- *  dac                      DAC mode on/off and the DMA ring counter twice, 100 us apart (diagnostics)
- *  bench <0|1>              CPU cycles of the loaded DSP patch per carrier period, interrupts off (DAC mode off)
- *  keys <0|1>               disable / enable the touch keys (pads still scanned; for unattended recordings)
+ *  leds <hex>               the 16 LEDs of the 74HC595 chain
+ *  dac [clear]              DAC mode, DMA ring counter twice 100 us apart, render and control-tick statistics
+ *  bench <0|1> [n]          CPU cycles of the loaded DSP patch per carrier period over n periods (default one
+ *                           buffer half), interrupts off (DAC mode off)
  *  cap <n> [us]             capture n loopback samples (PD5) every us microseconds, hex dump
  *  adc <ch>                 mean / min / max of 64 conversions of ADC channel ch (diagnostics)
  *  latch <0|1>              hold the 595 latch line PD4 low / high (diagnostics)
@@ -27,10 +24,9 @@
 #include "board.h"
 #include "hw.h"
 #include "synth.h"
-#include "ui.h"
 #include "dsp.h"
 
-#define FW_VERSION "0.1"
+#define FW_VERSION "0.2"
 
 static char line[40];
 static volatile uint8_t line_len, line_ready;
@@ -77,7 +73,7 @@ static int starts(const char *s, const char *w, const char **rest)
 #if defined(CH32V003)
 #define CAP_MAX 128                 /* 2 KB RAM */
 #elif defined(CH32V006)
-#define CAP_MAX 2048                /* 4 KB of 8 KB RAM, shared with the DAC ring buffer (hw.c) */
+#define CAP_MAX (HW_SCRATCH / 2)    /* shared with the DAC ring buffer (hw.c) */
 #define cap_buf hw_scratch
 #else
 #define CAP_MAX 512                 /* CH32V002: 4 KB RAM */
@@ -86,19 +82,22 @@ static int starts(const char *s, const char *w, const char **rest)
 static uint16_t cap_buf[CAP_MAX];
 #endif
 
-extern volatile uint32_t tick_count;
+extern volatile uint32_t tick_count, tick_lat_max, tick_lat_dac_max, tick_dac_n, tick_run_max;
+uint32_t stack_free(void);
+static uint8_t trim_dac = 128;                      /* VCA offset trim (74HC595 #3) */
+static uint16_t leds;
 
 static void run(const char *s)
 {
 	const char *r;
 	if (starts(s, "id", &r)) {
-		printf("touchsynth %s %s\n", FW_VERSION, CHIP_NAME);
+		printf("touchsynth %s %s dac %s\n", FW_VERSION, CHIP_NAME, DAC_DUAL ? "dual" : "single");
 	} else if (starts(s, "status", &r)) {
-		printf("preset %d %s octave %d tune %d manual %d\n", synth_preset_index(),
-		       synth_preset_name(synth_preset_index()), octave, synth_tune_playing(), synth_manual);
-		printf("ticks %lu\n", tick_count);
-		printf("cv amp %d cut %d res %d vca %d trim %d touch %04x\n", hw_cv_get(CV_AMP), hw_cv_get(CV_CUT),
-		       hw_cv_get(CV_RES), hw_cv_get(CV_VCA), trim_dac, touch_state);
+		printf("preset %d %s tune %d manual %d\n", synth_preset_index(), synth_preset_name(synth_preset_index()),
+		       synth_tune_playing(), synth_manual);
+		printf("ticks %lu stack_free %lu\n", tick_count, stack_free());
+		printf("cv amp %d cut %d res %d vca %d trim %d\n", hw_cv_get(CV_AMP), hw_cv_get(CV_CUT),
+		       hw_cv_get(CV_RES), hw_cv_get(CV_VCA), trim_dac);
 	} else if (starts(s, "note", &r)) {
 		synth_note_on(parse_int(&r), 0);
 	} else if (starts(s, "off", &r)) {
@@ -111,9 +110,6 @@ static void run(const char *s)
 		synth_preset(parse_int(&r));
 	} else if (starts(s, "tune", &r)) {
 		synth_tune_play(parse_int(&r));
-	} else if (starts(s, "param", &r)) {
-		int k = parse_int(&r), v = parse_int(&r);
-		ui_param_set(k, v);
 	} else if (starts(s, "cv", &r)) {
 		while (*r == ' ') r++;
 		int ch = !strncmp(r, "amp", 3) ? CV_AMP : !strncmp(r, "cut", 3) ? CV_CUT :
@@ -129,36 +125,50 @@ static void run(const char *s)
 		synth_manual = 0;
 	} else if (starts(s, "trim", &r)) {
 		trim_dac = parse_int(&r);
+		hw_leds_dac(leds, trim_dac);
 	} else if (starts(s, "leds", &r)) {
-		while (*r == ' ') r++;
-		if (!strncmp(r, "auto", 4)) led_forced = 0;
-		else {                                      /* hex, with or without 0x (decimal parse read "e000" as 0) */
-			if (r[0] == '0' && r[1] == 'x') r += 2;
-			uint16_t v = 0;
-			for (char c; (c = *r) != 0; r++) {
-				int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 :
-				        c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
-				if (d < 0) break;
-				v = (uint16_t)(v << 4 | d);
-			}
-			led_override = v; led_forced = 1;
+		while (*r == ' ') r++;                      /* hex, with or without 0x (decimal parse read "e000" as 0) */
+		if (r[0] == '0' && r[1] == 'x') r += 2;
+		uint16_t v = 0;
+		for (char c; (c = *r) != 0; r++) {
+			int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 :
+			        c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+			if (d < 0) break;
+			v = (uint16_t)(v << 4 | d);
 		}
-	} else if (starts(s, "dac", &r)) {                /* dac: DAC mode state, DMA transfers left (must change) */
-		uint16_t c0 = hw_dac_count();
-		Delay_Us(100);
-		uint16_t ov, mx, gp;
-		hw_dac_stats(&ov, &mx, &gp);
-		printf("dac %d dma %u %u overruns %u fill_max %u us gap_max %u us\n", hw_dac_active(), c0, hw_dac_count(),
-		       ov, mx, gp);
+		leds = v;
+		hw_leds_dac(leds, trim_dac);
+	} else if (starts(s, "dac", &r)) {                /* dac [clear]: DAC mode, DMA transfers left (must change), */
+		uint16_t c0 = hw_dac_count();               /* render statistics since the start (or the last clear), */
+		Delay_Us(100);                              /* control tick (cycles): entry latency overall and while a */
+		uint16_t c1 = hw_dac_count();               /* render ran, longest run time */
+		while (*r == ' ') r++;
+		int clr = !strncmp(r, "clear", 5);
+		dac_stats_t st;
+		hw_dac_stats(&st, clr);
+		__disable_irq();
+		uint32_t lm = tick_lat_max, ld = tick_lat_dac_max, nd = tick_dac_n, rm = tick_run_max;
+		if (clr)
+			tick_lat_max = tick_lat_dac_max = tick_dac_n = tick_run_max = 0;
+		__enable_irq();
+		printf("dac %d fmt %d half %u dma %u %u\n", hw_dac_active(), DAC_DUAL ? 3 : 4, st.half, c0, c1);
+		printf("renders %lu overruns %u fill_max %lu cycles slack_min %u periods\n", st.renders, st.overruns,
+		       st.fill_max, st.slack_min);
+		printf("tick_lat_max %lu tick_lat_dac_max %lu ticks_in_render %lu tick_run_max %lu\n", lm, ld, nd, rm);
 #if defined(CH32V006)
-	} else if (starts(s, "bench", &r)) {              /* bench <0|1>: one DAC buffer half of the loaded DSP patch
-		                                                 with interrupts off (oscillators silent / at C3) */
+	} else if (starts(s, "bench", &r)) {              /* bench <0|1> [n]: n carrier periods (default one buffer
+		                                                 half) of the loaded DSP patch with interrupts off
+		                                                 (oscillators silent / at C3) */
 		if (hw_dac_active()) {
 			printf("busy: DAC mode on\n");
 		} else {
 			dsp_pitch(48 << 8, parse_int(&r));
 			uint16_t arr, half;
 			dsp_carrier(&arr, &half);
+			if (*r) {
+				int n = parse_int(&r);
+				half = n < 1 ? 1 : n > HW_SCRATCH / DAC_BPP ? HW_SCRATCH / DAC_BPP : n;
+			}
 			__disable_irq();
 			uint32_t t0 = SysTick->CNT;
 			dsp_fill((uint8_t *)hw_scratch, half);
@@ -167,13 +177,6 @@ static void run(const char *s)
 			printf("bench %u periods %lu cycles, %lu per period\n", half, c, c / half);
 		}
 #endif
-	} else if (starts(s, "keys", &r)) {               /* keys <0|1>: disable / enable the touch keys */
-		keys_enabled = parse_int(&r) ? 1 : 0;
-	} else if (starts(s, "recal", &r)) {
-		ui_init();                                  /* re-measure the untouched baselines */
-	} else if (starts(s, "touch", &r)) {
-		for (int i = 0; i < N_PADS; i++)
-			printf("%d %lu %lu %lu\n", i, touch_raw[i], touch_base[i], touch_thr[i]);
 	} else if (hw_dac_active() && (starts(s, "capcv", &r) || starts(s, "cap", &r) || starts(s, "adc", &r))) {
 		printf("busy: DAC mode uses the capture buffer\n");     /* hw_scratch is the DAC ring buffer now */
 	} else if (starts(s, "capcv", &r)) {              /* capcv <ch 0..3> <code> <n> [us]: CV step, then capture */
@@ -187,16 +190,12 @@ static void run(const char *s)
 		printf("cap %d %d %lu\n", n, us, el);
 		for (int i = 0; i < n; i++)
 			printf("%03x%c", cap_buf[i], (i % 16 == 15 || i == n - 1) ? '\n' : ' ');
-	} else if (starts(s, "wait", &r)) {               /* wait <ms>: settling pause between test steps; runs the */
-		int ms = parse_int(&r);                     /* main loop's work (touch scan, LEDs, DAC refill), so DAC */
-		if (ms > 5000) ms = 5000;                   /* timing tests see normal operation */
+	} else if (starts(s, "wait", &r)) {               /* wait <ms>: settling pause between test steps (the DAC */
+		int ms = parse_int(&r);                     /* renders from its interrupt meanwhile) */
+		if (ms > 5000) ms = 5000;
 		uint32_t t0 = SysTick->CNT;
-		while ((SysTick->CNT - t0) / (F_CPU / 1000) < (uint32_t)ms) {
-			ui_poll();
-#if defined(CH32V006)
-			hw_dac_poll(dsp_fill);
-#endif
-		}
+		while ((SysTick->CNT - t0) / (F_CPU / 1000) < (uint32_t)ms)
+			;
 	} else if (starts(s, "latch", &r)) {              /* latch <0|1>: hold PD4 (595 RCLK, edge-triggered) - diagnostics */
 		funDigitalWrite(PIN_LATCH, parse_int(&r) ? 1 : 0);
 		Delay_Us(10);

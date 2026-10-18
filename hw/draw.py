@@ -7,13 +7,14 @@ is still split (global labels for nets shared between sheets), adds junctions, a
 """
 import math
 import sexp as S
-import design as D
+import board as B
+from board import D
 
 U = 2.54
 GRID = 1.27
 STUB = 2.54
 CHAR_W = 1.05
-POWER = {"GND": "power:GND", "+5V": "power:+5V"}
+POWER = B.POWER
 OUTWARD = {0: (-1, 0), 180: (1, 0), 90: (0, 1), 270: (0, -1)}
 PARTS = {p.ref: p for p in D.PARTS}
 

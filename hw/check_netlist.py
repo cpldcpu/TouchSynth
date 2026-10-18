@@ -1,15 +1,16 @@
-"""Export the KiCad netlist and compare it with design.py (connectivity, values, footprints, LCSC)."""
+"""Export the KiCad netlist and compare it with the board's design module (connectivity, footprints, LCSC)."""
 import os, subprocess, sys
 import sexp as S
-import design as D
+import board as B
+from board import D
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CLI = S.KICAD_CLI
 
 
 def main():
-    sch = os.path.join(HERE, "touchsynth", "touchsynth.kicad_sch")
-    net = os.path.join(HERE, "touchsynth", "touchsynth.net")
+    sch = os.path.join(B.OUT, f"{B.PROJECT}.kicad_sch")
+    net = os.path.join(B.OUT, f"{B.PROJECT}.net")
     subprocess.run([CLI, "sch", "export", "netlist", "--format", "kicadsexpr", "-o", net, sch], check=True,
                    capture_output=True)
     doc = S.parse(open(net, encoding="utf-8").read())

@@ -18,7 +18,7 @@
  *   CH32V00x: TIM1_RM = 0010b: TIM1_CH1_2 PC6, TIM1_CH2_2 PC7, TIM1_CH3_2 PC0, TIM1_CH4_2 PD3
  *             TIM2_RM = 010b:  TIM2_CH1_ETR_2 PC5, TIM2_CH2_2 PC2
  * The complementary / break functions these remaps also route (TIM1 CH1N PC3, CH2N PC4, CH3N PD1, BKIN PC1,
- * TIM2 CH3 PD2, CH4 PC1) are never enabled.
+ * TIM2 CH3 PD2) are never enabled; TIM2 CH4 on PC1 only in the dual-PWM DAC build (DAC_DUAL, hw.h).
  */
 #ifndef BOARD_H
 #define BOARD_H
@@ -68,7 +68,7 @@
 #define T_CEN      0x0001
 #define T_UDIS     0x0002
 #define T_ARPE     0x0080
-#define T_CMS1     0x0020   /* centre-aligned mode 1 (counts up and down) */
+#define T_CMS2     0x0040   /* centre-aligned mode 2 (counts up and down, compare flags on the up-count only) */
 #define T_UIE      0x0001
 #define T_UIF      0x0001
 #define T_UDE      0x0100   /* DMAINTENR: DMA request on update */
@@ -76,6 +76,7 @@
 #define T_MOE      0x8000
 #define T_OC_PWM1_LO  0x0068   /* OCxM = 110 (PWM1) + OCxPE, channel 1 / 3 half of CHCTLRx */
 #define T_OC_PWM1_HI  0x6800   /* same for channel 2 / 4 */
+#define T_OC_FRZ_LO   0x0008   /* OCxM = 000 (frozen: compare flag only) + OCxPE, channel 1 / 3 */
 #define T_CC1E     0x0001
 #define T_CC1P     0x0002
 #define T_CC2E     0x0010

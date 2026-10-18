@@ -61,14 +61,18 @@ Everything tick `n` computes appears at the card's outputs at frame `n + D`, on 
 
 | DAC buffer half `H` | Render lead | `D` | Ring RAM (single PWM) |
 |---|---|---|---|
-| 1024 periods (5.5 ms, now) | 10.9 ms | 12 frames | 4 KB |
-| 256 periods (1.37 ms, proposed) | 2.7 ms | 4 frames | 1 KB |
+| 1024 periods (5.5 ms, rev 0.1) | 10.9 ms | 12 frames | 4 KB |
+| 256 periods (1.37 ms, voice firmware) | 2.7 ms | 4 frames | 1 KB |
 
 Proposal: `H` = 256, `D` = 4. It frees 3 KB of RAM (with once-per-period loading the ring is only 0.5 KB, 1.5 KB
 for dual PWM; spec 3.2) and costs only the per-half overhead, which is small because the renderer works in
-32-period blocks anyway (to measure). A 1.37 ms half must never wait for the main loop: on board 1 the main loop
-stalls for 4–10 ms (console, UI), and short halves underran there. The renderer therefore runs in the DMA
-half-transfer interrupt at the lowest priority, the SYNC tick above it, the DAC DMA itself needs no CPU. If `V_n` is
+32-period blocks anyway. A 1.37 ms half must never wait for the main loop (on board 1 it stalls for 4–10 ms:
+console, UI), so the renderer runs in the DMA1 ch1 half/complete-transfer interrupt at the low preemption level
+(INTSYSCR.INESTEN, IPRIOR 0x80), the control tick above it. Measured on board 1: the tick enters within 27–28
+cycles while a render runs (without nesting it waited up to 45 k cycles); the worst render took 57.3 k of 65.5 k
+cycles (87 %), at least 32 periods of slack, 0 overruns over tunes 33–40 with the console polled; the per-half
+overhead is below 1 % (175 against 179 cycles per period at 256- and 32-period calls). The modal patch uses
+252-period halves (21 samples of 12 periods); with the bus, H must be the same for all patches. If `V_n` is
 not ready in time (a late tick), the renderer keeps `V_{n−1}` and counts the event.
 
 What limits the alignment between cards: the SYNC timestamp (EXTI entry, < 1 µs jitter), the block split (one
@@ -120,10 +124,10 @@ tables (1/16 semitone) take the top bits.
 | 0x11 | NOTE_OFF | yes | velocity u8 | release |
 | 0x12 | PITCH | yes | pitch u16 | new pitch of a sounding voice (glide target, per-voice bend) |
 | 0x13 | VOICE_STATE | yes | gate u8, pitch u16 | refresh: "at this frame the voice is gated / not gated at this pitch"; the card corrects itself if it differs (repairs a lost NOTE_ON or NOTE_OFF) |
-| 0x20 | CTRL | yes | id u8, value i16 | performance controls, usually to all: pitch bend, mod wheel, aftertouch, expression, tempo, LFO phase reset |
-| 0x21 | PARAM | yes | id u8, value i16 | one patch parameter (live edit) |
-| 0x22 | PATCH_DATA | | offset u8, count u8, values i16 × count | into the shadow patch; a whole patch spread over several frames |
-| 0x23 | PATCH_COMMIT | yes | | shadow patch becomes active at this frame: a program change hits all addressed voices on the same tick |
+| 0x20 | CTRL | yes | id u8, value i16 | performance controls of a part, to its voices: 0 pitch bend (−8192…+8191), 1 mod wheel, 2 channel pressure, 3 expression (0–16383), 4 tempo (0.01 BPM), 5 LFO phase reset |
+| 0x21 | PARAM | yes | id u8, value i16 | one parameter of the active patch (live edit), IDs 0–63 as in [midi.md](midi.md) section 4; IDs 64–79 per-voice settings (part volume, unison index, CC offsets) |
+| 0x22 | PATCH_DATA | | slot u8, offset u8, count u8, values i16 × count | into one of the card's 4 patch slots (not the active one); a whole patch spread over several frames |
+| 0x23 | PATCH_SELECT | yes | slot u8 | this slot becomes the active patch at this frame: a program change hits all addressed voices on the same tick; also used before a NOTE_ON when a voice changes parts or plays another kit sound (midi.md 2) |
 | 0x30 | REQUEST | | what u8, arg u8 | to one card: STATUS, CAL_DATA (block `arg`), HELLO |
 | 0x31 | CALIBRATE | yes | what u8 | loopback calibration (the voice mutes itself, answers STATUS "busy" until done) |
 
@@ -147,7 +151,7 @@ The chip ID lets the controller keep each card's calibration and identity even i
 
 1 Mbaud 8N1 = 100 bytes per frame. Encoded sizes (with COBS overhead and delimiter): FRAME 7 bytes, NOTE_ON 10,
 CTRL 9, PATCH_DATA 7 + 2 per value. An 8-voice chord with FRAME is 87 bytes: one frame. A 64-parameter program
-change is about 150 bytes over 2–3 frames before its COMMIT. Idle frames carry the refreshes: VOICE_STATE for one
+change is about 150 bytes over 2–3 frames before its PATCH_SELECT. Idle frames carry the refreshes: VOICE_STATE for one
 voice every 6 ms (each voice every 50 ms) and a slow round-robin resend of the active patch, so a lost PARAM also
 heals.
 
@@ -184,11 +188,11 @@ until "busy" clears → reads CAL_DATA blocks and stores them by chip ID. The ca
 | RX DMA ring (USART1 RX, ch5) | 256 bytes (2.5 frames at full load); parsed in the SYNC tick, at most 100 bytes per tick (a few % of the CPU) |
 | Event queue (timed events waiting for their frame) | 16 × 8 bytes |
 | Voice state queue `V_n` and CV delay line | `D` + 1 entries × about 24 bytes |
-| Shadow patch | the patch size (about 128 bytes) |
+| Patch slots | 4 × 128 bytes (the active patch and up to 3 more: kits, parts sharing cards) |
 
 ## 8. Open points
 
-- Parameter and controller IDs (the patch layout of the new voice firmware).
+- Parameter IDs: [midi.md](midi.md) section 4 (proposal); CTRL IDs above.
 - Measure the per-half overhead with `H` = 256 and the tick's run time with parsing (board 1).
 - Whether the renderer's block split at `b_n` is cheap enough; otherwise the 32-period block boundary (171 µs)
   is the alignment, still far below audibility for chords.
