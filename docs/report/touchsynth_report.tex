@@ -1170,6 +1170,17 @@ The console command \texttt{dac} reports the DMA position, late refills and the 
   \item \textbf{Open:} a faint line at \SI{122}{Hz}, the buffer-half rate, \SI{61}{dB} below the take's peak.
     It is at the level of the board's noise floor and probably comes from the DSP's current bursts reaching
     the analog supply.
+  \item \textbf{Carrier crosstalk:} the \SI{93.75}{kHz} carrier reaches the line out at about \SI{5.8}{mV}
+    rms, far more than the filter path lets through (S8). Closing the VCA hardly changes it (\SI{4.9}{mV}), so
+    it couples past the filter and the VCA, presumably from the PWM pin on the board. It is ultrasonic: in the
+    audio band the line out stays at the board's noise floor (\SI{0.32}{mV} at 2 to \SI{8}{kHz}, measured at
+    \SI{1}{MSa/s}). But a long scope take is sampled at only \SI{200}{kSa/s} (50\,Mpts for \SI{200}{s}),
+    which folds the carrier's sidebands into the audio band; the board recordings therefore show about twice
+    the true noise at 2 to \SI{8}{kHz}. A passive low-pass in front of the scope, or an audio interface,
+    avoids that. A higher carrier would fold outside the audio band, but needs a faster DMA refill than the
+    main loop allows.
+  \item \textbf{Console traffic:} each console exchange blocks the main loop for about \SI{20}{ms}, longer
+    than a buffer half; the recorder therefore no longer polls the console during a take.
 \end{itemize}
 The March recorded on board 1 uses the kettle (\file{docs/audio/pieces/march\_hw.mp3}). In the same folder,
 \file{kettle\_model.mp3} plays the triad and the March pattern in the model.
@@ -1517,7 +1528,15 @@ Power, hum & S7 & B2--B5, T12, V6 \\
       \SI{-61}{dB} re peak), probably the DSP's current bursts on the supply; smaller buffer halves would move
       it up and spread the load. The kettle uses up to about half of the CPU and leaves 1.4\,KB of stack, so
       more digital voices need care. A firmware routine that blocks the main loop for more than a buffer half
-      (\SI{8.2}{ms}) would starve the DAC.
+      (\SI{8.2}{ms}) would starve the DAC; a console exchange does (about \SI{20}{ms}).
+    \item \textbf{For a board revision: PWM carrier crosstalk.} In DAC mode about \SI{5.8}{mV} of the
+      \SI{93.75}{kHz} carrier reaches the line out past the filter and the VCA (Section~\ref{sec:kettle}).
+      Inaudible, but it folds into the audio band of sampled recordings and can upset amplifiers or
+      converters downstream. Slow the PULSE edges at the pin (series resistor and a small capacitor to ground,
+      corner well above the carrier), and review the routing and ground return of the PULSE trace and its
+      neighbours to the output stage. The firmware keeps the \SI{93.75}{kHz} carrier for now; a higher carrier
+      (\SI{375}{kHz}, 6-bit, still centred, interpolated and noise-shaped) would fold outside the audio band,
+      but needs the DMA refill moved into an interrupt.
   \end{itemize}
   \item \textbf{Touch sensitivity on the 4-layer board} (resolved on board 1). Real touches give 486 to 4233
     counts against an untouched $\sigma$ of 20--43 counts. The thresholds need a floor of 200 counts and a

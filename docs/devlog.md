@@ -1121,7 +1121,56 @@ high band drops by 5 dB and the tail noise from 2.6 to 2.2 mV. The March timpani
 
 > ok, update docs, then commit
 
-READMEs, devlog and report updated; this commit on `polyphonic_exp`.
+READMEs, devlog and report updated; commit `313b7e2` on `polyphonic_exp`.
+
+### 12:51
+
+> submit a pull request
+
+The GitHub CLI is not installed here, so the branch was pushed with git and the pull request form opened in the
+browser with title and description filled in. It covers three commits, because `master` on GitHub was still at
+the initial state.
+
+### 12:55
+
+> I hear more noise in the march_hw recording not. Is this possibly due to the lower PWM frequency?
+
+Partly, but not on the line out. Measured at 1 MSa/s, the line out is at the board's noise floor in the audio
+band. About 5.8 mV of the 93.75 kHz carrier reaches it past the filter and the VCA (crosstalk on the board, still
+4.9 mV with the VCA closed). A 200 s scope take is sampled at only 200 kSa/s, which folds the carrier's sidebands
+into 2-8 kHz; the old 187.5 kHz carrier had folded to 8-20 kHz, where it is less audible. Second-order noise
+shaping with independent codes per half period changed nothing measurable and was reverted.
+
+### 13:04
+
+> or go to higher carrier at lower resolution, but still with symmetric pwm, linear interpoliation and sigma delta
+
+A 375 kHz carrier (6 bits) would fold to 25 kHz, outside the audio band, but the DMA would need 750,000 values
+per second: the 4 KB ring then covers only 2.7 ms per half, while a console exchange blocks the main loop for
+about 20 ms. That showed a real problem too: the recorder's status polling caused a DAC dropout about once a
+second.
+
+### 13:06 (queued)
+
+> for the recording with the oscilloscope - you are oversampling anyways, cant you just use a digital downfilter?
+
+The recorder now stores the scope's raw 8-bit samples at full rate and `mix_parts.py` decimates them with a
+proper FIR low-pass. It removes the folding of the old 2-sample average, but the scope memory (50 Mpts) limits a
+200 s take to 200 kSa/s, so the folding in the scope itself remains. Takes no longer poll the console.
+
+### 13:20
+
+> i think we can stay with the original lower pwm for now, lets earmark this for a board revision.
+
+The 93.75 kHz carrier stays. The report lists the crosstalk as a board-revision item (slow the PULSE edges with
+a series R and small C, review the routing), with the higher carrier as the firmware alternative. The March
+timpani was recorded again with the committed firmware, without console polling.
+
+### 13:23
+
+> ok, lets commit
+
+This commit.
 
 ---
 

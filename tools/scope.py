@@ -4,6 +4,10 @@
   python3 scope.py query ":MEAS:ITEM? VPP,CHAN1"
   python3 scope.py wave out.csv [CHAN1]      # screen waveform (NORM mode, 1000 points) as t, v CSV
   python3 scope.py png shot.png              # screenshot
+  python3 scope.py record out.u8|out.f32 SECONDS [console cmds...]   single-shot record while the board plays:
+      .u8   the scope's raw 8-bit samples at full rate (rate yinc yorg yref in out.u8.txt), decimated offline with
+            a proper low-pass (mix_parts.py): keeps a PWM-DAC carrier below the scope's Nyquist out of the audio band
+      .f32  volts, boxcar-decimated here to about 100 kSa/s
 """
 import os, socket, sys, time
 import labconf
@@ -57,7 +61,7 @@ class Scope:
         if not err.startswith("0"):
             raise RuntimeError(f"{cmd}: {err}")
 
-    def record(self, seconds, ch="CHAN1", scale=0.2, start_cb=None, target_rate=100e3, trig_level=None):
+    def record(self, seconds, ch="CHAN1", scale=0.2, start_cb=None, target_rate=100e3, trig_level=None, raw=False):
         """Single-shot capture over `seconds` (10 divisions, 50 Mpts, normal acquisition: the MSO5074 stores 8 bit
         even in HRES mode, so resolution comes from oversampling + decimation instead; HRES would remove the noise
         that dithers the 8-bit steps). start_cb() runs right after arming. The record is read as 8-bit blocks of
@@ -65,6 +69,7 @@ class Scope:
         socket) and boxcar-decimated to about target_rate. Returns (rate, numpy float32 volts, preamble)."""
         import numpy as np
         self.s.settimeout(20)
+        self.write("*CLS")                                      # clear stale entries in the error queue
         self.write(":RUN")
         time.sleep(0.5)
         for c in (":ACQ:TYPE NORM", f":{ch}:SCAL {scale}", f":{ch}:OFFS 0", f":{ch}:COUP AC", f":{ch}:BWL 20M",
@@ -109,6 +114,13 @@ class Scope:
         self.write(f":WAV:STOP {npts}")
         pre = self.query(":WAV:PRE?").split(",")
         yinc, yorg, yref = float(pre[7]), float(pre[8]), float(pre[9])
+        if raw:                                                 # the scope's own 8-bit samples at full rate,
+            parts = []                                          # for proper (FIR) decimation offline
+            for a in range(1, npts + 1, 250000):
+                self.write(f":WAV:STAR {a}")
+                self.write(f":WAV:STOP {min(npts, a + 249999)}")
+                parts.append(np.frombuffer(self.block(":WAV:DATA?"), np.uint8))
+            return srate, np.concatenate(parts), pre
         dec = max(1, int(round(srate / target_rate)))
         step = 250000 - 250000 % dec
         out = []
@@ -142,16 +154,18 @@ def main():
         import subprocess
         out, secs = sys.argv[2], float(sys.argv[3])
         cmds = sys.argv[4:]
-        log = open(out + ".log", "w")                       # console log incl. a status poll during the capture
-        cb = (lambda: subprocess.Popen(["python3", "synthtest.py", "--wait", "1", "--hold", str(secs + 15),
-                                        "--poll", "status"] + cmds,
+        log = open(out + ".log", "w")                       # console log; POLL=status polls during the capture,
+        poll = ["--poll", os.environ["POLL"]] if os.environ.get("POLL") else []   # but each exchange blocks the
+        cb = (lambda: subprocess.Popen(["python3", "synthtest.py", "--wait", "1", "--hold", str(secs + 15)]  # main
+                                       + poll + cmds,                             # loop ~20 ms (DAC mode: dropouts)
                                        env=dict(os.environ, MINICHLINK=labconf.get("MINICHLINK", "ch32fun/minichlink/minichlink")),
                                        stdout=log)) if cmds else None
         t = time.time()
         lvl = float(os.environ["TRIG"]) if os.environ.get("TRIG") else None
-        rate, v, pre = sc.record(secs, start_cb=cb, trig_level=lvl)
+        raw = out.endswith(".u8")                           # .u8: raw 8-bit samples + scaling, decimated offline
+        rate, v, pre = sc.record(secs, start_cb=cb, trig_level=lvl, raw=raw)
         v.tofile(out)
-        open(out + ".txt", "w").write(f"{rate}\n")
+        open(out + ".txt", "w").write(f"{rate} {pre[7]} {pre[8]} {pre[9]}\n" if raw else f"{rate}\n")
         print(f"{len(v)} samples at {rate:g} Sa/s -> {out} ({time.time() - t:.0f} s); preamble {','.join(pre)}")
     elif sys.argv[1] == "png":
         open(sys.argv[2], "wb").write(sc.block(":DISP:DATA? PNG"))

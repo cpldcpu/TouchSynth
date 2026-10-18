@@ -60,9 +60,14 @@ def onsets_s(P, part):
 
 
 def load_hw(d, prefix, part, P):
-    f = os.path.join(d, f"{prefix}_{part}.f32")
-    rate = float(open(f + ".txt").read().split()[0])
-    v = np.fromfile(f, np.float32).astype(np.float64)
+    f = os.path.join(d, f"{prefix}_{part}.u8")
+    if os.path.exists(f):                                        # raw 8-bit scope samples at full rate: the
+        rate, yinc, yorg, yref = map(float, open(f + ".txt").read().split()[:4])   # FIR below is the anti-alias
+        v = (np.fromfile(f, np.uint8).astype(np.float64) - yorg - yref) * yinc    # filter (no boxcar folding)
+    else:
+        f = os.path.join(d, f"{prefix}_{part}.f32")
+        rate = float(open(f + ".txt").read().split()[0])
+        v = np.fromfile(f, np.float32).astype(np.float64)
     fr = Fraction(FS / rate).limit_denominator(1000)
     y = resample_poly(v, fr.numerator, fr.denominator)
     y -= np.median(y)
