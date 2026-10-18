@@ -89,6 +89,8 @@ static uint32_t pitch_counts(int32_t p)
 	return c << oct;
 }
 
+uint32_t synth_pitch_counts(int32_t p) { return pitch_counts(p); }
+
 static uint16_t amp_code(uint32_t ticks)
 {
 	uint32_t c = AMP_K / (ticks - RESET_COUNTS);
@@ -246,16 +248,22 @@ void synth_tick(void)
 	if (hit_ms < 255)
 		hit_ms++;
 	uint8_t wave = (patch.wave_ms && hit_ms > patch.wave_ms) ? patch.wave2 : patch.wave;
-	if (aenv.stage != 1 && aenv.level < 16)          /* envelope below -66 dB: sources off, or they leak through */
-		wave = 0;                                   /* the closed VCA at ~-40 dB (drum tails, rests) */
+	int quiet = aenv.stage != 1 && aenv.level < 16; /* envelope below -66 dB: sources off, or they leak through */
+	if (quiet)                                      /* the closed VCA at ~-40 dB (drum tails, rests) */
+		wave = 0;
 
 	/* oscillator */
 	int32_t pw = patch.pw + (((int32_t)patch.lfo_pw * tri) >> 15);
 	if (pw < 8) pw = 8;
 	if (pw > 247) pw = 247;
 	if (patch.dsp) {                                /* DAC mode: TIM2 is the PWM DAC, the DCO is parked */
-		if (!hw_dac_active())
-			hw_dac_start();
+#if defined(CH32V006)
+		uint16_t arr, half;
+		dsp_carrier(&arr, &half);
+		if (hw_dac_active() != arr)
+			hw_dac_start(arr, half);
+		dsp_pitch(pm, !quiet);
+#endif
 		hw_dco_waves(0, wave & WAVE_NOISE);
 		hw_cv_set(CV_AMP, 0);
 	} else {

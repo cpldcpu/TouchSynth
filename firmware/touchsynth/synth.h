@@ -56,5 +56,6 @@ int synth_tune_playing(void);
 const char *synth_tune_name(int i);
 uint16_t synth_held_mask(int base); /* held notes as a key mask (for the LEDs), bit = note - base */
 void synth_dco_note(uint16_t pitch256);   /* set the DCO directly (console), pitch in 1/256 semitone */
+uint32_t synth_pitch_counts(int32_t pitch256);   /* 48 MHz timer ticks per period */
 
 #endif

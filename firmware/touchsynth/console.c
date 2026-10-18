@@ -14,6 +14,7 @@
  *  touch                    raw, baseline and threshold of all pads
  *  recal                    re-measure the touch baselines (hands off)
  *  dac                      DAC mode on/off and the DMA ring counter twice, 100 us apart (diagnostics)
+ *  bench <0|1>              CPU cycles of the loaded DSP patch per carrier period, interrupts off (DAC mode off)
  *  keys <0|1>               disable / enable the touch keys (pads still scanned; for unattended recordings)
  *  cap <n> [us]             capture n loopback samples (PD5) every us microseconds, hex dump
  *  adc <ch>                 mean / min / max of 64 conversions of ADC channel ch (diagnostics)
@@ -149,6 +150,23 @@ static void run(const char *s)
 		hw_dac_stats(&ov, &mx, &gp);
 		printf("dac %d dma %u %u overruns %u fill_max %u us gap_max %u us\n", hw_dac_active(), c0, hw_dac_count(),
 		       ov, mx, gp);
+#if defined(CH32V006)
+	} else if (starts(s, "bench", &r)) {              /* bench <0|1>: one DAC buffer half of the loaded DSP patch
+		                                                 with interrupts off (oscillators silent / at C3) */
+		if (hw_dac_active()) {
+			printf("busy: DAC mode on\n");
+		} else {
+			dsp_pitch(48 << 8, parse_int(&r));
+			uint16_t arr, half;
+			dsp_carrier(&arr, &half);
+			__disable_irq();
+			uint32_t t0 = SysTick->CNT;
+			dsp_fill((uint8_t *)hw_scratch, half);
+			uint32_t c = SysTick->CNT - t0;
+			__enable_irq();
+			printf("bench %u periods %lu cycles, %lu per period\n", half, c, c / half);
+		}
+#endif
 	} else if (starts(s, "keys", &r)) {               /* keys <0|1>: disable / enable the touch keys */
 		keys_enabled = parse_int(&r) ? 1 : 0;
 	} else if (starts(s, "recal", &r)) {
@@ -169,16 +187,16 @@ static void run(const char *s)
 		printf("cap %d %d %lu\n", n, us, el);
 		for (int i = 0; i < n; i++)
 			printf("%03x%c", cap_buf[i], (i % 16 == 15 || i == n - 1) ? '\n' : ' ');
-	} else if (starts(s, "wait", &r)) {               /* wait <ms>: settling pause between test steps */
-		int ms = parse_int(&r);
-		if (ms > 5000) ms = 5000;
+	} else if (starts(s, "wait", &r)) {               /* wait <ms>: settling pause between test steps; runs the */
+		int ms = parse_int(&r);                     /* main loop's work (touch scan, LEDs, DAC refill), so DAC */
+		if (ms > 5000) ms = 5000;                   /* timing tests see normal operation */
 		uint32_t t0 = SysTick->CNT;
-		while ((SysTick->CNT - t0) / (F_CPU / 1000) < (uint32_t)ms)
+		while ((SysTick->CNT - t0) / (F_CPU / 1000) < (uint32_t)ms) {
+			ui_poll();
 #if defined(CH32V006)
-			hw_dac_poll(dsp_fill);                  /* keep the DAC fed (DAC mode) */
-#else
-			;
+			hw_dac_poll(dsp_fill);
 #endif
+		}
 	} else if (starts(s, "latch", &r)) {              /* latch <0|1>: hold PD4 (595 RCLK, edge-triggered) - diagnostics */
 		funDigitalWrite(PIN_LATCH, parse_int(&r) ? 1 : 0);
 		Delay_Us(10);

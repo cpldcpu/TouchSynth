@@ -63,6 +63,13 @@ def main():
     # CV_AMP code = AMP_K / (counts - RESET_COUNTS): I = A C / (T - t_reset), through the LIN network (S1)
     gain = rows("s1_cal")[1][0][0]
     amp_k = CODE_FS / V_FS * A_TGT * C_INT * RE_DCO / voice.LIN_RATIO / gain * F_TIM
+    # oscillators on the PWM DAC (dsp.c, CH32V006): phase step per 187.5 kHz sample (2^32 per period) and its inverse
+    # 2^48 / inc (polyBLEP), top octave in 1/16 semitone steps; lower octaves shift
+    incs = [round(440.0 * 2 ** ((120 + i / 16 - 69) / 12) / (F_TIM / 256) * 2 ** 32) for i in range(12 * 16 + 1)]
+    out.append("#if defined(CH32V006)")
+    out.append(carray("uint32_t", "osc_inc_top", incs, per_line=8, comment="phase step at 187.5 kHz, MIDI 120 + i/16"))
+    out.append(carray("uint32_t", "osc_inv_top", [round(2 ** 48 / x) for x in incs], per_line=8, comment="2^48 / step"))
+    out.append("#endif")
     out.append(f"#define AMP_K {round(amp_k)}UL           /* S1: dco_gain {gain} */")
     out.append(f"#define RESET_COUNTS {round(T_RESET * F_TIM)}  /* 3 us reset pulse */")
     out.append("")
@@ -114,18 +121,24 @@ def main():
                (4 if p.get("sub", 0) else 0) | (8 if p.get("noise", 0) else 0)
 
     # ---- digital voices on the PWM DAC (sim/behav/dsp.py): mode tables per DSP preset
-    dsp_modes, dsp_patches = [], []
+    dsp_modes, dsp_oscs, dsp_patches = [], [], []
 
     def dsp_index(p):
         d = p.get("dsp")
         if not d:
             return 0
+        if d["kind"] == "osc":                                  # oscillators: wave, level Q15, offset 1/256 semitone
+            first = len(dsp_oscs)
+            for wave, lvl, semis in d["osc"]:
+                dsp_oscs.append(({"saw": 0, "pulse": 1}[wave], round(lvl * 32767), round(semis * 256)))
+            dsp_patches.append((first, len(d["osc"]), round(d.get("pw", 0.5) * 255), 0, 0, 1))
+            return len(dsp_patches)
         assert d["kind"] == "modal"
         first = len(dsp_modes)
         for ratio, lvl_db, tau in d["modes"]:
             dsp_modes.append((ratio, round(10 ** (lvl_db / 20) * 2 ** 30), round(math.exp(-1 / (tau * 15625)) * 2 ** 30)))
         dsp_patches.append((first, len(d["modes"]), round(d.get("mallet_ms", 3.0) * 15.625), d.get("voices", 2),
-                            round(d.get("gain", 0.5) * 256)))
+                            round(d.get("gain", 0.5) * 256), 0))
         return len(dsp_patches)
 
     def patch(name, p):
@@ -165,7 +178,8 @@ def main():
     out.append("#if defined(CH32V006)")
     out.append("#define DSP_IDX(n) (n)")
     out.append("#define DSP_MODE_TABLE { " + (", ".join(f"{{ {r:.6f}f, {g}, {rr} }}" for r, g, rr in dsp_modes) or "{ 0 }") + " }")
-    out.append("#define DSP_PATCH_TABLE { " + (", ".join(f"{{ {a}, {b}, {c}, {d}, {e} }}" for a, b, c, d, e in dsp_patches) or "{ 0 }") + " }")
+    out.append("#define DSP_OSC_TABLE { " + (", ".join(f"{{ {w}, {l}, {o} }}" for w, l, o in dsp_oscs) or "{ 0 }") + " }")
+    out.append("#define DSP_PATCH_TABLE { " + (", ".join(f"{{ {a}, {b}, {c}, {d}, {e}, {k} }}" for a, b, c, d, e, k in dsp_patches) or "{ 0 }") + " }")
     out.append("#else")
     out.append("#define DSP_IDX(n) 0")
     out.append("#endif")
@@ -193,6 +207,9 @@ def main():
     import pieces                                                # multitrack pieces (sim/behav/pieces.py)
     parts = dict(getattr(tunes, "PARTS", {}))
     parts.update(pieces.all_parts())
+    parts.update(getattr(tunes, "TESTS", {}))                    # DSP test tunes, after the pieces
+    parts.update(getattr(pieces, "VARIANTS", {}))                # part variants (other presets)
+    parts.update(getattr(tunes, "COMPARE", {}))                  # DCO against DAC
     lens = {}
     for name, t in tunes.TUNES.items():
         src, lens[name] = steps(name, t)

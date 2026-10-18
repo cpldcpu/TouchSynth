@@ -121,8 +121,8 @@ def render_saw(reset_times, slope, n):
     cum_s = np.interp(s * FS, np.arange(n + 1), cum)
     v = np.where(valid, cum[:n] - cum_s, 0.0)
     v = np.maximum(v, 0.0)
-    # polyBLEP at each reset (jump from the value just before the reset to 0)
-    pos = np.asarray(reset_times) * FS
+    # polyBLEP at each jump to 0: the model ramps on through the reset pulse and drops at its end (starts)
+    pos = starts * FS
     n0 = np.ceil(pos).astype(int)
     d = n0 - pos
     ok = (n0 >= 2) & (n0 < n)
@@ -217,14 +217,24 @@ def analog(ev, cv, rsoft=None, thump=0.0):
     if ev.get("dac") is not None:                                   # pulse pin as PWM DAC (DAC mode)
         import dsp
         from fractions import Fraction
-        fr = Fraction(FS / dsp.F_CAR).limit_denominator(1000)          # carrier rate -> FS, averaging
-        d = resample_poly(np.asarray(ev["dac"], float) / dsp.ARR, fr.numerator, fr.denominator)
+        cfg = ev.get("dac_cfg", {})                                 # variants (sim/s9_osc); defaults = firmware
+        f_car = cfg.get("f_car", dsp.F_CAR)
+        fr = Fraction(FS / f_car).limit_denominator(1000)              # carrier rate -> FS, averaging
+        d = resample_poly(np.asarray(ev["dac"], float) / cfg.get("levels", dsp.ARR), fr.numerator, fr.denominator,
+                          window=("kaiser", 10.0))                # stopband ~-100 dB (images of the carrier rate)
         d = np.clip(np.pad(d[:n], (0, max(0, n - len(d))), constant_values=0.5), 0, 1)
-        P = 5.0 * A_DIG
-        lo_mean = hp1(mix + P * d, F_MIX_HP) - (mix + P * d)      # minus the slow mean the coupling removes
-        u_lo, u_hi = (mix + lo_mean + cn) / (2 * VT), (mix + P + lo_mean + cn) / (2 * VT)
-        bin1 = u_lo * 2 * VT + P * d
-        y4 = _ladder_pwm(u_lo, u_hi, d, g, kres, rs)
+        P = cfg.get("p", 5.0 * A_DIG)                               # DAC swing at the mixer node
+        if cfg.get("recon_fc"):                                     # reconstruction filter before the mixer: the
+            from scipy.signal import butter                         # ladder sees a continuous level, no PWM
+            b, a = butter(2, cfg["recon_fc"], fs=FS)
+            d = lfilter(b, a, d - 0.5) + 0.5
+            bin1 = hp1(mix + P * d, F_MIX_HP) + cn
+            y4 = _ladder(bin1 / (2 * VT), g, kres, rs)
+        else:
+            lo_mean = hp1(mix + P * d, F_MIX_HP) - (mix + P * d)  # minus the slow mean the coupling removes
+            u_lo, u_hi = (mix + lo_mean + cn) / (2 * VT), (mix + P + lo_mean + cn) / (2 * VT)
+            bin1 = u_lo * 2 * VT + P * d
+            y4 = _ladder_pwm(u_lo, u_hi, d, g, kres, rs)
     else:
         bin1 = hp1(mix, F_MIX_HP) + cn
         y4 = _ladder(bin1 / (2 * VT), g, kres, rs)
@@ -360,7 +370,10 @@ def firmware(notes, patch, t_end, automation=None):
               sub=(np.array(st), np.array(sl)), noise=(np.array(nt), np.array(nl)))
     if p.get("dsp"):                                                 # DAC mode: digital voice on the pulse pin
         import dsp
-        ev["dac"] = dsp.encode(dsp.render(notes, p, t_end))
+        if p["dsp"]["kind"] == "osc" and len(reset) > 1:            # oscillators: one sample per carrier period
+            ev["dac"] = dsp.render_osc(np.array(reset), p["dsp"], t_end)
+        else:
+            ev["dac"] = dsp.encode(dsp.render(notes, p, t_end))
     return ev, cv
 
 

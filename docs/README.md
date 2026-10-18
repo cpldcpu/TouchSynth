@@ -10,6 +10,7 @@ chapters.
 |---|---|
 | [report/touchsynth_report.pdf](report/touchsynth_report.pdf) | **Design report** (LaTeX, ~40 pages): requirements, circuit, ngspice simulations, behavioural model, PCB, BOM, firmware, demo tunes and instruments, verification plan and the board 1 bring-up and test results. |
 | [spec.md](spec.md) | Specification: goals, architecture, block requirements, part choices. |
+| [poly_spec.md](poly_spec.md) | Architecture of the polyphonic version: digital-oscillator voice cards (CH32V006, 5 V) on a USB backplane (CH32V203), pin maps, connectors, mixer, voice bus, clock synchronisation, decisions and open points. |
 | [sim_report.md](sim_report.md) | Circuit simulation report, blocks S1–S7 (oscillator, CV filters, ladder filter, VCA, touch, complete voice, power). |
 | [verification_plan.md](verification_plan.md) | Verification and validation plan: bring-up steps B1–B12 and functional tests T1–T14 with limits from the simulations, plus the board 1 results. |
 | [touchsynth_schematic.pdf](touchsynth_schematic.pdf) | Schematic, exported from KiCad. |

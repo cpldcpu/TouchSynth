@@ -369,6 +369,10 @@ PIECES["aero"] = dict(bpm=AERO_BPM, total=_at,
                       reverb=0.30, delay="lead")
 
 
+# part variants (CH32V006, compiled after the DSP test tunes): the Toccata's top manual track on the Moog DAC voice
+VARIANTS = {"toccata_m1_moog": dict(PIECES["toccata"]["parts"]["m1"], preset="moog_toccata")}
+
+
 def all_parts():
     """{piece_part: tune dict} in a stable order, for gen_tables.py (firmware) and the recording scripts."""
     return {f"{p}_{k}": v for p, pc in PIECES.items() for k, v in pc["parts"].items()}

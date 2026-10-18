@@ -113,12 +113,12 @@ static void dco_init(void)
 
 /* ------------------------------------------------------------------ PWM DAC on the pulse pin (DAC mode) */
 #if defined(CH32V006)
-#define DAC_BUF (2 * DAC_HALF * DAC_EPS)
 uint16_t hw_scratch[2048];
 #define dac_buf ((uint8_t *)hw_scratch)
-_Static_assert(DAC_BUF <= sizeof hw_scratch, "DAC ring larger than the shared buffer");
+_Static_assert(DAC_RING <= sizeof hw_scratch, "DAC ring larger than the shared buffer");
 static volatile uint8_t dac_need;                   /* bit 0: first half has played, bit 1: second half */
-static uint8_t dac_on;
+static uint16_t dac_on;                             /* arr of the running carrier, 0 = off */
+static uint16_t dac_half;                           /* carrier periods per buffer half */
 static volatile uint16_t dac_overruns;              /* a half was due again before it had been refilled */
 static uint16_t dac_fill_max;                       /* longest refill, us */
 static uint16_t dac_gap_max;                        /* longest time between two polls, us */
@@ -136,21 +136,25 @@ void DMA1_Channel2_IRQHandler(void)
 	DMA1->INTFCR = DMA_CHTIF2 | DMA_CTCIF2 | DMA_CGIF2;
 }
 
-void hw_dac_start(void)
+void hw_dac_start(uint16_t arr, uint16_t half)
 {
-	if (dac_on)
+	if (dac_on == arr)
 		return;
-	for (int i = 0; i < DAC_BUF; i++)
-		dac_buf[i] = 128;
+	hw_dac_stop();
+	if (half > DAC_RING / 4)
+		half = DAC_RING / 4;
+	dac_half = half;
+	for (int i = 0; i < 4 * half; i++)
+		dac_buf[i] = arr / 2;
 	NVIC_DisableIRQ(TIM2_IRQn);                      /* no sub-oscillator */
 	sub_on = 0;
 	funDigitalWrite(PIN_SUB, 0);
 	TIM2->DMAINTENR = 0;
 	TIM2->CTLR1 = 0;                                 /* the counting mode may only change while stopped */
 	TIM2->PSC = 0;
-	TIM2->ATRLR = 256;                               /* up 0...256, down again: 512 ticks, 93.75 kHz */
+	TIM2->ATRLR = arr;                               /* up 0...arr, down again: 2 arr ticks (256: 93.75 kHz) */
 	TIM2->CH1CVR = 0xFFFF;                           /* CH1 (inverted) stays low: DCO held in reset */
-	TIM2->CH2CVR = 128;
+	TIM2->CH2CVR = arr / 2;
 	TIM2->CNT = 0;
 	TIM2->SWEVGR = T_UG;
 	TIM2->CTLR1 = T_ARPE | T_CMS1 | T_CEN;
@@ -158,7 +162,7 @@ void hw_dac_start(void)
 	DMA1_Channel2->CFGR = 0;
 	DMA1_Channel2->PADDR = (uint32_t)&TIM2->CH2CVR;
 	DMA1_Channel2->MADDR = (uint32_t)dac_buf;
-	DMA1_Channel2->CNTR = DAC_BUF;
+	DMA1_Channel2->CNTR = 4 * half;
 	DMA1_Channel2->CFGR = DMA_DIR_PeripheralDST | DMA_CFGR1_MINC | DMA_CFGR1_CIRC | DMA_CFGR1_PSIZE_0 |
 	                      DMA_CFGR1_PL_1 | DMA_CFGR1_HTIE | DMA_CFGR1_TCIE;   /* bytes -> 16-bit register */
 	DMA1->INTFCR = DMA_CHTIF2 | DMA_CTCIF2 | DMA_CGIF2;
@@ -168,7 +172,7 @@ void hw_dac_start(void)
 	NVIC_EnableIRQ(DMA1_Channel2_IRQn);
 	DMA1_Channel2->CFGR |= DMA_CFGR1_EN;
 	TIM2->DMAINTENR = T_UDE;
-	dac_on = 1;
+	dac_on = arr;
 }
 
 void hw_dac_stop(void)
@@ -205,7 +209,7 @@ void hw_dac_poll(void (*fill)(uint8_t *dst, int n))
 			dac_need &= ~(1 << h);
 			__enable_irq();
 			uint32_t t0 = SysTick->CNT;
-			fill(dac_buf + h * DAC_HALF * DAC_EPS, DAC_HALF);
+			fill(dac_buf + h * 2 * dac_half, dac_half);
 			uint32_t us = (SysTick->CNT - t0) / (F_CPU / 1000000);
 			if (us > dac_fill_max)
 				dac_fill_max = us > 65535 ? 65535 : us;
@@ -216,7 +220,7 @@ void hw_dac_poll(void (*fill)(uint8_t *dst, int n))
 uint16_t hw_dac_count(void) { return dac_on ? DMA1_Channel2->CNTR : 0; }
 void hw_dac_stats(uint16_t *o, uint16_t *m, uint16_t *g) { *o = dac_overruns; *m = dac_fill_max; *g = dac_gap_max; }
 #else
-void hw_dac_start(void) {}
+void hw_dac_start(uint16_t arr, uint16_t half) { (void)arr; (void)half; }
 void hw_dac_stop(void) {}
 int hw_dac_active(void) { return 0; }
 void hw_dac_poll(void (*fill)(uint8_t *dst, int n)) { (void)fill; }

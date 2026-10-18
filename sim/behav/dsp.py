@@ -1,10 +1,14 @@
 """Digital voices on the pulse output used as a PWM DAC (mirrors the firmware's DAC mode).
 
-TIM2 runs centre-aligned over 2 x 256 ticks: a 93.75 kHz carrier with 8-bit duty and symmetric pulses; the DMA
-loads the duty from a ring buffer. The firmware synthesises at FS_DAC = 15.625 kHz, interpolates linearly from
-the previous sample over the UPS = 6 carrier periods of a sample, and quantises each period's duty with
-first-order error feedback (noise shaping), so the average follows the signal with sub-LSB accuracy.
+TIM2 runs centre-aligned over 2 x 128 ticks: a 187.5 kHz carrier with 7-bit duty (129 levels) and symmetric
+pulses; the DMA loads the duty from a ring buffer. The firmware synthesises at FS_DAC = 15.625 kHz, interpolates
+linearly from the previous sample over the UPS = 12 carrier periods of a sample, and quantises each period's duty
+with second-order error feedback (noise shaping), so the average follows the signal with sub-LSB accuracy.
+(Until 2026-10-18: 93.75 kHz, 8 bit, first order; the same quality for the drums, sim/s9_osc.)
 The ladder filter is the reconstruction filter (sim/s8_dac).
+
+Oscillators (kind "osc"): up to three saw / pulse oscillators (pitch offset in semitones, level), one sample per
+carrier period, polyBLEP band-limited, the same output stage (render_osc; sim/s9_osc).
 
 Voices:
   modal  a bank of two-pole resonators per stroke, one per drum mode (ratio to the note, level, decay time),
@@ -15,30 +19,18 @@ import numpy as np
 from numba import njit
 from scipy.signal import lfilter
 
-F_TIM, ARR, UPS = 48e6, 256, 6
-F_CAR = F_TIM / (2 * ARR)               # 93.75 kHz (centre-aligned)
+F_TIM, ARR, UPS = 48e6, 128, 12
+F_CAR = F_TIM / (2 * ARR)               # 187.5 kHz (centre-aligned)
 FS_DAC = F_CAR / UPS                    # 15.625 kHz (drum modes stay below 2 kHz)
 
 
-@njit(cache=True)
-def _encode(v):
-    out = np.empty(v.shape[0], np.int32)
-    err = 0.0
-    for i in range(v.shape[0]):
-        q = int(round(v[i] + err))
-        q = min(ARR - 1, max(0, q))
-        err += v[i] - q
-        out[i] = q
-    return out
-
-
 def encode(x):
-    """Samples -1...1 at FS_DAC -> duty codes 0...255 per carrier period: linear interpolation from the
-    previous sample over UPS periods (as the firmware), error feedback."""
-    c = (np.clip(np.asarray(x, float), -1, 1) + 1) / 2 * (ARR - 1)
-    prev = np.concatenate([[(ARR - 1) / 2], c[:-1]])
+    """Samples -1...1 at FS_DAC -> duty codes 0...ARR per carrier period: linear interpolation from the previous
+    sample over UPS periods (as the firmware), second-order error feedback."""
+    c = (np.clip(np.asarray(x, float), -1, 1) + 1) / 2 * ARR
+    prev = np.concatenate([[ARR / 2], c[:-1]])
     v = (prev[:, None] + (c - prev)[:, None] * (np.arange(1, UPS + 1) / UPS)[None, :]).ravel()
-    return _encode(v)
+    return _sdm2(v, ARR + 1)
 
 
 def mtof(m):
@@ -105,3 +97,51 @@ def softclip(x):
     """Cubic soft clipper (as the firmware): 1.5 x - 0.5 x^3 up to |x| = 1, then 1; linear-ish below 0.5."""
     x = np.clip(x, -1, 1)
     return 1.5 * x - 0.5 * x ** 3
+
+
+# ---------------------------------------------------------------- oscillators (kind "osc")
+@njit(cache=True)
+def _sdm2(v, levels):
+    """Second-order error feedback (NTF (1 - z^-1)^2) to integer codes 0...levels-1, as the firmware."""
+    out = np.empty(v.shape[0], np.int32)
+    e1 = e2 = 0.0
+    for i in range(v.shape[0]):
+        w = v[i] + 2.0 * e1 - e2
+        q = min(levels - 1, max(0, int(round(w))))
+        e2 = e1
+        e1 = min(4.0, max(-4.0, w - q))
+        out[i] = q
+    return out
+
+
+def saw_blep(t, dt):
+    """Rising saw -1...1 from the phase fraction t, 2-point polyBLEP at the wrap (dt = phase step per sample)."""
+    s = 2 * t - 1
+    a = t < dt
+    x = t[a] / dt[a]
+    s[a] -= 2 * x - x * x - 1
+    b = t > 1 - dt
+    x = (t[b] - 1) / dt[b]
+    s[b] -= x * x + 2 * x + 1
+    return s
+
+
+def render_osc(reset, d, t_end):
+    """Oscillator voice: the pitch follows the firmware's DCO period (reset times: glide, vibrato); returns the
+    duty code 0...ARR per carrier period."""
+    fc = F_CAR
+    n = int(t_end * fc)
+    t = np.arange(n) / fc
+    per = np.diff(reset)
+    k = np.clip(np.searchsorted(reset, t, side="right") - 1, 0, len(per) - 1)
+    f0 = 1.0 / per[k]
+    acc = np.zeros(n)
+    for i, (wave, lvl, semis) in enumerate(d["osc"]):
+        f = f0 * 2 ** (semis / 12)
+        dt = f / fc
+        ph = (i / 3 + np.cumsum(dt)) % 1.0
+        s = saw_blep(ph, dt)
+        if wave == "pulse":
+            s = (s - saw_blep((ph + d.get("pw", 0.5)) % 1.0, dt)) / 2
+        acc += lvl * s
+    return _sdm2((np.clip(acc, -1, 1) + 1) / 2 * ARR, ARR + 1)

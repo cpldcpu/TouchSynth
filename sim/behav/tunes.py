@@ -5,6 +5,8 @@ no envelope retrigger feel), 'A' accent (more filter envelope + level). 3 bytes 
 Each tune also names a preset (patch) from PRESETS.
 """
 
+_MOOG = dict(kind="osc", pw=0.5, osc=[("saw", 0.317, 0.0), ("saw", 0.317, 0.07), ("pulse", 0.317, -12.0)])
+
 PRESETS = {
     "acid": dict(saw=1.0, cutoff=170.0, env_amt=3.2, res=0.8, keytrack=0.3, vol=0.8,
                  fenv=("adsr", 0.002, 0.09, 0.0, 0.04), aenv=("adsr", 0.002, 0.2, 0.7, 0.02),
@@ -78,6 +80,26 @@ PRESETS = {
                      glide=0.12, lfo_rate=5.5, lfo_pitch=25.0,
                      fenv=("adsr", 0.2, 0.5, 0.8, 0.6), aenv=("adsr", 0.15, 0.5, 0.9, 0.6)),
 }
+# Three oscillators on the PWM DAC (CH32V006, 187.5 kHz carrier, sim/behav/dsp.py, sim/s9_osc): saw, saw +7 cent,
+# square one octave down, as a Minimoog patch
+PRESETS["moog_bass"] = dict(saw=0.0, cutoff=250.0, env_amt=3.5, res=0.5, keytrack=0.3, vol=0.8,
+                            fenv=("adsr", 0.002, 0.18, 0.1, 0.1), aenv=("adsr", 0.002, 0.25, 0.7, 0.08), dsp=_MOOG)
+PRESETS["moog_lead"] = dict(saw=0.0, cutoff=1800.0, env_amt=1.5, res=0.3, keytrack=0.5, glide=0.06, lfo_rate=5.5,
+                            lfo_pitch=12.0, vol=0.8, fenv=("adsr", 0.01, 0.6, 0.4, 0.3), aenv=("adsr", 0.01, 0.3, 0.9, 0.3),
+                            dsp=_MOOG)
+PRESETS["moog_toccata"] = dict(saw=0.0, cutoff=1800.0, env_amt=1.2, res=0.25, keytrack=0.7, lfo_rate=5.5,
+                               lfo_pitch=6.0, vol=0.9, fenv=("adsr", 0.005, 0.25, 0.5, 0.2),
+                               aenv=("adsr", 0.004, 0.2, 1.0, 0.15), dsp=_MOOG)   # Toccata top voice (pieces)
+# DCO against DAC on board 1 (sim/s9_osc/s9_hwcmp.py): the same patches with the saw from the DCO or from one
+# DAC oscillator (full scale); the lead's sub-oscillator becomes a square one octave down
+_SAW = dict(kind="osc", pw=0.5, osc=[("saw", 0.95, 0.0)])
+PRESETS["cmp_dco"] = dict(saw=1.0, cutoff=16000.0, res=0.0, env_amt=0.0, keytrack=0.0, vol=0.8,
+                          aenv=("adsr", 0.005, 0.2, 1.0, 0.1))
+PRESETS["cmp_dac"] = dict(PRESETS["cmp_dco"], saw=0.0, dsp=_SAW)
+PRESETS["acid_dac"] = dict(PRESETS["acid"], saw=0.0, dsp=_SAW)
+PRESETS["lead_dac"] = dict(PRESETS["lead"], saw=0.0, sub=0,
+                           dsp=dict(kind="osc", pw=0.5, osc=[("saw", 0.53, 0.0), ("pulse", 0.42, -12.0)]))
+PRESETS["moog_open"] = dict(saw=0.0, cutoff=12000.0, res=0.0, vol=0.8, aenv=("adsr", 0.005, 0.2, 1.0, 0.2), dsp=_MOOG)
 
 def _transpose(steps, d):
     return [(n + d if n else 0, ln, fl) for n, ln, fl in steps]
@@ -356,6 +378,29 @@ PARTS = {
     "demo_arp": dict(bpm=DEMO_BPM, preset="arp", steps=_part(_arp)),
     "demo_lead": dict(bpm=DEMO_BPM, preset="lead", steps=_part(_lead)),
     "demo_pad": dict(bpm=DEMO_BPM, preset="sweep", steps=_part(_pad)),
+}
+
+
+# DSP test tunes (CH32V006): compiled after the pieces' parts
+TESTS = {
+    "moog_bass_test": dict(bpm=107, preset="moog_bass",
+                           steps=[(n, 1, "") for n in [36, 36, 48, 36, 43, 36, 46, 48, 36, 36, 48, 36, 41, 43, 46, 51] * 2]),
+    "moog_lead_test": dict(bpm=100, preset="moog_lead",
+                           steps=[(67, 4, ""), (72, 2, ""), (74, 2, ""), (76, 6, ""), (74, 2, ""), (72, 2, ""),
+                                  (79, 8, ""), (0, 4, "")]),
+    "moog_open_test": dict(bpm=100, preset="moog_open",
+                           steps=[(48, 8, ""), (0, 2, ""), (60, 8, ""), (0, 2, ""), (72, 8, ""), (0, 2, ""),
+                                  (84, 8, ""), (0, 4, "")]),
+}
+
+
+# DCO against DAC (CH32V006): compiled after the part variants
+_CMP_SCALE = [(n, 10, "") for n in (36, 48, 60, 72, 84, 96) for n in (n, 0)]
+COMPARE = {
+    "cmp_scale_dco": dict(bpm=100, preset="cmp_dco", steps=[(n, 10 if n else 2, "") for n, _, _ in _CMP_SCALE]),
+    "cmp_scale_dac": dict(bpm=100, preset="cmp_dac", steps=[(n, 10 if n else 2, "") for n, _, _ in _CMP_SCALE]),
+    "acid_dac": dict(TUNES["acid"], preset="acid_dac"),
+    "ode_dac": dict(TUNES["ode"], preset="lead_dac"),
 }
 
 
