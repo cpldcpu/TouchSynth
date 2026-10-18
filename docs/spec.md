@@ -1,6 +1,6 @@
 # TouchSynth Poly: specification
 
-Status: draft 0.3 (2026-10-18), branch `polyphonic_hw`. Simulated (S9, S10) and partly tested on board 1;
+Status: draft 0.4 (2026-10-18), branch `polyphonic_hw`. Simulated (S9, S10) and partly tested on board 1;
 nothing of the new hardware is built yet.
 
 ## 1. Goal
@@ -20,13 +20,14 @@ connectors hand-soldered.
 | Oscillators | digital, on the V006's PWM DAC; no analog DCO | DCO and DAC saw measure the same on board 1 (S9d); 3 oscillators, any waveform, the kettle in firmware |
 | DAC | 187.5 kHz carrier (TIM2 centre-aligned, 2 × 128), 7 bit, second-order error feedback, one sample per carrier period (oscillators) or 15.625 kHz interpolated (modal drums) | S9: images, not bits, limit the quality; implemented and recorded on board 1 |
 | Supply | single 5 V; MCU on a 3.3 V LDO; CJ431 2.5 V reference | S10 (v5m: Microchip MCP6002 model) |
-| Voice bus | UART broadcast + SYNC line + per-slot reset | pin and DMA constraints of the V006 |
+| Voice bus | UART broadcast + SYNC line + per-slot reset; timed events on a 1 ms frame clock, fixed presentation delay | section 5, [bus.md](bus.md) |
 | Controller | CH32V203C8T6, LQFP-48 (USB-MIDI, CDC; USB audio of the mix via its ADCs as an option); all slot lines (NRST, SWIO) direct, no port expanders | section 4 |
 | Slots | 8 on the backplane, populated as cards are built | |
 | Backplane PCB | 2 layers (voice cards: 4 layers) | section 4 |
-| Card format | small cards; backplane connector on one edge, LEDs and debug connectors (SWIO, line out) on the opposite edge | section 3.3 |
-| Voice MCU | CH32V006K8U7 (QFN-32, own stock); the board 1 pin map carries over, reset on PA7 | section 3.2 |
-| DAC variants | standard: one PWM, 187.5 kHz, 7 bit, second-order error feedback (−67 to −87 dB in the three-oscillator model); assembly option: dual PWM (high + low byte, 7 + 7 bit, 128:1) at 187.5 kHz: −82 to −92 dB, near an ideal DAC, at about the same CPU; a firmware mode with 93.75 kHz samples interpolated on the 187.5 kHz carrier halves the oscillator CPU (model: −57 to −67 dB; not quantisation, not the in-band droop; most likely an artefact of the model's 192 kHz ladder with images near its Nyquist rate; below the analog noise floor either way; to be settled by recording both modes on the first card). The carrier stays at 187.5 kHz: a 93.75 kHz carrier reaches the line out at −39 dB through the 30 kHz filter (S11) | S9b |
+| Card format | about 60 × 45 mm, 4 layers; backplane connector on one long edge, LEDs and debug connectors (SWIO, line out) on the opposite edge; 10 mm slot pitch, backplane within 100 × 100 mm | section 3.3 |
+| Controls | none on the instrument (no touch UI, no knobs): played and edited only over USB, from the computer or a USB-MIDI keyboard | |
+| Voice MCU | CH32V006F8P7 (TSSOP-20, hand-soldered); the board 1 pin map carries over unchanged | section 3.2 |
+| DAC variants | standard: one PWM, 187.5 kHz, 7 bit, second-order error feedback (−67 to −87 dB in the three-oscillator model); assembly option: dual PWM (high + low byte, 7 + 7 bit, 128:1) at 187.5 kHz: −82 to −92 dB, near an ideal DAC, at about the same CPU; a half-rate firmware mode (oscillators at 93.75 kHz, interpolated on the 187.5 kHz carrier) saves 28 % of the CPU per sample (board 1: 136 instead of 189 cycles); its cost is the polyBLEP saw's aliasing at the lower rate, −48.5 to −51 dB re the fundamental at C5–C7 (4–11 dB above board 1's floor), nothing measurable below C5 or in the three-oscillator tunes: full rate by default, half rate as a CPU reserve. The carrier stays at 187.5 kHz: a 93.75 kHz carrier reaches the line out at −39 dB through the 30 kHz filter (S11) | S9b, board 1 (docs/results/hw_board1_half_rate.csv) |
 | Slot addresses | by enumeration over the per-slot NRST lines; no ID pins on the card | section 5 |
 | Not used | the V006's internal op-amp, a temperature sensor for the expo pair, a separate UART console | |
 
@@ -78,50 +79,64 @@ same resonance CV, THD 0.44 % at full drive (0.58 %), signal-to-noise 68–69 dB
 −61 / −65 / −78 dB at 100 Hz / 1 kHz / 10 kHz (−80 / −84 / −71 dB), smallest V_CE 0.51 V, 3.6 mA analog current
 (9.1 mA). Supply per card about 10 mA at 5 V (analog 3.6 mA, MCU ~5 mA, LEDs).
 
-### 3.2 MCU pin map (CH32V006K8U7, QFN-32, 3.3 V)
+### 3.2 MCU pin map (CH32V006F8P7, TSSOP-20, 3.3 V)
 
-The board 1 (TSSOP-20) pin functions carry over unchanged: TIM1 and TIM2 keep remap 2 (TIM1_RM = 0010,
-TIM2_RM = 010), USART1 its default pins. Differences of the QFN-32: reset is PA7 (pin 4; PD7 is a plain GPIO
-here), PA4 and PD7 are separate pins (shorted inside the TSSOP-20), and 14 GPIO stay free (plus PA1 without the clock option).
+The board 1 pin functions carry over unchanged: TIM1 and TIM2 keep remap 2 (TIM1_RM = 0010, TIM2_RM = 010),
+USART1 its default pins. Reset is PD7 (pin 4; PA4 is bonded to the same pin inside the TSSOP-20, so it is never
+configured as an output). All 18 GPIO are assigned or reserved; PC5 stays free.
 
 | Pin | Port | Function | Pin | Port | Function |
 |---|---|---|---|---|---|
-| 0 | VSS | GND (exposed pad) | 17 | VDD | +3.3 V |
-| 1 | PB3 | spare (SWCK: 2-wire debug, if the programmer supports it) | 18 | PC4 | ADC A2 ← audio loopback |
-| 2 | PA5 | spare | 19 | PC5 | spare |
-| 3 | PA6 | spare | 20 | PC6 | TIM1 CH1 → VCA trim |
-| 4 | PA7 | NRST ← backplane | 21 | PC7 | TIM1 CH2 → CV_CUT |
-| 5 | PA0 | LED "playing" | 22 | PB4 | LED status |
-| 6 | PA1 | external clock in (XI; DNP 0 Ω link), else spare | 23 | PD1 | SWIO |
-| 7 | PA2 | ADC A0 ← self-test: ladder bias VB0 (option) | 24 | PD2 | ADC A3 ← self-test: analog rail / 2 (option) |
-| 8 | PD0 | spare | 25 | PD3 | TIM1 CH4 → CV_VCA |
-| 9 | PA3 | spare | 26 | PD4 | SYNC in (EXTI) |
-| 10 | PB0 | spare | 27 | PD5 | USART1 TX → return line |
-| 11 | PB1 | spare | 28 | PD6 | USART1 RX ← broadcast |
-| 12 | PB2 | spare | 29 | PB5 | spare |
-| 13 | PC0 | TIM1 CH3 → CV_RES | 30 | PB6 | spare |
-| 14 | PC1 | TIM2 CH4 → DAC low byte (dual-PWM option) | 31 | PD7 | spare (plain GPIO on the QFN-32) |
-| 15 | PC2 | TIM2 CH2 → PWM DAC | 32 | PA4 | spare |
-| 16 | PC3 | spare | | | |
+| 1 | PD4 | SYNC in (EXTI) | 20 | PD3 | TIM1 CH4 → CV_VCA |
+| 2 | PD5 | USART1 TX → return line | 19 | PD2 | ADC A3 ← self-test: analog rail / 2 (option) |
+| 3 | PD6 | USART1 RX ← broadcast | 18 | PD1 | SWIO |
+| 4 | PD7 | NRST ← backplane | 17 | PC7 | TIM1 CH2 → CV_CUT |
+| 5 | PA1 | external clock in (XI; DNP 0 Ω link), else spare | 16 | PC6 | TIM1 CH1 → VCA trim |
+| 6 | PA2 | ADC A0 ← self-test: ladder bias VB0 (option) | 15 | PC5 | spare |
+| 7 | VSS | GND | 14 | PC4 | ADC A2 ← audio loopback |
+| 8 | PD0 | LED "playing" | 13 | PC3 | LED status |
+| 9 | VDD | +3.3 V | 12 | PC2 | TIM2 CH2 → PWM DAC |
+| 10 | PC0 | TIM1 CH3 → CV_RES | 11 | PC1 | TIM2 CH4 → DAC low byte (dual-PWM option) |
 
-Pin numbers from the datasheet's pin table (CH32V006 DS V2.0, table 2-1-1, column V006K8U7). KiCad 10 has no
-CH32V006 symbol: the voice card needs its own (pins as above), footprint QFN-32 4 × 4 mm, 0.4 mm pitch
-(Package_DFN_QFN: QFN-32-1EP_4x4mm_P0.4mm_EP2.65x2.65mm or EP2.9x2.9mm, to match the datasheet's pad).
+Pin numbers from the datasheet's pinout (CH32V006 DS V2.0, CH32V006F8P7); the TSSOP-20 pinout matches the
+CH32V003's, so KiCad's `MCU_WCH_RiscV:CH32V003FxPx` symbol and `Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm` (as on
+rev 0.1) fit without a custom symbol. Hand-soldered.
 
 **DMA allocation** (CH32V00X reference manual V1.4, table 8-2; measured on board 1):
 
 | Channel | Requests (V006) | Use |
 |---|---|---|
-| ch2 | SPI1_RX, TIM1_CH1, TIM2_UP | PWM DAC (TIM2_UP), the only option |
+| ch1 | ADC1, TIM2_CH3 | PWM DAC: TIM2 CC3 request once per carrier period (CMS = 10), 1 byte per period into CH2CVR; dual option: a TIM2 DMA burst from the same request (CH2, CH3, CH4: 3 bytes per period) |
+| ch2 | SPI1_RX, TIM1_CH1, TIM2_UP | free (rev 0.1 and board 1: the DAC on TIM2_UP, two requests per period) |
 | ch4 | USART1_TX, TIM1_CH4/TRIG/COM | USART1 TX (return line), if by DMA |
 | ch5 | **USART1_RX, TIM1_UP**, TIM2_CH1 | USART1 RX ring (voice bus) |
 | ch6 | USART2_TX, I2C1_TX, TIM1_CH3 | CV dither burst: TIM1 with CCDS = 1 and CC3DE (request on the update event) |
-| ch3, ch7, ch1 | SPI1_TX / TIM1_CH2; USART2_RX / TIM2_CH2/CH4; ADC1 / TIM3_CH3 | free (ch7: dual-PWM option, ch1: ADC) |
+| ch3, ch7 | SPI1_TX / TIM1_CH2; USART2_RX / TIM2_CH2/CH4 | free (ch7: dual PWM if the DAC stays on TIM2_UP) |
+
+The ADC (loopback calibration, self-test) runs without DMA, by interrupt or polling: calibration mutes the voice,
+so the CPU is free then.
 
 TIM1_UP and USART1_RX share ch5, so the burst runs on the CC3 request (ch6; ch3 via CC2DE works too). With CCDS = 1
 the CCx request comes on the update event; preload (OCxPE) must stay on; enable the DMA channel before the request.
 All three (DAC, CV burst, USART1 RX ring) ran together on board 1 during a tune: 1353 of 1353 bytes received, no
 UART errors, no DAC overruns, CV pattern intact. The noise LFSR that lived in the TIM1 interrupt moves into the DSP.
+
+**DAC loading** (board 1, register read-back synchronised to the update flag and pin timing; all formats exact):
+
+| Format | Mechanism | Bytes per period | Transfers/s | Cycles per period (3 osc, one build) |
+|---|---|---|---|---|
+| 0 (board 1 now) | TIM2_UP on ch2 → CH2CVR, each code twice | 2 | 375 000 | 189 |
+| 4 (proposed) | CMS = 10, CC3 at 64 → ch1 → CH2CVR: written on the up-count, loaded at the top, the pulse around the bottom stays symmetric | 1 | 187 500 | 184 |
+| 3 (proposed, dual) | as 4, a TIM2 burst (DMACFGR, DBA = CH2CVR, 3 transfers) writes [hi, 64, lo] | 3 | 562 500 | 190 |
+| 2 (dual) | ch2 TIM2_UP → CH2CVR and ch7 TIM2_CH4 (CCDS = 1) → CH4CVR, started in one DMAINTENR write | 4 | 750 000 | 187 |
+| 1 (dual) | TIM2 burst on TIM2_UP: [hi, 64, lo] twice per period | 6 | 1 125 000 | 196 |
+
+With CMS = 01 the request falls on the down-count and every pulse comes out asymmetric; CMS = 11 requests twice per
+period. The dual split is high = v >> 8, low = round((v & 255) × k / 256), one multiply. Format 0 has a start-up
+dependency: its pulses are symmetric only if the first request falls on a bottom update, which the current code
+reaches by chance (more than 128 cycles between CEN and UDE); waiting for CTLR1.DIR = 1 before UDE fixes it. One
+early format 4 start transferred 49 bytes at once and rotated the registers (not reproduced in more than 36
+starts): the start sequence must clear a pending CC3 request before enabling the DMA.
 
 ### 3.3 Connectors
 
@@ -146,9 +161,14 @@ console works over SWIO as on rev 0.1.
 
 **Line out**, 1×2 (card top): AUDIO_OUT, GND, for the scope or an amplifier in standalone operation.
 
-**Card format:** small (target about 60 × 45 mm, 4 layers), plugged into the backplane edge-on. The backplane
-connector sits on one edge; the opposite edge carries the two LEDs, the programming header and the line-out
-header, so they stay reachable with all 8 cards plugged in. The analog part sits next to the backplane
+**Card format:** about 60 × 45 mm, 4 layers, plugged into the backplane edge-on at 10 mm pitch. The backplane
+connector (2×8 right-angle male header) sits centred on one long edge and plugs into a vertical 2×8 socket on the
+backplane; the opposite edge carries the two LEDs, the programming header and the line-out header, so they stay
+reachable with all 8 cards plugged in. The 10 mm pitch sets the mechanics: all parts on the top side, at most about
+6 mm high (1.6 mm board + 6 mm leaves about 2 mm to the next card's bare underside); the debug-edge headers are
+right-angle types pointing out of the edge. The 220 µF bulk capacitor is the tallest part: a 6.3 × 5.4 mm
+electrolytic just fits, otherwise two 100 µF tantalums (B case, 2.1 mm, JLCPCB Basic C16133; 6.3 V at 5 V is little
+margin) or a 10 V type. The analog part sits next to the backplane
 connector (short audio path, away from the debug edge); the MCU and the PWM outputs sit between them, with the
 reconstruction filter right at the DAC pin.
 
@@ -189,6 +209,9 @@ AUDIO_GND as its local reference (pseudo-differential input) so ground currents 
 to the audio. USB full-speed (12 Mbit/s) runs as a short pair from the connector to the V203; a controlled
 impedance is not critical at that rate and length.
 
+- **Size:** within 100 × 100 mm (about 95 × 90 mm): the slot row is 8 × 10 mm long, with the cards (45 mm high,
+  60 mm deep) standing over it; controller, USB connectors and mixer take a strip of about 30–35 mm along one side.
+  Low parts (the mixer's per-slot resistors, decoupling) fit between the sockets under the cards.
 - **Controller:** CH32V203 (LQFP-48: enough pins for 8 slots), 8 MHz crystal, PLL 144 MHz. The crystal also sets
   the pitch of the whole synth (the voices synchronise to it, section 6).
 - **USB device:** USB-C, full-speed, on USBD (PA11/PA12, LQFP-48 pins 32/33): composite of
@@ -235,8 +258,8 @@ datasheet covers both), and isochronous transfers with the chosen USB stack.
 ## 5. Communication
 
 - **Broadcast:** controller USART TX to the RX of all cards, 8N1, 1 Mbaud or more. Messages carry a voice address
-  (or "all"); every card receives every byte by DMA (USART1_RX has its own DMA channel; to be confirmed in the
-  V006 reference manual) and filters by address.
+  (or "all"); every card receives every byte by DMA (USART1_RX on channel 5, tested on board 1 together with the
+  DAC and the CV burst) and filters by address.
 - **Return:** one shared line, open drain with a pull-up on the backplane. A card drives its TX only while the
   controller has addressed it with a request (calibration results, status).
 - **SYNC:** a 1 kHz pulse from a controller timer. It is the timing reference for the clock synchronisation and
@@ -244,9 +267,13 @@ datasheet covers both), and isochronous transfers with the chosen USB stack.
 - **Enumeration:** at power-up the controller holds all NRST lines low and releases one slot at a time. Each
   released card synchronises (section 6) and is then told its address. About 2 s for 8 slots.
 
-SPI was considered and dropped: on the TSSOP-20 only SPI remap 4 avoids the timer pins, and its NSS pin is
-CV_VCA; SPI1_RX DMA would share a channel with TIM2_UP, which DAC mode uses (V003 request table; to be
-confirmed for the V006).
+The protocol (frames, timed events, presentation delay, packets, enumeration) is in [bus.md](bus.md).
+
+SPI was considered and dropped. Pins alone would allow it: remap 4 (SCK PD4, MISO PD5, MOSI PD6) takes the
+UART and SYNC pins, with software NSS (its hardware NSS pin, PD3, is CV_VCA) and SYNC moved to PC5. The obstacle is
+DMA: SPI1_RX shares channel 2 with TIM2_UP, which feeds the DAC (reference manual table 8-2), so SPI would only
+work with per-byte receive interrupts during the DSP loop, or with the DAC moved to the TIM2_CH2/CH4 request on
+channel 7. UART needs the HSI trimmed first (section 6), which the voices need for their pitch anyway.
 
 ## 6. Clock synchronisation
 
@@ -256,8 +283,8 @@ The HSI is specified at ±2 % (−10 to 70 °C). Untrimmed, voices would be up t
 1. **Coarse, at start-up:** the card timestamps SYNC edges with SysTick over ~100 periods and sets HSITRIM so its
    clock is within one trim step of the controller's. Board 1: 0.21 % per step (reference manual: ~0.25 %),
    monotonic, range −4.2 % to +2.3 % around the default 16, so the residual is at most ±0.1 % (1.8 cent)
-   (docs/results/hw_board1_hsitrim.csv). Only then does it compute its baud divider (from the measured ratio, so
-   the baud rate matches exactly) and start listening on RX.
+   (docs/results/hw_board1_hsitrim.csv). Only then does it start listening on RX: at 1 Mbaud the USART divider is fixed (3.0, resolution 1/16), so the
+   baud accuracy comes from this trim (bus.md 2).
 2. **Fine, continuous:** the card keeps measuring the SYNC period and scales its oscillators' phase steps by the
    ratio (the oscillator tables are in 1/16 semitone; the scaling is exact arithmetic). This tracks temperature
    drift. The HSI also wanders by itself (board 1: flicker frequency noise, Allan deviation about 2e-4 from 1 ms
@@ -283,6 +310,7 @@ switches it to that external clock (PA1, 3–32 MHz).
 | 5 V analog core | simulated (S10, docs/results/s10_5v.csv); Microchip's model has no input crossover or distortion detail |
 | HSITRIM, HSI jitter | measured on board 1 |
 | Kettle on the 187.5 kHz carrier | board 1 |
+| DAC loading formats (single and dual PWM, once or twice per period), half rate | board 1: all formats exact in read-back and on the pins; half rate measurable only as polyBLEP aliasing at C5–C7 (docs/results/hw_board1_half_rate.csv) |
 | CV dither by TIM1 DMA burst; DMA request table | board 1: burst works (all request variants), CV pattern exact (register read-back), DAC + CV burst + USART1 RX ring together without errors or overruns |
 
 ## 8. Open points
@@ -293,13 +321,15 @@ switches it to that external clock (PA1, 3–32 MHz).
   Resonance difference amp: 3.2–3.75 V, below. VCA difference amp: its inputs move from 4.22 V (VCA closed) to
   ~3.2 V (open) and cross the transition during attacks (an offset step of ~1.6 mV at the VCA output, ≈ −56 dB);
   fix: matched resistors from both inputs to GND, so they stay below ~3.5 V. Bench check on the first card.
-- Dual-PWM option: both TIM2 compare values per period, by a TIM2 DMA burst on TIM2_UP (ch2: CH2CVR..CH4CVR)
-  or a second request on ch7 (TIM2_CH2/CH4); to be tested.
+- DAC formats 4 and 3 (once per period, ch1): a start sequence that cannot pick up a stale request; the ADC
+  without DMA.
+- Dual PWM's audio benefit is still unmeasured (board 1 has no low-byte resistor): first card.
+- Spare pins: only PC5 (and PA1 without the clock option) are left on the TSSOP-20.
 - RAM: 8 KB is tight (a test build on board 1 kept only ~430 B of stack); the voice firmware without the touch UI
   and the tunes must free room.
 - USB stack on the V203: MIDI + CDC first; isochronous audio second.
 - SWIO programming from the controller (protocol timing on the V203).
-- Card dimensions, connector type and backplane mechanics (card guides, slot pitch).
+- Bulk capacitor type for the 6 mm height limit (section 3.3); card guides or an enclosure to hold the cards.
 - USB host stack for class-compliant MIDI devices on USBFS (ch32fun has USBFS host support in its headers; a MIDI
   host driver is to be written or taken from TinyUSB).
 - First build: one voice card at 5 V on the bench (programmer-powered), before the backplane.

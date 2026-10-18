@@ -67,3 +67,28 @@ The rev 0.1 tree (report, S1–S7, KiCad project, tools for the report) is kept 
   earlier estimate of 28 % came from a busy-loop measurement that depends on code alignment in flash). TIM1_UP and
   USART1_RX share DMA channel 5, so the burst uses the CC3 request on the update event (CCDS = 1, channel 6); DAC
   (ch2), CV burst (ch6) and a USART1 RX ring (ch5) ran together without errors (spec 3.2).
+- **Voice MCU back to the TSSOP-20:** enough CH32V006F8P7 at hand, hand-soldered. Board 1's pin map carries over
+  as it is, with KiCad's CH32V003 TSSOP-20 symbol (same pinout); the QFN-32's extra pins are not needed: two LEDs on
+  PD0 and PC3, the self-test option on PA2 and PD2, the clock option on PA1, PC5 spare. With the TSSOP-20 the SPI
+  question is the same as before: the pins fit (remap 4 with software NSS), DMA does not (SPI1_RX on the DAC's
+  channel), so the bus stays UART + SYNC.
+- **Mechanics and controls:** cards about 60 × 45 mm with 4 layers at 10 mm slot pitch (parts on one side, at most
+  about 6 mm high), backplane 2 layers within 100 × 100 mm; no controls on the instrument, USB only.
+- **Bus protocol proposal (bus.md):** synchronisation over latency. Each card runs its control tick on the SYNC
+  edges and scales its oscillators to the measured frame period; every event carries its execution frame and is
+  sent two frames ahead; what a card computes in frame n reaches its outputs at frame n + D, the DAC switch exact
+  to one carrier period. With 256-period DAC buffer halves (instead of 1024) D = 4 frames: 6–7 ms from MIDI to sound,
+  a few µs between cards, 3 KB of RAM freed. Side finding: at 1 Mbaud the V006's USART divider (3.0, 1/16
+  resolution) cannot fine-tune the baud rate; the HSITRIM trim alone gives ±0.1 %.
+- **Board 1, DAC loading and half rate:** both dual-PWM mechanisms work (a TIM2 DMA burst on TIM2_UP, or a
+  second request on ch7), exact in register read-back and on the pins. Better: one DMA request per carrier period.
+  TIM2 has no repetition counter, but in centre-aligned mode 2 (CMS = 10) a CC3 compare at 64 requests only on the
+  up-count, and the value then loads at the top, so the pulse stays symmetric. 1 byte per period instead of 2
+  (single PWM), 3 instead of 4–6 (dual, as a burst from the same request); it needs DMA ch1, so the ADC runs
+  without DMA. Also found: the current DAC's pulses are symmetric only because its first request happens to fall
+  on a bottom update. Half rate saves 28 % of the CPU; on the hardware its only measurable cost is the polyBLEP
+  saw's aliasing at 93.75 kHz, −48.5 to −51 dB re the fundamental at C5–C7, nothing below C5 or in the
+  three-oscillator tunes. That is oscillator aliasing, which S9b leaves out (it band-limits the oscillators); the
+  model's −57 to −67 dB stays unexplained but has no counterpart on the hardware. Full rate stays the default.
+  Short buffer halves underran because board 1's main loop stalls for 4–10 ms: the new firmware renders in the DMA
+  interrupt.
