@@ -1,4 +1,11 @@
-# TouchSynth firmware 0.1
+# Voice firmware (from TouchSynth firmware 0.1)
+
+Starting point for the voice card firmware: the TouchSynth rev 0.1 firmware as it runs on board 1, with the
+digital oscillators on the 187.5 kHz PWM DAC (`dsp.c`). Still contains the rev 0.1 parts (touch UI, LEDs,
+analog DCO) and the rev 0.1 CV calibration; to be reduced to the voice card (docs/spec.md, section 3).
+References to the design report and `docs/verification_plan.md` below point to the rev 0.1 documents on `master`.
+
+## TouchSynth firmware 0.1 (original description)
 
 Firmware for the TouchSynth board (CH32V003, CH32V002 or CH32V006 in TSSOP-20), built on
 [ch32fun](../ch32fun). Runs on board 1 (CH32V006); bring-up and test results are in the design report, section 10.

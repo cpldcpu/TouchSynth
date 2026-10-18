@@ -1,4 +1,10 @@
-# TouchSynth hardware (KiCad 10)
+# Hardware generator scripts
+
+The schematic / PCB generator of TouchSynth rev 0.1, kept as the basis for the voice card and the backplane.
+`design.py` still describes rev 0.1 and the scripts expect its KiCad project (`hw/touchsynth/`, now on `master`);
+the footprint library (touch pads) is in `lib/TouchSynth.pretty`. To be adapted to the new boards.
+
+## TouchSynth hardware (KiCad 10), original description
 
 Everything here is generated from Python; edit the sources, not the `.kicad_sch` files.
 

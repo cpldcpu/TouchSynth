@@ -58,3 +58,6 @@ docs/report/*.toc
 temp/
 # Local arrangements of copyrighted music and their renders (not for publication)
 private/
+
+# Archived TouchSynth rev 0.1 tree (local reference; the history is in git: master, commit 17536f3)
+archive/
