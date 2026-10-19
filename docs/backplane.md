@@ -1,8 +1,16 @@
 # TouchSynth Poly: backplane and controller PCB
 
-Status: proposal 0.2 (2026-10-19). Nothing here is drawn in KiCad yet. Changes from 0.1, decided by the user: board
+Status: 0.3 (2026-10-19), drawn in KiCad: `hw/backplane.py` (design), schematic (`docs/schematics/backplane.pdf`),
+PCB (`hw/gen_pcb_bp.py`, 4 layers, routed and DRC clean, figures in `docs/figures/backplane_pcb/`). Changes from 0.1,
+decided by the user: board
 fixed at 100 × 100 mm; an SPI flash (not fitted) on SPI1; the 8 NRST lines through a 74HC595 on the same bus; the
-soft start not fitted (0 Ω bypass). Requirements: [design.md](design.md); card connector and backplane summary:
+soft start not fitted (0 Ω bypass). Changes from 0.2 while drawing: the 595 drives NRST directly, no pull-downs or
+series resistors (user decision, 3.5); the host port not fitted, its switch a TPS2051C (4.2); VREF from the
+controller's +3V3 through two RC stages, no CJ431 and no buffer (user proposal, 5); the per-slot input capacitors
+in 0805 (the +5 V rail passes between their pads); the 8 MHz crystal in the 2-pad 5032 package (C115962 is a 2-pad
+part); SYNC joins the bus riser between slots 6 and 7 (the east margin carries the +5 V trunk and both 47 µF);
+the SWD header J5 vertical beside the flash; no card-guide screw holes yet (the M3 holes only). Requirements:
+[design.md](design.md); card connector and backplane summary:
 [spec.md](spec.md) sections 3.3 and 4; controller plan: [controller.md](controller.md); voice bus: [bus.md](bus.md);
 MIDI: [midi.md](midi.md); mixer values: S12 (`sim/s12_mixer/s12_mixer.py --bus2`,
 [results/s12_mixer_2bus.csv](results/s12_mixer_2bus.csv)).
@@ -16,7 +24,7 @@ Statements marked **unverified** still need a source or a bench test.
 | Item | Requirement | Source |
 |---|---|---|
 | Slots | 8 voice cards, 50 × 50 mm, at 10 mm pitch; any slot may be empty | design C4, F1 |
-| PCB | 2 layers, **100 × 100 mm** (fixed) | design C4, user decision |
+| PCB | 4 layers (0.3; planned as 2), **100 × 100 mm** (fixed) | design C4, user decisions |
 | Controller | CH32V203C8T6 (LQFP-48), 8 MHz crystal, PLL × 18 = 144 MHz; hand-soldered from own stock | design C3, 7.3 |
 | USB device | USB-C, full speed, on USBD (PA11/PA12): MIDI + CDC (+ UAC1 later); sink with 5.1 kΩ on CC1/CC2 | design 5.4 |
 | USB host | USB-A on USBFS (PB6/PB7) for class-compliant MIDI keyboards, VBUS through a current-limited switch | design F3 |
@@ -35,11 +43,12 @@ Statements marked **unverified** still need a source or a bench test.
   the bench the WCH-LinkE provides it), and the one-wire protocol samples about 0.6 µs after each edge; without
   the pull-up every read returns 0.
 - **Crystal clock:** the V203 runs from its 8 MHz crystal (HSE, PLL × 18 = 144 MHz). SYNC is the pitch reference
-  of every voice. A voice V006 measured its HSI within ±0.03 % of the crystal at factory trim, with ±200–250 ppm
+  of every voice. A voice V006 measured its HSI within ±0.03 % of the crystal at factory trim (±0.06 % in the bus tests,
+  bus.md 9.1), with ±200–250 ppm
   of wander.
 - **Pins that worked:** USART3 TX PB10 for the broadcast and RX PB11 for the return; SYNC on PA8 (TIM1 CH1); NRST
   open drain; USART1 PA9/PA10 kept free for the bootloader and a debug UART; SWD on PA13/PA14. Section 3 keeps all
-  of them except NRST, which now comes from the 74HC595 (push-pull through 1 kΩ, with pull-downs; section 3.5).
+  of them except NRST, which now comes from the 74HC595 (push-pull, direct; section 3.5).
 - **Levels:** the bus lines are 3.3 V on both sides. No level shifters.
 
 ## 2. Block diagram
@@ -67,8 +76,8 @@ Statements marked **unverified** still need a source or a bench test.
    PB11 USART3_RX ◄──────────── RETURN (1k to 3V3) ◄──────────────────────── pin 11 (TX, open drain)
    PA8  TIM1_CH1 ── 33R ─────── SYNC 1 kHz ─────────────────────────────────► pin 9
    PB1  TIM3_CH4 ── 33R ─────── CLK 24 MHz (option, off by default) ────────► pin 15
-   SPI1 remap 1: PB3 SCK, PB5 MOSI ──┬──► U6 74HC595 ── 1k ──┬── NRST_k ────► pin 12 of slot k
-                 PB4 MISO            │    RCLK ◄ PC13        4k7 to GND
+   SPI1 remap 1: PB3 SCK, PB5 MOSI ──┬──► U6 74HC595 ─────────── NRST_k ────► pin 12 of slot k
+                 PB4 MISO            │    RCLK ◄ PC13
                  PA15 CS ────────────┴──► U7 SPI flash (not fitted)
                                           OE_N ◄ PC14 (10k pull-up)
    8 GPIO ──────────────────┬── SWIO_k ─────────────────────────────────────► pin 14 of slot k
@@ -77,7 +86,7 @@ Statements marked **unverified** still need a source or a bench test.
    PA1 ADC2_IN1 ◄─ 15k/27k/330p ◄── MIX_R ┤
    PA10 USART1_RX ◄─ JP3 (DNP) ◄─ opto ◄─ MIDI in (not fitted; shared with J6)
    PA13/PA14 SWD, PA9/PA10 USART1 (J6),    │       stereo mixer (S12)
-   BOOT0 jumper, PB2 LED                   │   2 × MCP6002 inverting sums on VREF 2.5 V (CJ431)
+   BOOT0 jumper, PB2 LED                   │   MCP6002 inverting sums on VREF 2.41 V (+3V3 / RC)
                                            └── ◄── pins 5 (AUDIO_L), 6 (AUDIO_GND), 7 (AUDIO_R) of every slot
                                                ├─► 220R + 10 µF ─► 3.5 mm line out
                                                └─► ADC taps
@@ -142,9 +151,10 @@ bootloader access over USART1.
 
 **Routing order around the package.** The two USB pairs leave pins 32/33 (right side) and 42/43 (top side) toward
 the board edge. The pins between them, 34–41 (SWDIO, VSS_2, VDD_2, SWCLK, PA15, PB3, PB4, PB5), are enclosed by the
-two pairs and the edge, so they can only reach parts in that corner without crossing a USB pair: SWD and the flash
-sit there. SCK and MOSI must also reach the 595 outside that corner (section 7.3: two short hops under the USB-A
-pair). The slot lines (8 SWIO, SYNC, BCAST, RETURN, CLK) come from the other side of the package, ordered from west
+two pairs and the edge, so they can only reach parts in that corner without crossing a USB pair. SWD sits there;
+the SPI lines leave the corner westward under the USB-A pair (short bottom hops) to the flash and the 595, which
+sit together west of the MCU (as drawn in 0.3: a flash in the corner as well left the routing too dense on two
+layers). The slot lines (8 SWIO, SYNC, BCAST, RETURN, CLK) come from the other side of the package, ordered from west
 to east like the slots: PA2–PA7 (SWIO 1–6), PB1, PB10, PB11 (bus riser), PB12, PB13 (SWIO 7, 8), PA8 (SYNC, east
 end). The NRST lines come from U6 as a separate bundle (section 7.3).
 
@@ -209,7 +219,7 @@ Slot lines by slot (NRST through U6, see 3.5):
 
 | Slot | NRST (pin 12) | SWIO (pin 14) | SWIO FT |
 |---|---|---|---|
-| 1 | U6 output, 1 kΩ, 4.7 kΩ pull-down | PA2 | no |
+| 1 | U6 output, direct | PA2 | no |
 | 2 | U6 | PA3 | no |
 | 3 | U6 | PA4 | no |
 | 4 | U6 | PA5 | no |
@@ -263,8 +273,8 @@ A card turned by 180° in its socket maps socket pin p onto card pin 17 − p: s
 GND (pin 16), socket pins 4 and 13 (GND) reach card GND too, so +5 V is shorted through the card and F1 trips. While
 the contacts make in a bad order, the card's ground can sit at +5 V and drive socket pins 9 (SYNC, from card pin 8),
 11 (RETURN, from card pin 6) and 14 (SWIO, from card pin 3). SYNC (PA8) and RETURN (PB11) are FT; SWIO is FT for
-slots 7 and 8 only (section 3.2). The NRST lines see the card's AUDIO_L (0 V DC) and reach U6 only through 1 kΩ
-(at most 2 mA into the 74HC clamp at 5.5 V). An enabled CLK_OUT would drive the card's +5 V net, which is then
+slots 7 and 8 only (section 3.2). The NRST lines see the card's AUDIO_L (0 V DC, behind
+the card's 10 µF and 100 kΩ: no DC path into U6). An enabled CLK_OUT would drive the card's +5 V net, which is then
 grounded: CLK is off by default. The protection against this fault is mechanical: the card guides (section 6.3) do
 not accept a reversed card, and the silkscreen marks pin 1 and the part side. Hot-plugging is not supported.
 
@@ -272,25 +282,26 @@ not accept a reversed card, and the silkscreen marks pin 1 and the part side. Ho
 
 **Circuit:** U6 74HC595 (C5947, SOIC-16) at +3V3 (74HC: 2–6 V), 100 nF. SER = MOSI (PB5), SRCLK = SCK (PB3),
 RCLK = SR_LATCH (PC13), OE_N = SR_OE_N (PC14) with 10 kΩ to +3V3, MR_N tied to +3V3, QH' unused. Each output
-goes through 1 kΩ (series array) to its slot's pin 12, with 4.7 kΩ to GND on the slot side of the 1 kΩ (pull-down
-array).
+drives its slot's pin 12 directly: no series resistors, no pull-downs (user decision, 2026-10-19; 0.2 had 1 kΩ in
+series and 4.7 kΩ pull-downs that held the cards in reset until the firmware ran).
 
 **Power-up state:** the 595's storage register (and so its outputs) is undefined at power-up, and MR_N clears only
-the shift register, not the outputs, so MR_N cannot define the state. The output enable does: while the V203 is in
-reset or booting, PC14 floats, the 10 kΩ holds OE_N high, the outputs are high impedance, and the 4.7 kΩ
-pull-downs hold every NRST low. With the card's internal NRST pull-up (assumed 30–50 kΩ like the V203's;
-**unverified** for the V006) the card sees 0.28–0.45 V: in reset. Released (595 output high through 1 kΩ) it sees
-about 2.8 V. When released, each pull-down draws 0.6 mA (8 slots: 4.8 mA).
+the shift register, not the outputs. The 10 kΩ on OE_N keeps those undefined outputs off the slots while the V203 is
+in reset, booting, in the bootloader or halted: the NRST lines then float, and the card's internal NRST pull-up
+lets every card boot and run on its own (standalone, bus.md 6: no SYNC, VCA muted, it never sends unless
+addressed). The system accepts this by design: the controller can always take the cards back, through the 595 or
+over each card's SWIO line (a debug-interface reset), so nothing depends on the cards staying in reset before the
+firmware runs, and a controller reset or watchdog needs no special handling.
 
 **Firmware sequence:**
 
-1. Shift 0x00 (all slots in reset), pulse RCLK, then drive OE_N low: the 595 now holds all cards in reset itself.
+1. Shift 0x00 (all slots in reset), pulse RCLK, then drive OE_N low: every card is reset and held there.
 2. Start SYNC and FRAME (bus.md 6).
 3. Enumeration, slot by slot: shift the pattern with bit k set, pulse RCLK. The card in slot k boots, trims to SYNC
    and answers ASSIGN; no HELLO within 300 ms means the slot is empty (bus.md 6). Released slots stay released.
 4. A single-voice reset is the same: clear that bit, latch, set it again.
-5. A controller reset (power, watchdog, SWD) lets OE_N float high again: all cards return to reset, as bus.md 6
-   expects.
+5. A controller reset (power, watchdog, SWD) lets OE_N float high again: the cards keep running (muted without
+   SYNC) until the restarted firmware takes them back with step 1; a card that hangs can be reset over SWIO.
 
 **Sharing SPI1 with the flash:** every flash transfer also clocks the 595's shift register, but its outputs change
 only on a rising RCLK edge. The firmware therefore always shifts all 8 bits directly before a latch, never relies
@@ -299,9 +310,11 @@ parts use SPI mode 0 (data sampled on the rising clock edge). The 595 at 3.3 V i
 25 MHz (4.5 V), roughly 13 MHz at 3.3 V by interpolation (**unverified**): write it at 9 MHz (PCLK2 / 8), read the
 flash up to 36 MHz. Faster flash traffic only scrambles the 595's shift register, which is harmless.
 
-**Against the bench lesson "NRST open drain":** the 595 drives NRST push-pull. That is safe: the card's NRST is an
-input with a pull-up, and if a card pulls its own NRST low (an internal reset), the 1 kΩ limits the current to
-3.3 mA.
+**Against the bench lesson "NRST open drain":** the 595 drives NRST push-pull. The card's NRST is an input with a
+pull-up, so that is fine as long as the card's PD7 is configured as NRST (option bytes; **unverified** for the V006
+default, set it when the card is programmed). Without the series resistor nothing limits the current if a card
+drives its own NRST low (an internal reset on parts that do that, or PD7 left as a GPIO output): the 74HC595's
+output (about 25 mA short-circuit at 3.3 V) and the card pin survive it, and the firmware sees the card as missing.
 
 ## 4. Power
 
@@ -336,10 +349,15 @@ fitted, the LDO (on +5V_IN) starts before the cards.
 
 ### 4.2 Host port
 
-No current-limited power switch is on the Basic or Promotional lists. Proposal: **TI TPS2553DBVR** (SOT-23-6,
-adjustable limit with one resistor, enable active high, open-drain fault output; hand-soldered), or the cheaper
-**Silergy SY6280AAC** (SOT-23-5, adjustable). The limit is set to about 300 mA (keyboards draw 50–200 mA); the
-R_ILIM value follows the chosen part's datasheet formula (**unverified** here). Input from +5V_IN, 1 µF; output
+**Not fitted in the first build** (user decision, 2026-10-19: nothing to plug in yet). The whole port is drawn and
+routed, but all its parts are DNP: U4, J2, the ESD array U5, the capacitors, the HOST_EN pull-down, the fault
+pull-up and both LEDs. Fitting them later needs no board change. Until then the firmware keeps USBFS off, drives
+HOST_EN low and reads HOST_FLT_N (PB9) with its internal pull-up, if at all.
+
+No current-limited power switch is on the Basic or Promotional lists. The design uses the **TI TPS2051C**
+(SOT-23-5, fixed 0.5 A limit, enable active high, open-drain fault output; hand-soldered; KiCad symbol
+TPS2051CDBV). The fixed limit needs no R_ILIM, whose value would have depended on an unread datasheet formula
+(0.2 proposed the adjustable TPS2553DBVR or SY6280AAC at about 300 mA). Input from +5V_IN, 1 µF; output
 VBUS_HOST with 2 × 47 µF (C96123). USB 2.0 asks for 120 µF at a host port; the ceramics give about 40 µF at 5 V
 (**risk**, usually harmless for a keyboard). HOST_EN (PB8, 100 kΩ pull-down) keeps the port off until the firmware
 has configured the USB device and decided the power budget. HOST_FLT_N (PB9) has a 10 kΩ pull-up and also drives
@@ -350,6 +368,12 @@ PB8/PB9.
 USBFS in host mode needs 15 kΩ pull-downs on D+/D−; whether the V203's USBFS has them inside is **unverified**:
 two 15 kΩ footprints, not fitted. Likewise the USBD D+ pull-up is expected to be internal and switchable
 (**unverified**, reference manual); a 1.5 kΩ footprint from PA12 to +3V3, not fitted.
+*[2026-10-19]* Bench (controller.md 5): `EXTEN_USBD_PU_EN` does switch an internal pull-up on PA12 (PA12 rises in
+about 80 ns with the bit set and the transceiver powered, never without it), but its strength against a host could
+not be shown: the development board has no host on PA11 / PA12 (its USB-C goes to USBFS, PB6 / PB7), and the
+powered transceiver itself pulls PA12 low, so the pull-up loses once the 40 kΩ GPIO pull-down is added. Keep the
+1.5 kΩ footprint (fit it if the USBD build does not enumerate). USBFS's internal device pull-up works without an
+external resistor (the board has none and enumerates).
 
 ### 4.3 Current budget
 
@@ -357,13 +381,12 @@ two 15 kΩ footprints, not fitted. Likewise the USBD D+ pull-up is expected to b
 |---|---|---|
 | 8 voice cards | 80 mA | about 10 mA each (spec 3.1, S10) |
 | CH32V203 at 144 MHz | 12–20 mA | datasheet Table 4-6-1: 11.8 mA typ., all peripherals on; plus USB and I/O |
-| Mixer | 1.7 mA | S12 |
-| NRST pull-downs | up to 4.8 mA | 8 × 0.6 mA with all cards released |
+| Mixer | 0.34 mA | S12 (VREF from +3V3, no CJ431) |
 | LEDs | about 3 mA | PWR 0.6, ACT 1.3, HOST 1.4 mA (FAULT off) |
 | SWIO pull-up held low | 3.3 mA | only while one slot is being programmed |
 | SPI flash (if fitted) | µA standby, up to about 25 mA while programming | |
 | **Synth** | **about 110–120 mA** | design 4.2: 110 mA |
-| Keyboard on USB-A | 50–200 mA, limited at about 300 mA | U4 |
+| Keyboard on USB-A (port not fitted at first) | 50–200 mA, limited at 0.5 A | U4 |
 | **Total** | **at most about 425 mA** | inside a USB 2.0 port's 500 mA after configuration |
 
 Before configuration a USB device may draw only 100 mA; the synth draws about 115 mA from power-up because the
@@ -386,25 +409,34 @@ has the same values.
 The input capacitors keep the cards' 100 kΩ output bleeders off the 2.5 V summing nodes; C_G is shared by L and R
 (each channel sees 5 µF: the card's 10 µF in series with it).
 
-**Common (31 parts):** U_MIX MCP6002 (C7377): unit A sums L, unit B sums R, each inverting with R_F 20 kΩ ∥ C_F
+**Common (30 parts):** U_MIX MCP6002 (C7377): unit A sums L, unit B sums R, each inverting with R_F 20 kΩ ∥ C_F
 47 pF C0G (C4184, C1671) from output to − input and R_F' 20 kΩ ∥ 47 pF from + input to VREF, so
-out = VREF − 0.357 Σ (AUDIO_x_k − AUDIO_GND_k). VREF: CJ431 (C3113) from the 5 V through 2.2 kΩ (C4190),
-10 kΩ / 10 µF (C25804, C19702), U_REF MCP6002 follower (unit B spare, wired as a follower). Op-amp rail: 47 Ω
-(C23182) + 22 µF (C45783), 2 × 100 nF. Line out per channel: 220 Ω (C22962) + 10 µF to the jack, 100 kΩ bleeder
+out = VREF − 0.357 Σ (AUDIO_x_k − AUDIO_GND_k). VREF: a divider from the controller's +3V3 (XC6206), 10 kΩ / 27 kΩ
+(C25804, C22967) with 10 µF (C19702), then a second RC stage, 10 kΩ / 10 µF: 2.41 V, corners 2.2 and 1.6 Hz,
+unbuffered (user proposal, 2026-10-19; 0.2 had a CJ431 from the 5 V, 10 kΩ / 10 µF and an MCP6002 follower). The
+summing amps' + inputs are VREF's only DC load (picoamps: the mirror network is AC coupled), and VREF reaches the
+line out about 1:1 (through R_F' to the + input, divided by 3.9, then the noise gain 3.9). The LDO rejects
+low-frequency ripple of the 5 V; the two RC stages take out the MCU's own load steps on +3V3 (USB frames and the
+SYNC tick at 1 kHz, the activity LED): −72 dB at 100 Hz and −112 dB at 1 kHz from +3V3 to the line out, against
+−36 / −56 dB with one stage (S12). The ADC tap's DC now follows the ADC's own 3.3 V. Op-amp rail: 47 Ω (C23182) + 22 µF
+(C45783), 100 nF. Line out per channel: 220 Ω (C22962) + 10 µF to the jack, 100 kΩ bleeder
 (C25803). ADC tap per channel: 15k / 27k (C22809 / C22967) + 330 pF C0G (C1664) at the ADC pin. Jack: 3.5 mm
 stereo, hand-soldered.
 
 **Simulated (S12, two buses):** 0.357 per card; 8 cards hard-panned in phase at the capped level give 3.95 Vpp,
-1.9 dB below clipping; 8 centred cards 2.79 Vpp per channel (5.0 dB); flat −0.04 dB at 20 Hz, −0.09 dB at 20 kHz;
-mixer noise 7.8 µV (one card) to 17.5 µV (8 slots); ground rejection −68 dB nominal, −45 dB typical and −29 dB worst
+2.0 dB below clipping; 8 centred cards 2.79 Vpp per channel (5.0 dB); flat −0.04 dB at 20 Hz, −0.09 dB at 20 kHz;
+mixer noise 6.7 µV (one card) to 17.0 µV (8 slots); ground rejection −65 dB nominal, −45 dB typical and −29 dB worst
 case with 1 % resistors (−26 dB at 20 Hz with ±20 % capacitors); L/R crosstalk −110 dB; supply rejection
-−69 to −71 dB; 1.7 mA. ADC tap: DC 1.61 V, one centred card at −23 dBFS, 8 hard-panned cards at −2.3 dBFS, the
+−71 to −73 dB (the CJ431 reference: −69 to −72 dB, 17.5 µV; at a 4.6 V supply both keep 8 hard-panned cards
+undistorted); 0.34 mA. ADC tap: DC 1.55 V, one centred card at −23 dBFS, 8 hard-panned cards at −2.3 dBFS, the
 187.5 kHz carrier at −111 dBFS, about 60 dB signal-to-noise for one centred card at 384 kHz dual-mode sampling.
 
 **Placement:** each slot's 7 parts sit in that slot's 10 mm column directly south of its socket, under the card
 (section 7.4). The common block (both op-amps, the reference, the rail filter) sits at the west end of the slot
-row, beyond slot 1, with at least 4 mm to slot 1's column. The line-out stage sits at the jack; the ADC dividers sit
-at the MCU, so the long runs carry the op-amps' low-impedance outputs (electrically the same circuit as S12).
+row, beyond slot 1, with at least 4 mm to slot 1's column. The jack sits on the west edge right beside it (0.3,
+user decision): sockets → summing band → op-amps → line-out stage → jack, all at the west end, so the line-out run
+is about 10 mm; the ADC dividers sit at the MCU, so the long runs carry the op-amps' low-impedance outputs
+(electrically the same circuit as S12).
 
 ## 6. Connectors and mechanics
 
@@ -476,16 +508,16 @@ header is the outer pad row, whose pins bend at the upper level, farther from th
 
 | Ref | Connector | Position |
 |---|---|---|
-| J1 | USB-C 16-pin receptacle (e.g. GCT USB4105) | east edge, y ≈ 82–91 |
+| J1 | USB-C 16-pin receptacle (e.g. GCT USB4105) | rear edge, east of J2 (0.3; was the east edge) |
 | J2 | USB-A receptacle, right-angle, THT | rear edge, x ≈ 66–80, above the MCU |
-| J3 | 3.5 mm stereo jack (e.g. CUI SJ1-3523N) | rear edge, x ≈ 9–24 (west end, next to the analog run) |
+| J3 | 3.5 mm stereo jack (e.g. CUI SJ1-3523N) | west edge beside the mixer, y ≈ 20–32 (0.3; was the rear edge) |
 | J4 | 2-pin header, external 5 V | east edge, y ≈ 74–78 |
 | JP1 | 1×3 header + jumper, supply source | east edge, next to J4 |
 | JP2 | 1×3 header + jumper, BOOT0 (+3V3 / BOOT0 / GND) | north-west of the MCU, near pin 44 |
 | JP3 | 2-pin jumper, MIDI opto → PA10 (not fitted) | at J6 |
-| J5 | 1×4 header SWD: +3V3, SWDIO, SWCLK, GND (WCH-LinkE) | north-east corner, beside J2 |
+| J5 | 1×4 header SWD: +3V3, SWDIO, SWCLK, GND (WCH-LinkE) | rear edge, east of J1 |
 | J6 | 1×3 header USART1: GND, TX (PA9), RX (PA10) | east of the MCU |
-| J7 | 1×3 header MIDI in: DIN pin 4, DIN pin 5, shield (not fitted) | east of the MCU, beside J6 |
+| J7 | 1×3 header MIDI in: DIN pin 4, DIN pin 5, shield (not fitted) | north-west, with the MIDI option parts |
 | J10–J17 | 2×8 sockets | slot row |
 
 **MIDI in (not fitted):** rev 0.1's circuit at 3.3 V: 220 Ω (C22962) into the LTV-817S (C109227) LED, 1N4148W
@@ -499,7 +531,7 @@ own 3-pin programming header stays reachable at its top edge with the card in th
 Connect only SWIO and GND, or power the backplane: the LinkE's 5 V would otherwise feed the whole slot rail through
 the card's B5819W.
 
-**LEDs** (strip, visible beside the cards): PWR red (C2286) from +3V3 through 2.2 kΩ; ACT yellow (C2296) on PB2
+**LEDs** (strip, visible beside the cards): PWR red (C2286) from +3V3 through 2.2 kΩ; ACT yellow (C89811, 0603) on PB2
 through 1 kΩ; HOST yellow on VBUS_HOST; FAULT red on HOST_FLT_N.
 
 ### 6.5 SPI flash (not fitted)
@@ -541,36 +573,29 @@ the slot row and the strip boundary are to scale):
 
 ```
 +---------------------------------------------------------------------------------------------------+  y = 100 rear
-| o      [ J3 LINE OUT ]      LED PWR                   U4      [   J2 USB-A   ]   J5 SWD  U7    o  |
-|                                                                                  flash (DNP)      |
-|  out stage                                                                                        |
-|  220R 10u 100k                        U6 595           JP2                               [J1      |
-|                                     1k + 4k7 arrays         Y1  +-------+                USB      |
-|                                                                 |  U1   |                -C]      |
-|            ADC taps ------------------------------------>       | V203  |== USB-D ======          |
-|                        NRST bundle                              +-------+     J6 UART    J4 5V    |
-|                     |||                                       LED ACT        MIDI opto   JP1 F1   |
-|                     |||                                                                  D1 Q1    |
-|                     |||               SWIO 1-6 ribbon           riser     SWIO 7-8, SYNC        # |
-|                     |||                                                                         # |
-|                     |||                       / / / / / /          |||        \ \  \            # |
+| o    LED PWR ACT   [RESET]   U4 (DNP)  [    J2 USB-A (DNP)   ]  [ J1 USB-C ]  J5 SWD             o  |
+|                                                                   USB-C passives, ESD               |
+| MIDI in (DNP)       U7 flash     JP2 BOOT0                                                   JP1     |
+|  J7, opto           (DNP)              Y1  +-------+                                   F1  supply  |
+|                     ADC dividers           |  U1   |    J6 UART      test points       D1  J4 5V   |
+|                  U6 595                    | V203  |                          LDO, bulk  R_BYP      |
+|                                            +-------+                                           #  |
+|                SWIO pull-ups          (fan-out zone)     bus resistors, bus test points        #  |
 |. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .#.|  y = 58
 |               ==================================================================================# |  north guide rail
-|                 NRST bundle (top) over SWIO exits (bottom); SWIO vias north of it               # |
-|^ L/R            bus in socket field gaps: SYNC 4|5, BCAST 5|6, RETURN 6|7, CLK 7|8              # |
-|| out             S1        S2        S3        S4        S5        S6        S7        S8       # |
-|                 +---+     +---+     +---+     +---+     +---+     +---+     +---+     +---+     # |  y = 40
-|MIXER            |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
-|common           |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
-|2xMCP6002        |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
-|CJ431 VREF       |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
-|47R/22u          |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
-|                 |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
-|                 |1  |     |1  |     |1  |     |1  |     |1  |     |1  |     |1  |     |1  |     # |
-|                 +---+     +---+     +---+     +---+     +---+     +---+     +---+     +---+     # |  y = 20
-|              #################################################################################### |  +5V rail
+|                 bus tracks in the socket field gaps: SYNC 4|5, BCAST 5|6, RETURN 6|7, CLK 7|8   # |
+|line-out          S1        S2        S3        S4        S5        S6        S7        S8       # |
+|stage+-+          +---+     +---+     +---+     +---+     +---+     +---+     +---+     +---+     # |  y = 40
+|  J3   |          |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
+|<LINE  |          |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
+| OUT   |          |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
+|+------+          |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
+|VREF filter       |   |     |   |     |   |     |   |     |   |     |   |     |   |     |   |     # |
+|feedback R/C      |1  |     |1  |     |1  |     |1  |     |1  |     |1  |     |1  |     |1  |     # |
+|U8 MCP6002        +---+     +---+     +---+     +---+     +---+     +---+     +---+     +---+     # |  y = 20
+|47R/22u       #################################################################################### |  +5V rail
 |               per-slot mixer parts (7 per slot), caps across the +5 V rail                        |
-|               summing band L-/L+  R+/R-  (bottom layer)  ===> to the mixer                        |
+|               summing band L-/L+  R+/R-  (bottom layer)  ===> to U8                               |
 |                                                                                                   |
 | o             ==================================================================================  |  south guide rail
 +---------------------------------------------------------------------------------------------------+  y = 0
@@ -581,25 +606,35 @@ the slot row and the strip boundary are to scale):
 the sockets. The cards cover y = 5 … 55 over the whole slot row; everything there is low (≤ 8 mm under the card
 edges). The controller strip (y = 58 … 100) is not covered.
 
-Main positions: U1 (MCU) centred near (74, 81), above slots 6–7, so that the bus riser drops between slots 6 and 7;
-Y1 west of U1; U6 (595) with its arrays near (43, 87); U4 west of J2; U7 and J5 in the north-east corner between the
-USB pairs; power entry (J4, JP1, F1, D1, R_BYP/Q1, bulk) on the east edge, y ≈ 62–80; J6, J7 and the MIDI parts east
-of U1, y ≈ 70–77; mixer common block x = 1 … 16, y = 8 … 50.
+Main positions as drawn in 0.3 (user decision: spread out, nothing crowded into one corner): U1 (MCU) in the middle
+of the strip near (52, 76), so the bus riser drops between slots 4 and 5; on the rear edge from west to east the
+MIDI option, the LEDs and the reset button, J2 (USB-A) above the MCU's host pins, J1 (USB-C) and J5 (SWD); Y1
+west of U1; U7 (flash) and U6 (595) west of U1; J6 (UART) east of U1; power entry (J4, JP1, F1, D1, R_BYP/Q1,
+bulk) on the east edge, y ≈ 58–75; mixer common block and the line-out jack J3 on the west edge, x = 0 … 15
+(KiCad y = 100 − y).
 
 Zones: analog in the west (mixer common, the line-out run up the west margin to J3, the ADC taps along y ≈ 80 to the
 MCU); USB and power in the east; the MCU in between. Digital parts keep at least 15 mm from J3 and the mixer block
 (U6 is the closest, at about 20 mm from J3).
 
-## 7. Layout rules (2 layers)
+## 7. Layout rules (4 layers as drawn; written for 2)
 
 ### 7.1 Stack and general rules
 
-- JLCPCB standard 2-layer, 1.6 mm, 1 oz; 0.2 mm tracks and 0.2 mm clearance by default, 0.15/0.15 mm where noted;
-  supplies 0.4–1.0 mm; vias 0.3/0.6 mm, tented. Passives 0603 (the 47 µF and the 0 Ω bypass in 1206, 22 µF in
-  0805).
-- **Bottom: ground pour** over the whole board, stitched to top ground fill every 5–10 mm and along the edges.
-  Breaks are short crossings only (list in 7.6), with one deliberate exception, the summing band (7.4).
-- **Top:** all parts, all long tracks, ground fill in the free areas.
+- **As drawn (0.3): JLCPCB 4-layer, 1.6 mm** (user decision, 2026-10-19). F.Cu: all parts and signals; In1: GND,
+  solid; In2: +3V3 under the controller strip (y < 42 mm in KiCad coordinates) and GND under the slot area; B.Cu:
+  signals, the summing band (7.4) directly against the In2 ground. Ground pours on both outer layers, stitched to
+  the planes on a grid. +5V stays on its pre-routed trunk and rail (7.2). Routed: 0 DRC violations, 0 unconnected,
+  no isolated copper; 2.8 m of track on F.Cu and 1.8 m on B.Cu, 1783 vias (1629 of them GND stitching).
+- **Why not 2 layers:** this document planned a 2-layer board (the rules below were written for it). Routed on two
+  layers, the MCU area left a few nets open in every run (+3V3 to the VDD pins, the SPI and SWD lines; the bottom
+  pour broke into islands around the MCU), and a local ground star and keep-outs did not fix it. With the In1 / In2
+  planes every supply and ground pin is one via, and the rest routes cleanly. `BP_LAYERS=2` routes the same
+  placement on two layers as a check (`hw/gen_pcb_bp.py`).
+- 0.2 mm tracks and 0.2 mm clearance by default; supplies 0.3–1.0 mm; vias 0.3/0.6 mm, tented. Passives 0603 (the
+  47 µF and the 0 Ω bypass in 1206, 22 µF and the input capacitors in 0805).
+- 2-layer plan, kept for reference: bottom ground pour over the whole board, breaks only for short crossings
+  (7.6) and the summing band; top: all parts, long tracks, ground fill.
 
 ### 7.2 Supplies
 
@@ -628,14 +663,15 @@ MCU); USB and power in the east; the MCU in between. Digital parts keep at least
   8 SWIO lines run on top as a ribbon in slot order to the MCU (SWIO 1–6 from PA2–PA7, SWIO 7–8 from PB12/PB13),
   with the 1 kΩ pull-up arrays (C20197) at the MCU. Keep them at least 0.4 mm from CLK and from each other over long
   runs; they idle at 1 kΩ.
-- **NRST bundle:** U6 with the 1 kΩ series arrays and the 4.7 kΩ pull-down arrays sits north-west of the MCU. The 8
+- **NRST bundle:** U6 sits north-west of the MCU (its outputs drive the slots directly). The 8
   static NRST lines run south-west through the strip, down the east edge of slot 1's column (x ≈ 21–24, still 5 mm
   from the analog margin), then east along the north edge of the socket field (y ≈ 42–46, 8 tracks at 0.45 mm
   pitch). Each slot's pin 12 leaves the socket on the bottom (in the gap between the two pad rows), runs north under
   the field tracks, and vias up onto its own bundle track. The bundle tapers as it drops one line per slot and
   ends at slot 8, west of the SYNC descent.
-- **SPI:** U7 and its passives sit next to pins 38–41 in the corner between the USB pairs. SCK and MOSI continue to
-  U6 west of J2 with two short bottom hops under the USB-A pair. The latch and output enable come from PC13/PC14 at
+- **SPI:** pins 38–41 sit in the corner between the USB pairs; all four SPI lines leave it westward with short
+  bottom hops under the USB-A pair, to U7 (flash) and U6 (595) west of the MCU. The latch and output enable come from
+  PC13/PC14 at
   the MCU's north-west corner, so they need no hop. Keep SCK at least 5 mm from the ADC taps and 15 mm from J3.
 
 ### 7.4 Mixer feeds
@@ -654,9 +690,9 @@ MCU); USB and power in the east; the MCU in between. Digital parts keep at least
   Alternative if the pour must stay unbroken: the band on top, with the resistors bridging the nearer tracks (0603
   over one, 0805 over two, 1206 over three).
 - The summing nodes end at the op-amp inputs at the west end with R_F, C_F, R_F' and C_F' right at the pins. The VREF
-  network and the CJ431 stay inside the mixer block.
-- Line out L/R from the op-amps: north along the west margin (x ≈ 2–12), 220 Ω + 10 µF + 100 kΩ at J3. ADC taps:
-  branch at J3, along the strip (y ≈ 80) to PA0/PA1, ground fill on both sides; 15k/27k/330 pF at the pins. They
+  divider and its 10 µF stay inside the mixer block (+3V3 reaches it as a thin, static track).
+- Line out L/R from the op-amps: a few mm north to J3 on the west edge, 220 Ω + 10 µF + 100 kΩ between them. ADC
+  taps: from the op-amp outputs up the west margin and along the strip to PA0/PA1; 15k/27k/330 pF at the pins. They
   cross the NRST bundle's descent with two short bottom hops on the low-impedance section.
 
 ### 7.5 USB, crystal, separation
@@ -712,16 +748,15 @@ H = hand-soldered, DNP = not fitted.
 | | AO3401A, 1 MΩ, 220 kΩ, 100 nF (soft start) | C15127, C22935, C22961, C14663 | B | DNP (4) |
 | | 47 µF 10 V 1206 (+5V_SLOTS) | C96123 | B | 2 |
 | | 10 µF 0603 (one per socket) | C19702 | B | 8 |
-| Host port | 1 µF (U4 input), 2 × 47 µF 1206 (VBUS_HOST) | C15849, C96123 | B | 3 |
-| | SRV05-4A ESD | C20615829 | P | 1 |
-| | R_ILIM (value per U4 datasheet), 100 kΩ (HOST_EN) | Basic 0603 | B | 2 |
-| | LED yellow 0805 + 2.2 kΩ (host on), LED red 0603 + 1 kΩ (fault) | C2296, C4190, C2286, C21190 | B | 4 |
-| Status | LED red 0603 + 2.2 kΩ (PWR), LED yellow 0805 + 1 kΩ (ACT) | C2286, C4190, C2296, C21190 | B | 4 |
+| Host port | 1 µF (U4 input), 2 × 47 µF 1206 (VBUS_HOST) | C15849, C96123 | B | DNP (3) |
+| | SRV05-4A ESD (host) | C20615829 | P | DNP (1) |
+| | 100 kΩ (HOST_EN), 10 kΩ (HOST_FLT_N pull-up) | C25803, C25804 | B | DNP (2) |
+| | LED yellow 0603 + 2.2 kΩ (host on), LED red 0603 + 1 kΩ (fault) | C89811, C4190, C2286, C21190 | P / B | DNP (4) |
+| Status | LED red 0603 + 2.2 kΩ (PWR), LED yellow 0603 + 1 kΩ (ACT) | C2286, C4190, C89811, C21190 | B / P | 4 |
 | Bus | 33 Ω (BCAST, SYNC, CLK) | C23140 | B | 3 |
 | | 1 kΩ (RETURN pull-up) | C21190 | B | 1 |
-| | 4 × 1 kΩ array 0603x4 (SWIO pull-ups × 2, NRST series × 2) | C20197 | B | 4 |
+| | 4 × 1 kΩ array 0603x4 (SWIO pull-ups) | C20197 | B | 2 |
 | NRST driver | 74HC595D (U6), 100 nF | C5947, C14663 | B | 1 + 1 |
-| | 4 × 4.7 kΩ array 0603x4 (NRST pull-downs) | C1980 | B | 2 |
 | | 10 kΩ (OE_N pull-up) | C25804 | B | 1 |
 | SPI flash | 10 kΩ (CS_N, WP_N, HOLD_N), 100 nF | C25804, C14663 | B | 3 + 1 |
 | | W25Q128JVSIQ (U7) | C97521 | B | DNP (1) |
@@ -729,23 +764,24 @@ H = hand-soldered, DNP = not fitted.
 | | 56k 1 % (R_IN_L, R_IN_R, R_P_L, R_P_R) | C23206 | B | 32 |
 | Mixer, common | 20k (R_F, R_F'), 47 pF C0G (C_F, C_F') | C4184, C1671 | B | 4 + 4 |
 | | 220 Ω, 100k, 15k, 27k (per channel) | C22962, C25803, C22809, C22967 | B | 2 each |
-| | 330 pF C0G (ADC), 10 µF (C_OUT × 2, C_REF) | C1664, C19702 | B | 2 + 3 |
-| | 2.2k, 10k, 47 Ω, 22 µF 0805, 100 nF × 2 | C4190, C25804, C23182, C45783, C14663 | B | 6 |
-| | MCP6002T-I/SN | C7377 | P | 2 |
-| | CJ431 | C3113 | B | 1 |
+| | 330 pF C0G (ADC), 10 µF (C_OUT × 2, C_REF × 2) | C1664, C19702 | B | 2 + 4 |
+| | 10k × 2, 27k (VREF), 47 Ω, 22 µF 0805, 100 nF | C25804, C22967, C23182, C45783, C14663 | B | 6 |
+| | MCP6002T-I/SN | C7377 | P | 1 |
 | MIDI | 220 Ω, 1N4148W, LTV-817S, 1 kΩ; JP3 0 Ω or 2-pin jumper | C22962, C81598, C109227, C21190, C21189 | B | DNP (5) |
 
-**Totals:** 154 fitted SMD parts (86 of them the mixer: 56 per-slot + 30 common), 36 distinct LCSC numbers, all
-Basic except three Promotional Extended (C7377, C2925443, C20615829), so no extended-part fees. Parts cost at the
-list prices: **about US$ 4.4 per board** (mixer 1.9, power and host port 1.5, controller periphery, 595 and flash
-passives 1.1). The flash adds US$ 2.55 when a W25Q128JVSIQ is fitted (the BY25D16ASTIG is own stock).
+**Totals (as drawn, 0.3):** 140 assembled SMD parts (85 of them the mixer: 56 per slot + 29 common, i.e. section
+5's 30 without the hand-soldered jack; ADC dividers included), 36 distinct LCSC numbers, all Basic except four
+Promotional Extended (C7377, C2925443, C20615829, the
+yellow LED C89811), so no extended-part fees. Parts cost at the list prices: **about US$ 4.6 per board** (mixer
+2.7). Not fitted at first: the host port, the soft start, MIDI in, the flash, the USB pull-up / pull-down options. The
+flash adds US$ 2.55 when a W25Q128JVSIQ is fitted (the BY25D16ASTIG is own stock).
 
 ### 8.2 Hand-soldered
 
 | Ref | Part | Note | Rough price (**unverified**) |
 |---|---|---|---|
 | U1 | CH32V203C8T6 | own stock | – |
-| U4 | TPS2553DBVR or SY6280AAC | not on the lists | 0.1–1.0 |
+| U4 | TPS2051C (DBV, SOT-23-5) | not on the lists; not fitted at first | 0.3–1.0 |
 | U7 | BY25D16ASTIG (own stock) or W25Q128JVSIQ | not fitted at first; SOIC-8 208 mil (`SOIC-8_5.3x5.3mm_P1.27mm`) | – / 2.55 |
 | F1 | PTC 0.75 A, 1206/1812 | not on the lists | 0.1–0.2 |
 | J1 | USB-C 16-pin | | 0.3–0.6 |
@@ -765,15 +801,15 @@ quantity of a few.
 |---|---|---|
 | Inrush | without the soft start, about 1.8 A for a few ms at plug-in (8 × 230 mA through the cards' 22 Ω) | accept; if a port or hub drops out, remove R_BYP and fit Q1 + RC (values to simulate first, S14) |
 | USB unit load | about 115 mA before configuration (limit 100 mA); the cards' supply is not switched | accept (hosts rarely enforce it) |
-| 595 power-up | relies on OE_N pulled up and 4.7 kΩ pull-downs against the V006's internal NRST pull-up and its V_IL (both unverified) | check the V006 datasheet; bench-check on the first card (NRST voltage with OE_N high) |
+| 595 power-up | the cards run freely until the controller firmware resets them (no NRST pull-downs, by design); PD7 must be configured as NRST on every card (V006 option-byte default unverified) | card programming sets the reset function; bench-check a 595-driven reset on the first card |
 | 595 speed at 3.3 V | about 13 MHz by interpolation (unverified) | write it at 9 MHz |
 | SPI remap 1 layout | SCK and MOSI must leave the corner between the USB pairs: two short hops under the USB-A pair | accepted (user decision); SPI1 default pins (PA5–PA7) would avoid the hops but take three SWIO pins |
 | Flash commands | BY25D16 command set and JEDEC ID (68 40 15) assumed, no datasheet read | read 0x9F at bring-up; firmware sizes the part from the ID |
 | MIDI on USART1 | MIDI in and the UART bootloader / debug RX share PA10 | JP3 not fitted by default; fit only for DIN MIDI |
-| Host switch | none on the lists; R_ILIM unverified | TPS2553DBVR or SY6280AAC, hand-soldered; set about 300 mA from its datasheet |
+| Host switch | none on the lists | TPS2051C (fixed 0.5 A), hand-soldered; the port is not fitted in the first build |
 | Host VBUS capacitance | 120 µF asked by USB 2.0; ceramics give about 40 µF | accept for keyboards; a 100 µF electrolytic footprint if trouble shows |
-| USB pull-ups | internal D+ pull-up of USBD and host pull-downs of USBFS unverified | check the reference manual; DNP footprints (1.5 kΩ, 2 × 15 kΩ) |
-| Bootloader port | datasheet 2.5.2: USART1 and USB, which USB not stated | keep USART1 (J6) free (JP3 out); test wchisp on the development board |
+| USB pull-ups | internal D+ pull-up of USBD and host pull-downs of USBFS unverified. *[2026-10-19]* USBD: the pull-up exists and is switchable (`EXTEN_USBD_PU_EN`), its strength against a host is not shown (no host on PA11 / PA12 on the bench board, 4.2); USBFS device pull-up: works without a resistor | DNP footprints (1.5 kΩ, 2 × 15 kΩ); enumerate the USBD build once (a cable to PA11 / PA12, `make USB=usbd`) before deciding the 1.5 kΩ |
+| Bootloader port | datasheet 2.5.2: USART1 and USB, which USB not stated. *[2026-10-19]* a software jump into the system flash made a device appear on USBFS that did not take an address (inconclusive; not tested with BOOT0 = 1) | keep USART1 (J6) free (JP3 out); test with the BOOT0 jumper and wchisp on the development board |
 | 5 V on slot lines | SWIO 1–6 on non-FT pins; only a reversed card can stress them | keyed card guides, silkscreen; FT for SYNC, RETURN, SWIO 7/8 |
 | Socket geometry | card-plane offset (3.3 mm) and the KiCad rotation (180°) assume standard parts | check with the chosen header and socket before generating the board |
 | CLK_IN | 24 MHz over about 100 mm and 8 stubs (Table 4-21: 30 MHz into 50 pF in 50 MHz mode); the V006's input level for an external clock unverified; EMI near the ADC (PB1 is 8 pins from PA0) | option only, off by default; measure on 1–2 cards first |
@@ -783,4 +819,4 @@ quantity of a few.
 | ESD part stock | SRV05-4A: 128 in the list snapshot; SRV05-4 (C7420376) only 2 | check at order time; H5VU13U (C20615795) as fallback |
 | Crystal | C115962 has 80 Ω ESR, the datasheet's recommended maximum (Table 4-11); gain margin about 30 (estimate: start-up g_m 17 mA/V against about 0.6 mA/V needed) | fine; C12674 (HC-49S, 70 Ω) as alternative |
 | MIDI DIN | LTV-817S speed and CTR at 3.3 V | not fitted; test if wanted, or a 6N138 by hand |
-| Docs to update (not done here) | spec 6 and design 4.2 still say "MCO to CLK_IN"; design 4.2's pin budget and bus.md 2 still describe NRST as direct open-drain GPIOs; spec 4 asks for a backplane SWIO header and gives about 95 × 85 mm; spec 3.3's table still shows the one-output pinout (AUDIO_OUT on pin 5, pin 7 GND), while the card (`hw/voice.py`) has AUDIO_L 5, AUDIO_GND 6, AUDIO_R 7 | update when the card work settles |
+| Docs to update | done in 0.3 (spec, design, controller.md, midi.md now match this document) | - |

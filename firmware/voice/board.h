@@ -111,5 +111,28 @@
 #define F_CPU      48000000UL
 #define RESET_TICKS 144        /* DCO reset pulse: 3 us at 48 MHz (same as RESET_COUNTS in tables.h) */
 #define CV_PWM_TOP 1023        /* TIM1: 10 bit at 46.875 kHz, 2 more bits by dithering */
+#define FRAME_CYCLES 48000     /* HCLK cycles per 1 ms frame (SYNC period), nominal */
+#ifndef BUS_BAUD
+#define BUS_BAUD   1000000     /* card: voice bus (docs/bus.md 2): USART divider 48 = 3.0 (2 Mbaud: 24 = 1.5, exact) */
+#endif
+#ifndef BUS_TX_PP
+#define BUS_TX_PP  0           /* 1: drive the return line push-pull during a reply (bench without pull-up, hw.c) */
+#endif
+
+/* interrupt state save / restore (mstatus.MIE only), usable in the control tick as well as in the main loop:
+   ch32fun's __disable_irq / __enable_irq also clear / set MPIE, which inside a handler changes the state that mret
+   restores */
+static inline uint32_t irq_save(void)
+{
+	uint32_t s;
+	__asm volatile(ADD_ARCH_ZICSR "csrrci %0, mstatus, 8" : "=r"(s) :: "memory");
+	return s;
+}
+
+static inline void irq_restore(uint32_t s)
+{
+	if (s & 8)
+		__asm volatile(ADD_ARCH_ZICSR "csrsi mstatus, 8" ::: "memory");
+}
 
 #endif

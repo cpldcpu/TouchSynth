@@ -16,7 +16,8 @@ CLI = S.KICAD_CLI
 
 ROT = [(r"^SOT-23", 180), (r"^SOT-363", 180), (r"^SOT-89", 180), (r"^SOIC-", 270), (r"^TSSOP-", 270),
        (r"^SMDIP-", 270), (r"^R_Array_Convex", 90)]
-LAYERS = "F.Cu,In1.Cu,In2.Cu,B.Cu,F.Paste,B.Paste,F.SilkS,B.SilkS,F.Mask,B.Mask,Edge.Cuts"
+COPPER = "F.Cu,B.Cu" if getattr(D, "COPPER_LAYERS", 4) == 2 else "F.Cu,In1.Cu,In2.Cu,B.Cu"
+LAYERS = COPPER + ",F.Paste,B.Paste,F.SilkS,B.SilkS,F.Mask,B.Mask,Edge.Cuts"
 
 
 def run(*args):

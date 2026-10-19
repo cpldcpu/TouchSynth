@@ -207,7 +207,7 @@ add("D", "Device:LED", "yellow", FP["LED"], {2: "LED_PLAY_A", 1: "GND"}, lcsc="C
 R(None, "1k", "LED_STAT", "LED_STAT_A", note="status LED series")
 add("D", "Device:LED", "red", FP["LED"], {2: "LED_STAT_A", 1: "GND"}, lcsc="C2286", note="status")
 group("Options (not fitted)")
-R(None, "0", "CLK_IN", "CLK_SEL", dnp=True, note="external clock from the backplane MCO (fallback, spec 6)")
+R(None, "0", "CLK_IN", "CLK_SEL", dnp=True, note="external 24 MHz clock from the backplane (TIM3 CH4; fallback, spec 6)")
 R(None, "10k", "VB0", "ST_VB0", dnp=True, note="self-test: ladder bias VB0 to ADC A0")
 R(None, "10k", "VA", "ST_RAIL", dnp=True, note="self-test: analog rail / 2 to ADC A3")
 R(None, "10k", "ST_RAIL", "GND", dnp=True, note="self-test divider")

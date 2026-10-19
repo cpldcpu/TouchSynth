@@ -32,7 +32,9 @@ pseudo-differential input (1 % resistors worst case and Monte Carlo, +-20 % capa
 mirror capacitor and no compensation), crosstalk (slot to slot, L to R, empty slots), ADC path (alias frequencies of
 the DAC carrier, anti-alias attenuation, level, noise against the quantisation), supply current and rejection.
 
-Two-bus variant ("--bus2", for the stereo cards of S13): each card has two outputs, AUDIO_L (pin 5) and AUDIO_R
+Two-bus variant ("--bus2", for the stereo cards of S13; VREF there from the controller's +3V3 instead of the CJ431:
+divider 10k / 27k with 10 uF and a second stage 10k / 10 uF, unbuffered, 2.41 V; compared with one RC stage and with
+the CJ431 + follower in section 9 of the run): each card has two outputs, AUDIO_L (pin 5) and AUDIO_R
 (pin 7), each the card's difference amp -> 100R -> 10 uF -> 100k bleeder to the card's ground, plus AUDIO_GND
 (pin 6). The pan is on the card (S13 variant A: L = alpha I, R = (1 - alpha) I, the firmware raises CV_VCA towards
 the centre for constant power and caps it at 70.6 % at hard pan), so the mixer has no fixed pan: every slot feeds
@@ -81,6 +83,10 @@ R_A1, R_A2, C_A = 15e3, 27e3, 330e-12                     # ADC divider and anti
 R_K431, Z_KA = 2.2e3, 0.2                                 # CJ431 feed resistor, dynamic impedance (typ.)
 EN_431 = 300e-9                                           # assumed CJ431 noise density [V/rtHz] (not specified)
 R_RF, C_RF = 10e3, 10e-6                                  # reference filter
+R_VA, R_VB, C_VR = 10e3, 27e3, 10e-6                      # two-bus VREF from the MCU's +3V3: 2.41 V, 2.2 Hz
+R_VC, C_VR2 = 10e3, 10e-6                                 # second RC stage ("v33rc2"): 1.6 Hz
+V33, LDO_PSRR_DB = 3.3, 50.0                              # XC6206 ripple rejection, assumed flat (datasheet: about
+                                                          # 50 dB at 1 kHz, not read here); its noise is left out
 FS_ADC = 384e3                                            # proposed ADC rate (8 x 48 kHz)
 F_CAR = 187.5e3                                           # voice DAC carrier
 VDDA, NBIT = 3.3, 12
@@ -174,7 +180,8 @@ def wdir(vendor):
 
 # ------------------------------------------------------------------ netlist
 def nominal(**kw):
-    c = dict(pop=list(range(N)), sig={}, gnd={}, rl=list(RL), rr=list(RR), rlp=list(RL), rrp=list(RR),
+    c = dict(pop=list(range(N)), sig={}, gnd={}, rl=list(RL), rr=list(RR), rlp=list(RL), rrp=list(RR), ref="cj431",
+             vdd=5.0,
              rf={"l": RF, "r": RF}, rfp={"l": RF, "r": RF}, cf=CF, cg=[CG] * N, cc=[CCARD] * N, cx={"l": CX, "r": CX}, variant=VARIANT,
              cin=[CIN] * N, incap=True, oa=OA_N, ideal_ref=False, bleed=CARD["bleed"], vdd_ac=0, inj=0,
              noise=False, vdc_card=CARD["vdc"], ro=CARD["ro"], zl=CARD["l"])
@@ -183,13 +190,21 @@ def nominal(**kw):
 
 
 def supply_ref(n, c):
-    """Op-amp rail and VREF (CJ431, RC, MCP6002 follower + spare half), shared by both bus variants."""
+    """Op-amp rail and VREF, shared by both bus variants. ref 'cj431': CJ431 from the 5 V, RC, MCP6002 follower +
+    spare half; 'v33': divider 10k / 27k from the controller's +3V3 (XC6206 LDO) with 10 uF, unbuffered (the + inputs
+    are VREF's only DC load)."""
     oa, s = c["oa"], []
     nz = c["noise"] and oa == "OPB"                         # behavioural op-amp: input noise as a resistor
-    s += [f"VDD{n} v5_{n} 0 DC 5 AC {c['vdd_ac']}", f"RSUP{n} v5_{n} va_{n} {R_SUP}",
+    s += [f"VDD{n} v5_{n} 0 DC {c['vdd']} AC {c['vdd_ac']}", f"RSUP{n} v5_{n} va_{n} {R_SUP}",
           f"CSUP{n} va_{n} 0 {C_SUP:.3g}"]                # op-amp rail; the CJ431 is fed from the 5 V
     if c["ideal_ref"]:
         s.append(f"VREFI{n} vref_{n} 0 2.5")
+    elif c["ref"] in ("v33", "v33rc2"):                     # v33_ac: ripple on the +3V3 rail itself (MCU load)
+        vd = f"vrd_{n}" if c["ref"] == "v33rc2" else f"vref_{n}"
+        s += [f"V33{n} v33_{n} 0 DC {V33} AC {c['vdd_ac'] * 10 ** (-LDO_PSRR_DB / 20) + c.get('v33_ac', 0):.4g}",
+              f"RVA{n} v33_{n} {vd} {R_VA:.0f}", f"RVB{n} {vd} 0 {R_VB:.0f}", f"CVR{n} {vd} 0 {C_VR:.3g}"]
+        if c["ref"] == "v33rc2":
+            s += [f"RVC{n} {vd} vref_{n} {R_VC:.0f}", f"CVRB{n} vref_{n} 0 {C_VR2:.3g}"]
     else:
         s += [f"B431{n} k431_{n} 0 V=2.5+{Z_KA / R_K431:.4g}*(v(v5_{n})-5)",
               f"RNZK{n} nzk_{n} 0 {T.rn(EN_431):.4g}", f"ENZK{n} k431n_{n} k431_{n} nzk_{n} 0 1",
@@ -689,6 +704,7 @@ G2 = RF / RI2                                             # gain per card: 0.357
 CG2 = 10e-6                                               # mirror capacitor per slot, shared by L and R (see below)
 MIRROR2 = "slot"                                          # proposed mirror network
 POP4 = [0, 2, 4, 6]                                       # half the slots empty
+REF2 = "v33rc2"                                           # VREF from the controller's +3V3, two RC stages (main2 9.)
 S13 = {}                                                  # card levels and noise from S13 (variant A, 5.0 V)
 
 
@@ -708,7 +724,7 @@ def s13_load():
 def nominal2(**kw):
     """Two-bus configuration. mirror: 'slot' (one capacitor per slot on AUDIO_GND, 56k to each + input), 'chan'
     (one capacitor per slot and channel), 'none' (no mirror network, + inputs on VREF through Rf' only)."""
-    c = dict(bus2=True, pop=list(range(N)), sigl={}, sigr={}, gnd={}, ril=[RI2] * N, rir=[RI2] * N,
+    c = dict(bus2=True, pop=list(range(N)), sigl={}, sigr={}, gnd={}, ril=[RI2] * N, rir=[RI2] * N, ref=REF2, vdd=5.0,
              rpl=[RI2] * N, rpr=[RI2] * N, rf={"l": RF, "r": RF}, rfp={"l": RF, "r": RF}, cf=CF, mirror=MIRROR2,
              cg=[CG2] * N, cgl=[CG] * N, cgr=[CG] * N, ccl=[CCARD] * N, ccr=[CCARD] * N, cinl=[CIN] * N,
              cinr=[CIN] * N, incap=True, oa=OA_N, ideal_ref=False, bleed=CARD["bleed"], vdd_ac=0, inj=0,
@@ -757,12 +773,12 @@ def build2(n, c):
     return "\n".join(s) + "\n"
 
 
-def headroom2():
+def headroom2(cases=None, tag="", **kw):
     """Transient, 1 kHz sines in phase. 'hard': n cards hard left at x times the capped level (S13: 1.38 Vpp),
-    'centre': all 8 cards in the centre (L = R = 0.98 Vpp)."""
+    'centre': all 8 cards in the centre (L = R = 0.98 Vpp). kw: nominal2 settings (ref, vdd), tag: run name."""
     xu = S13["uncapped"] / S13["hard"]
-    cases = ([("hard", n, 1.0) for n in (1, 2, 4, 8)] + [("hard", 8, x) for x in (1.1, 1.2, 1.25, 1.3)] +
-             [("hard", 8, round(xu, 2)), ("hard", 8, 2.0), ("centre", 8, 1.0), ("centre", 8, 1.5)])
+    cases = cases or ([("hard", n, 1.0) for n in (1, 2, 4, 8)] + [("hard", 8, x) for x in (1.1, 1.2, 1.25, 1.3)] +
+                      [("hard", 8, round(xu, 2)), ("hard", 8, 2.0), ("centre", 8, 1.0), ("centre", 8, 1.5)])
     ctrl = ("option method=gear\ntran 1u 5m 0 1u\n" +
             "".join(f"meas tran mx{c} MAX v(o{c}_0) from=3m to=5m\nmeas tran mn{c} MIN v(o{c}_0) from=3m to=5m\n"
                     f"meas tran jx{c} PP v(j{c}_0) from=3m to=5m\nmeas tran ax{c} MAX v(a{c}_0) from=3m to=5m\n"
@@ -774,8 +790,8 @@ def headroom2():
         sig = {k: ("tran", lev) for k in range(n)}
         # the cards' output inductance (0.37 mH, the Zout rise to 113 ohm at 20 kHz) left out: with it the vendor
         # model's transient fails to start with more than one card populated; no effect at 1 kHz
-        c = nominal2(sigl=sig, sigr=sig if kind == "centre" else {}, zl=1e-9)
-        name = f"s12b_tran_{kind}_n{n}_x{x:.2f}".replace(".", "p")
+        c = nominal2(sigl=sig, sigr=sig if kind == "centre" else {}, zl=1e-9, **kw)
+        name = f"s12b_tran_{kind}_n{n}_x{x:.2f}{tag}".replace(".", "p")
         log = spice.run(netlist(name, [c], VM is not None, ctrl), wdir(VM), name)
         g = lambda k: float(re.search(rf"^{k}\s*=\s*([-\d.e+]+)", log, re.M | re.I).group(1))
         thd = [float(t) for t in re.findall(r"THD:\s*([\d.e+-]+)", log)]
@@ -786,8 +802,8 @@ def headroom2():
     return out
 
 
-def dc_op2():
-    copies = [nominal2(), nominal2(incap=False)]
+def dc_op2(**kw):
+    copies = [nominal2(**kw), nominal2(incap=False, **kw)]
     nodes = ["ol", "or", "pl", "nl", "pr", "vref", "al", "aol0", "y0", "va"]
     ctrl = "op\nprint " + " ".join(f"v({nd}_{i})" for i in range(len(copies)) for nd in nodes) + " i(vdd0)\n"
     log = spice.run(netlist("s12b_op", copies, VM is not None, ctrl), wdir(VM), "s12b_op")
@@ -958,16 +974,15 @@ def bom2():
     cf, ca, c22, c100 = pick_cap("47p", 25, "C0G"), pick_cap("330p", 25, "C0G"), pick_cap("22u", 10), \
         pick_cap("100n", 10)
     for ref, val, part, q in (("R_F, R_F'", "20k 1 %", r(20e3), 4), ("C_F, C_F'", "47 pF C0G", cf, 4),
-                              ("R_OUT", "220R 1 %", r(220), 2), ("C_OUT, C_REF", "10 uF X5R", c10, 3),
+                              ("R_OUT", "220R 1 %", r(220), 2), ("C_OUT, C_REF", "10 uF X5R", c10, 4),
                               ("R_BLEED", "100k 1 %", r(100e3), 2), ("R_ADC1", "15k 1 %", r(15e3), 2),
                               ("R_ADC2", "27k 1 %", r(27e3), 2), ("C_ADC", "330 pF C0G", ca, 2),
-                              ("R_K431", "2.2k 1 %", r(2.2e3), 1), ("R_REF", "10k 1 %", r(10e3), 1),
+                              ("R_VA, R_VB, R_VC (VREF from +3V3)", "10k, 27k, 10k 1 %", r(10e3), 3),
                               ("R_SUP", "47R 1 %", r(47), 1), ("C_SUP", "22 uF X5R", c22, 1),
-                              ("C_DEC", "100 nF X7R", c100, 2)):
+                              ("C_DEC", "100 nF X7R", c100, 1)):
         lc, pkg, lib = part
         rows.append(("common", ref, val, pkg, lc, lib, q))
-    rows += [("common", "U_MIX, U_REF", "MCP6002T-I/SN", "SOIC-8", "C7377", "promotional_extended", 2),
-             ("common", "U_431", "CJ431", "SOT-23", "C3113", "basic", 1),
+    rows += [("common", "U_MIX", "MCP6002T-I/SN", "SOIC-8", "C7377", "promotional_extended", 1),
              ("common", "J_OUT", "3.5 mm stereo jack", "THT", "(hand-soldered)", "-", 1)]
     return rows
 
@@ -1101,6 +1116,34 @@ def main2():
     print(f"supply -> line out: 100 Hz {p[100]:.1f} dB, 1 kHz {p[1e3]:.1f} dB, 10 kHz {p[1e4]:.1f} dB")
     for x in p:
         add(f"psrr_db_{x:g}hz", p[x])
+
+    # --- 9. VREF: divider from the controller's +3V3 with two RC stages (the design), with one stage, and the
+    # CJ431 + MCP6002 follower of 0.2; ripple on the +3V3 rail itself (MCU load steps: USB frames, the SYNC tick,
+    # the activity LED) -> line out
+    for ref in ("v33rc2", "v33"):
+        f, r = ac(f"s12b_v33rip_{ref}", [nominal2(v33_ac=1, ref=ref)], ["jl"], True)
+        rp = {x: db(at(f, r[(0, "jl")], x)) for x in (20, 100, 1e3, 1e4)}
+        print(f"VREF {ref}: +3V3 ripple -> line out " + ", ".join(f"{x:g} Hz {v:.1f} dB" for x, v in rp.items()))
+        for x in rp:
+            add(f"vref_{ref}_rail_db_{x:g}hz", rp[x])
+    for ref in ("v33rc2", "v33", "cj431"):
+        f, r = ac(f"s12b_psrr_{ref}", [nominal2(vdd_ac=1, ref=ref)], ["jl"], True)
+        p = {x: db(at(f, r[(0, "jl")], x)) for x in (50, 100, 1e3, 1e4)}
+        fn, sp = noise_run(f"s12b_nz8_{ref}", nominal2(sigl={0: 1}, noise=True, ref=ref), "jl", "vsl0", True)
+        mu = integrate(fn, sp)
+        lo = headroom2([("hard", 8, 1.0), ("hard", 8, 1.2)], tag=f"_{ref}_4v6", ref=ref, vdd=4.6)
+        val, _ = dc_op2(ref=ref)
+        print(f"VREF {ref}: {val['vref_0']:.3f} V (ADC tap {val['al_0']:.3f} V); supply -> line out 50 Hz "
+              f"{p[50]:.1f}, 100 Hz {p[100]:.1f}, 1 kHz {p[1e3]:.1f}, 10 kHz {p[1e4]:.1f} dB; mixer noise (8 slots) "
+              f"{mu * 1e6:.2f} uV; at 4.6 V supply, 8 cards hard left: " +
+              ", ".join(f"x{h['x']:.1f} {h['mnl']:.2f} ... {h['mxl']:.2f} V, THD {h['thd']:.2f} %" for h in lo))
+        add(f"vref_{ref}_v", val["vref_0"]), add(f"vref_{ref}_adc_dc_v", val["al_0"])
+        for x in p:
+            add(f"vref_{ref}_psrr_db_{x:g}hz", p[x])
+        add(f"vref_{ref}_noise_uv_8", mu * 1e6)
+        for h in lo:
+            add(f"vref_{ref}_4v6_thd_pct_x{h['x']:.1f}", h["thd"])
+            add(f"vref_{ref}_4v6_out_min_v_x{h['x']:.1f}", h["mnl"]), add(f"vref_{ref}_4v6_out_max_v_x{h['x']:.1f}", h["mxl"])
 
     # --- 8. parts
     bom = bom2()

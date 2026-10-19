@@ -38,8 +38,9 @@ held one. Masks may overlap. Then the controller sends PATCH_SELECT in the same 
 changes parts; when the patch is not in one of the card's 4 slots it first loads it with PATCH_DATA (2–3 frames),
 and the note starts that much later. Disjoint masks avoid that; the default setup uses them.
 
-Stereo position follows from the slots: each slot has a fixed pan position on the backplane (spec 4), so a part's
-mask is also its stereo placement (slots 1–8 left to right).
+Stereo position: each card pans its voice itself (S13, spec 3.1: current steering after the VCA, set by PWM), so a
+part or a single voice can sit anywhere in the stereo field independent of its slot; the backplane mixer has two
+buses and no fixed pan (spec 4).
 
 **Default setup:** part 1 on channel 1, all 8 voices, poly, program 1; parts 2–8 off.
 

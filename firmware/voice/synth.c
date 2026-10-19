@@ -8,7 +8,7 @@
 #include "tables.h"
 
 patch_t patch;
-volatile uint8_t synth_manual;
+volatile uint8_t synth_manual, synth_mute;
 
 static const patch_t presets[N_PRESETS] = { PRESET_TABLE };
 static const char *const preset_names[N_PRESETS] = { PRESET_NAMES };
@@ -47,10 +47,14 @@ static uint8_t hit_ms;                  /* ms since the last attack (saturates),
 static uint32_t lfo_phase;
 static uint16_t boot_ms;
 static uint8_t stack[8], n_stack;
+static uint8_t gate;                    /* a note is held (bus VOICE_STATE compares with it) */
+static int32_t bend, tuning;            /* 1/256 semitone: bus CTRL 0 (pitch bend), CONFIG */
+static uint16_t wheel, expr = 16383;    /* bus CTRL 1 (mod wheel: vibrato), 3 (expression: level) */
+static int32_t pitch_out;               /* the last tick's oscillator pitch (diagnostics) */
 
-static void voice_trigger(uint8_t note, uint8_t flags)
+static void voice_trigger(int32_t p, uint8_t flags)
 {
-	target = (int32_t)note << 8;
+	target = p;
 	if (pitch < 0)
 		pitch = target;
 	cur_flags = flags;
@@ -61,13 +65,13 @@ static void voice_trigger(uint8_t note, uint8_t flags)
 	aenv.stage = 1;
 #if defined(CH32V006)
 	if (patch.dsp)                                  /* digital voice: strike the modal bank */
-		dsp_strike(note, (flags & STEP_ACCENT) ? patch.acc_vol : patch.vol);
+		dsp_strike((p + 128) >> 8, (flags & STEP_ACCENT) ? patch.acc_vol : patch.vol);
 #endif
 }
 
-static void voice_legato(uint8_t note)
+static void voice_legato(int32_t p)
 {
-	target = (int32_t)note << 8;
+	target = p;
 }
 
 static void voice_release(void)
@@ -186,7 +190,7 @@ static void tune_tick(void)
 		if (s->flags & STEP_SYNC)
 			sync_ms = 4;
 		if (s->note && !(s->flags & STEP_TIE))
-			voice_trigger(s->note, s->flags);
+			voice_trigger((int32_t)s->note << 8, s->flags);
 	}
 	if (++step_t == step_gate && t->steps[step_i].note && !(t->steps[step_i].flags & STEP_HOLD))
 		voice_release();
@@ -225,6 +229,17 @@ void synth_tick(void)
 	env_tick(&aenv, patch.aenv);
 	if (synth_manual)
 		return;
+#if defined(CH32V006)
+	if (patch.dsp) {                                /* the DAC carrier runs from the patch select on, not only from
+		                                               the first note (no start-up at a note's V_n) */
+		uint16_t arr, half;
+		dsp_carrier(&arr, &half);
+		hw_dac_start(arr, half, dsp_fill);          /* no-op while it runs with these settings */
+	} else if (hw_dac_active()) {
+		hw_dac_stop();                              /* TIM2 back in DCO mode from its reset state */
+		last_counts = 0;
+	}
+#endif
 	if (pitch < 0) {                                /* no note yet: only the sync marker can open the VCA */
 		if (sync_ms) {
 			sync_ms--;
@@ -244,7 +259,9 @@ void synth_tick(void)
 	lfo_phase += (uint32_t)patch.lfo_rate * 42950u;  /* 2^32 / 100 000 per 0.01 Hz and ms */
 	uint16_t ph = lfo_phase >> 16;
 	int32_t tri = ph < 32768 ? (int32_t)ph * 2 - 32768 : 32767 - ((int32_t)ph - 32768) * 2;   /* Q15 */
-	int32_t pm = pitch + (((int32_t)patch.lfo_pitch * tri / 100) * 256 >> 15) + penv;
+	int32_t depth = patch.lfo_pitch + (((int32_t)wheel * 50) >> 14);   /* cent; the wheel adds up to 50 */
+	int32_t pm = pitch + ((depth * tri / 100) * 256 >> 15) + penv + bend + tuning;
+	pitch_out = pm;
 	penv = (penv * (int32_t)time_coef[patch.penv_dec]) >> 16;    /* the DCO is a timer: pitch sweeps are free */
 	if (hit_ms < 255)
 		hit_ms++;
@@ -289,6 +306,7 @@ void synth_tick(void)
 
 	/* amplifier (VCA held closed for 0.5 s after boot while the coupling capacitors settle) */
 	int32_t vol = (cur_flags & STEP_ACCENT) ? patch.acc_vol : patch.vol;
+	vol = (vol * (expr + 1)) >> 14;
 	int32_t a = (vol * aenv.level) >> 11;           /* 0...4079 */
 	i = a >> 6; f = a & 63;
 	uint16_t vc = vca_code[i] + (((int32_t)(vca_code[i + 1] - vca_code[i]) * f) >> 6);
@@ -296,56 +314,155 @@ void synth_tick(void)
 		sync_ms--;
 		vc = 4095;
 	}
-	hw_cv_set(CV_VCA, boot_ms < 500 ? 0 : vc);
+	hw_cv_set(CV_VCA, (boot_ms < 500 || synth_mute) ? 0 : vc);
 }
 
 /* ------------------------------------------------------------------ notes (called from the main loop) */
 void synth_note_on(uint8_t note, uint8_t flags)
 {
-	__disable_irq();
+	uint32_t s = irq_save();
 	if (tune_i >= 0)
 		tune_i = -1;
 	for (int k = 0; k < n_stack; k++)               /* remove if already held, then push */
 		if (stack[k] == note) { for (; k < n_stack - 1; k++) stack[k] = stack[k + 1]; n_stack--; break; }
 	if (n_stack < sizeof(stack))
 		stack[n_stack++] = note;
-	voice_trigger(note, flags);
-	__enable_irq();
+	voice_trigger((int32_t)note << 8, flags);
+	gate = 1;
+	irq_restore(s);
 }
 
 void synth_note_off(uint8_t note)
 {
-	__disable_irq();
+	uint32_t s = irq_save();
 	for (int k = 0; k < n_stack; k++)
 		if (stack[k] == note) { for (; k < n_stack - 1; k++) stack[k] = stack[k + 1]; n_stack--; break; }
-	if (n_stack)
-		voice_legato(stack[n_stack - 1]);           /* back to the previous held note */
-	else
+	if (n_stack) {
+		voice_legato((int32_t)stack[n_stack - 1] << 8);   /* back to the previous held note */
+	} else {
 		voice_release();
-	__enable_irq();
+		gate = 0;
+	}
+	irq_restore(s);
 }
 
 void synth_all_off(void)
 {
-	__disable_irq();
+	uint32_t s = irq_save();
 	n_stack = 0;
 	tune_i = -1;
+	gate = 0;
 	voice_release();
-	__enable_irq();
+	irq_restore(s);
 }
 
 void synth_preset(int i)
 {
 	if (i < 0 || i >= N_PRESETS)
 		return;
-	__disable_irq();
+	uint32_t s = irq_save();
 	patch = presets[i];
 	preset_i = i;
-	__enable_irq();
+	irq_restore(s);
 #if defined(CH32V006)
-	dsp_select(patch.dsp);                          /* soft-float mallet table: not with interrupts blocked */
+	dsp_select(patch.dsp);                          /* outside the lock: the renderer may run meanwhile */
 #endif
 }
+
+/* ------------------------------------------------------------------ bus events (control tick, bus.c) */
+void synth_bus_note_on(int32_t p, uint8_t vel, uint8_t flags)
+{
+	tune_i = -1;
+	n_stack = 0;
+	if ((flags & SYNTH_LEGATO) && gate) {           /* glide from the current pitch, envelopes continue */
+		voice_legato(p);
+		if (!glide_idx)
+			glide_idx = patch.glide ? patch.glide : patch.slide_glide;
+	} else {
+		voice_trigger(p, vel >= 100 ? STEP_ACCENT : 0);   /* high velocity = accent, as over MIDI */
+		if (flags & SYNTH_RETRIG)
+			fenv.level = aenv.level = 0;
+	}
+#if defined(CH32V006)
+	if (flags & SYNTH_PHASE)
+		dsp_phase_reset();
+#endif
+	gate = 1;
+}
+
+void synth_bus_note_off(void)
+{
+	n_stack = 0;
+	gate = 0;
+	voice_release();
+}
+
+void synth_bus_pitch(int32_t p) { target = p; }
+
+int synth_bus_state(int g, int32_t p)               /* VOICE_STATE: 1 if the voice had to be corrected */
+{
+	if (g && !gate) {                               /* a NOTE_ON was lost */
+		synth_bus_note_on(p, 64, 0);
+		return 1;
+	}
+	if (!g && gate) {                               /* a NOTE_OFF was lost */
+		synth_bus_note_off();
+		return 1;
+	}
+	if (g && target != p) {                         /* a PITCH was lost */
+		target = p;
+		return 1;
+	}
+	return 0;
+}
+
+void synth_bus_ctrl(uint8_t id, int16_t v)
+{
+	switch (id) {
+	case 0: bend = v / 16; break;                   /* -8192...8191 = +-2 semitones (BEND_RANGE: patch, later) */
+	case 1: wheel = v < 0 ? 0 : v > 16383 ? 16383 : v; break;
+	case 3: expr = v < 0 ? 0 : v > 16383 ? 16383 : v; break;
+	case 5: lfo_phase = 0; break;
+	}                                               /* 2 pressure, 4 tempo: not used yet */
+}
+
+void synth_bus_tuning(int16_t t) { tuning = t; }
+
+/* PARAM: the patch parameters (midi.md 4) that map onto patch_t directly; the others are ignored for now */
+static uint8_t time_idx(int16_t v) { return v < 0 ? 0 : v > 127 ? 127 : v; }
+
+int synth_bus_param(uint8_t id, int16_t v)
+{
+	switch (id) {
+	case 20: patch.glide = time_idx(v); break;
+	case 28: patch.lfo_pitch = v < 0 ? 0 : v > 255 ? 255 : v; break;
+	case 32: patch.cutoff = v + 82; break;          /* above 20 Hz -> above CUT_F0_HZ (16): 256 log2(20 / 16) */
+	case 33: patch.res = v < 0 ? 0 : v > 255 ? 255 : v; break;
+	case 34: patch.env_amt = patch.acc_env_amt = v; break;
+	case 35: patch.keytrack = v < 0 ? 0 : v > 255 ? 255 : v; break;
+	case 38: case 39: case 41: patch.fenv[id - 38] = time_idx(v); break;
+	case 40: patch.fenv[2] = time_idx(v) * 2; break;   /* sustain 0...127 -> 0...254 */
+	case 42: case 43: case 45: patch.aenv[id - 42] = time_idx(v); break;
+	case 44: patch.aenv[2] = time_idx(v) * 2; break;
+	case 47: patch.vol = patch.acc_vol = time_idx(v) * 2; break;
+	default: return 0;
+	}
+	return 1;
+}
+
+void synth_bus_preset(int i)                        /* PATCH_SELECT, in the tick */
+{
+	if (i < 0 || i >= N_PRESETS || i == preset_i)
+		return;
+	patch = presets[i];
+	preset_i = i;
+#if defined(CH32V006)
+	dsp_select(patch.dsp);
+#endif
+}
+
+int synth_gate(void) { return gate; }
+int32_t synth_pitch(void) { return pitch_out; }
 
 int synth_preset_index(void) { return preset_i; }
 const char *synth_preset_name(int i) { return (i >= 0 && i < N_PRESETS) ? preset_names[i] : "?"; }

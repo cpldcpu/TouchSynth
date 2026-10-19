@@ -26,8 +26,9 @@ import board as B
 import sexp as S
 import pcb_place as PP
 
-if B.NAME != "voice":
-    raise SystemExit("gen_pcb.py lays out the voice card (BOARD=voice); rev 0.1: see master")
+if B.NAME != "voice" and __name__ == "__main__":
+    raise SystemExit("gen_pcb.py lays out the voice card (BOARD=voice; the backplane: gen_pcb_bp.py, which "
+                     "imports its helpers); rev 0.1: see master")
 D = B.D
 OUT = B.OUT
 PCB = os.path.join(OUT, f"{B.PROJECT}.kicad_pcb")
@@ -234,8 +235,9 @@ def greedy_place(board, fps, placed, step=0.25, clr=0.25):
             icp, icfp = fps[ic]
             dec_block[p.ref] = PP.block_of(icp)
             supply = [n for n in p.pins.values() if n != "GND"][0]
+            pin = PP.dec_pin(p) if hasattr(PP, "dec_pin") else None      # a specific pin of the IC, if given
             for pd in icfp.Pads():
-                if icp.pins.get(pd.GetNumber()) == supply:
+                if (pd.GetNumber() == pin) if pin else icp.pins.get(pd.GetNumber()) == supply:
                     dec_target[p.ref] = (pcbnew.ToMM(pd.GetPosition().x), pcbnew.ToMM(pd.GetPosition().y))
     ux0, uy0, ux1, uy1 = PP.USABLE
     while todo:
@@ -262,6 +264,7 @@ def greedy_place(board, fps, placed, step=0.25, clr=0.25):
             geoms[0] = ((bx0, min(by0, -0.5), bx1 + tp_label_w(p), max(by1, 0.5)), pads)
         regions = [region] + [(max(region[0] - g_, ux0), max(region[1] - g_, uy0), min(region[2] + g_, ux1),
                                min(region[3] + g_, uy1)) for g_ in (2.0, 5.0, 10.0, 50.0)]   # fallback: spill over
+        c_ = getattr(PP, "BLOCK_CLEARANCE", {}).get(blk, clr)                  # per-block spacing, if any
         for region in regions:
             near = [r for r in rects if r[2] > region[0] - 8 and r[0] < region[2] + 8 and r[3] > region[1] - 8
                     and r[1] < region[3] + 8]
@@ -277,7 +280,7 @@ def greedy_place(board, fps, placed, step=0.25, clr=0.25):
                         y = y0 + j * step
                         if y + box[1] < y0 - 0.01 or y + box[3] > y1 + 0.01:
                             continue
-                        bx0, by0, bx1, by1 = x + box[0] - clr, y + box[1] - clr, x + box[2] + clr, y + box[3] + clr
+                        bx0, by0, bx1, by1 = x + box[0] - c_, y + box[1] - c_, x + box[2] + c_, y + box[3] + c_
                         if any(bx0 < r[2] and r[0] < bx1 and by0 < r[3] and r[1] < by1 for r in near):
                             continue
                         cost = 0.0
@@ -322,7 +325,15 @@ def build(route=False, passes=30):
     board = pcbnew.NewBoard(PCB)
     design_rules(board)
     add_rect(board, pcbnew.Edge_Cuts, 0, 0, W, H, 0.1)
+    nets, fps = make_footprints(board)
+    place_and_finish(board, nets, fps, route, passes)
 
+
+def make_footprints(board, big_libs=("Amplifier_Operational", "MCU_WCH_RiscV", "Regulator_Linear",
+                                     "Reference_Voltage", "Connector_Generic", "Transistor_BJT")):
+    """nets and footprints of every design part (deterministic schematic paths, LCSC / Sim / Note fields, DNP and
+    BOM flags); references on the silkscreen only for the parts of `big_libs`. Returns (net -> NETINFO_ITEM,
+    ref -> (part, footprint))."""
     kname = kicad_net_names()
     nets = {}
     for n in sorted({n for p in D.PARTS for n in p.pins.values()}):
@@ -355,8 +366,7 @@ def build(route=False, passes=30):
                 pad.SetNet(nets[n])
         ref_ = fp.Reference()
         ref_.SetTextSize(pcbnew.VECTOR2I_MM(0.8, 0.8)); ref_.SetTextThickness(MM(0.15))
-        big = p.lib_id.split(":")[0] in ("Amplifier_Operational", "MCU_WCH_RiscV", "Regulator_Linear",
-                                          "Reference_Voltage", "Connector_Generic", "Transistor_BJT")
+        big = p.lib_id.split(":")[0] in big_libs
         if not big:
             ref_.SetLayer(pcbnew.F_Fab)           # passives: references on the fab layer only
         fp.Value().SetLayer(pcbnew.F_Fab); fp.Value().SetVisible(False)
@@ -366,7 +376,10 @@ def build(route=False, passes=30):
             v.SetTextSize(pcbnew.VECTOR2I_MM(0.8, 0.8)); v.SetTextThickness(MM(0.15))
         board.Add(fp)
         fps[p.ref] = (p, fp)
+    return nets, fps
 
+
+def place_and_finish(board, nets, fps, route, passes):
     def put(ref, x, y, rot=0.0):
         fp = fps[ref][1]
         fp.SetOrientationDegrees(rot)
@@ -567,8 +580,9 @@ def stitch_grid(board, pitch=2.0, via_d=VIA_D, drill=VIA_DRILL):
     novia = [z for z in board.Zones() if z.GetIsRuleArea() and z.GetDoNotAllowVias()]
     vias = [(pcbnew.ToMM(t.GetPosition().x), pcbnew.ToMM(t.GetPosition().y)) for t in board.GetTracks()
             if t.GetClass() == "PCB_VIA"]
-    holes = [(pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y)) for p in board.GetPads()
-             if p.GetAttribute() == pcbnew.PAD_ATTRIB_PTH]
+    holes = [(pcbnew.ToMM(p.GetPosition().x), pcbnew.ToMM(p.GetPosition().y),       # plated and unplated holes,
+              max(1.6, pcbnew.ToMM(max(p.GetDrillSize().x, p.GetDrillSize().y)) / 2 + via_d / 2 + 0.35))
+             for p in board.GetPads() if p.GetAttribute() in (pcbnew.PAD_ATTRIB_PTH, pcbnew.PAD_ATTRIB_NPTH)]
     silk = silk_boxes(board)
     n = 0
     r = via_d / 2 + 0.15
@@ -581,7 +595,7 @@ def stitch_grid(board, pitch=2.0, via_d=VIA_D, drill=VIA_DRILL):
                      for dx, dy in ring)
             ok = ok and not any(z.Outline().Collide(pcbnew.VECTOR2I_MM(x, y), MM(via_d / 2 + 0.05)) for z in novia)
             ok = ok and all(math.hypot(x - vx, y - vy) > 1.0 for vx, vy in vias)
-            ok = ok and all(math.hypot(x - hx, y - hy) > 1.6 for hx, hy in holes)
+            ok = ok and all(math.hypot(x - hx, y - hy) > hr for hx, hy, hr in holes)
             ok = ok and not any(b[0] - r < x < b[2] + r and b[1] - r < y < b[3] + r for b in silk)
             if ok:
                 v = pcbnew.PCB_VIA(board)

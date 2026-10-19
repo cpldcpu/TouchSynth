@@ -21,9 +21,9 @@ connectors hand-soldered.
 | DAC | 187.5 kHz carrier (TIM2 centre-aligned, 2 × 128), 7 bit, second-order error feedback, one sample per carrier period (oscillators) or 15.625 kHz interpolated (modal drums) | S9: images, not bits, limit the quality; implemented and recorded on board 1 |
 | Supply | single 5 V; MCU on a 3.3 V LDO; CJ431 2.5 V reference | S10 (v5m: Microchip MCP6002 model) |
 | Voice bus | UART broadcast + SYNC line + per-slot reset; timed events on a 1 ms frame clock, fixed presentation delay | section 5, [bus.md](bus.md) |
-| Controller | CH32V203C8T6, LQFP-48 (USB-MIDI, CDC; USB audio of the mix via its ADCs as an option); all slot lines (NRST, SWIO) direct, no port expanders | section 4 |
+| Controller | CH32V203C8T6, LQFP-48 (USB-MIDI, CDC; USB audio of the mix via its ADCs as an option); SWIO direct (8 GPIOs), the 8 NRST lines through a 74HC595 on SPI1 (backplane.md 3.5) | section 4 |
 | Slots | 8 on the backplane, populated as cards are built | |
-| Backplane PCB | 2 layers (voice cards: 4 layers) | section 4 |
+| Backplane PCB | 4 layers (planned as 2; backplane.md 7.1), like the voice cards | section 4 |
 | Card format | at most 50 × 50 mm, 4 layers (fallback: 2 layers, about 50 × 60 mm); backplane connector on one edge (on a 50 × 60 mm card: a short edge), so the backplane stays small; LEDs and debug connectors (SWIO, line out) on the opposite edge; 10 mm slot pitch, backplane within 100 × 100 mm | section 3.3 |
 | Controls | none on the instrument (no touch UI, no knobs): played and edited only over USB, from the computer or a USB-MIDI keyboard | |
 | Voice MCU | CH32V006F8P7 (TSSOP-20, hand-soldered); the board 1 pin map carries over unchanged | section 3.2 |
@@ -36,7 +36,7 @@ connectors hand-soldered.
 ```
  backplane                                                  voice card (x4..8, identical)
  ───────────────────────────────────────────────            ───────────────────────────────────────────────────
- USB-C 5 V ─► fuse/TVS ─► 5V ──────────────────────────────► 5V ─► 10 R / 220 u ─► analog rail (ladder, op-amps)
+ USB-C 5 V ─► fuse/TVS ─► 5V ──────────────────────────────► 5V ─► 22 R / 3 × 100 u ─► analog rail (ladder, op-amps)
                           └► 3.3 V LDO (controller)                 ├► XC6206 3.3 V ─► MCU (PWM reference)
                                                                      └► CJ431 2.5 V ─► VREF, VEXP_REF, VBIAS
  CH32V203 (crystal, 144 MHz)                                voice CH32V006 (3.3 V, synchronised HSI)
@@ -47,7 +47,7 @@ connectors hand-soldered.
    timer ─────── SYNC 1 kHz ─────────────────────────────►    EXTI + SysTick: clock ratio
    GPIO x8 ───── NRST per slot ──────────────────────────►    NRST (enumeration, single-voice reset)
    GPIO x8 ───── SWIO per slot (in-system programming) ──►    SWIO
- stereo mixer (MCP6002, 5 V, VREF 2.5 V) ◄── AUDIO_OUT ◄──    VCA out (AC-coupled line level)
+ stereo mixer (MCP6002, 5 V, VREF 2.41 V) ◄── AUDIO_OUT ◄──    VCA out (AC-coupled line level)
    ├► line out L/R                                            └► loopback divider ─► ADC (calibration)
    └► ADC1/ADC2 of the CH32V203 (USB audio, option)
 ```
@@ -66,7 +66,7 @@ connectors hand-soldered.
 | Ladder | 4 poles, 10 nF, bias chain 620 Ω / 4 × 1.5 kΩ / 3.3 kΩ from the analog rail (VB0 1.66 V, spacing 0.76 V) | 33 nF; 2k2 / 4 × 1k / 2k4 |
 | INA, difference amps, references | MCP6002 (rail-to-rail): VREF buffer, INA (2), resonance and VCA difference amps, reconstruction filter = 6 units, 3 × MCP6002 (VREF + filter, INA, difference amps) | 3 × TL072 |
 | V→I converters, VBIAS | LM324: expo, resonance and VCA converters, and the VBIAS buffer (1.0 V, inside the LM324's input range; it must stay buffered, the expo divider's CV current would move a bare divider by up to 0.6 V); resonance R4 12k / R_E 3k6, VCA R4 7k5 / R_E 2k2; VCA anti-offset 240k from VREF | 4 units used |
-| VCA trim | TIM1 CH1 (the former CV_AMP channel) through 2 × (10k, 1 µF) and 680k into vin2, 2M from vin1 to ground: ±2.4 mV at the pair's input around mid scale | R-2R DAC + 74HC595, 1M |
+| VCA trim | TIM1 CH1 (the former CV_AMP channel) through 2 × (10k, 1 µF) and 680k into vin2, 5.1M from vin1 to ground (RTRF): ±2.4 mV at the pair's input around mid scale | R-2R DAC + 74HC595, 1M |
 | Stereo pan (S13, variant A) | current steering on the VCA collectors: two BC847BS steering pairs, L bases on VREF, R bases on PAN_B = VREF − 143…+149 mV from PC5 (TIM2 CH1 PWM through 27k, with 24k to +3V3 and 3k to VREF, 1 µF: 66 Hz, centre at 49 % duty); L = α·ΔI, R = (1−α)·ΔI (linear law; the firmware raises CV_VCA towards the centre for constant power and caps it at 70.6 % at hard pan). VCA bases on VCA_BIAS 1.89 V (2.4k / 7.5k from VREF, 1 µF), R4V 3k, R_E 1.2k (the same 0.6 mA tail), RTRF 5.1M; 4.7k loads; both difference amps 10k / 30k (G = 3.0), 33k to ground; a fourth MCP6002 (R amp; unit B a follower on VREF), 100 Ω, 10 µF, 100k. S13 at 5 V and 4.6 V: centre −3.5 dB per channel, separation 47–50 dB, THD 0.47 %, SNR 68.8 dB, smallest V_CE 0.50 V, 4.7 mA analog. A steering-pair mismatch gives ±27 mV of click per mV at the centre (opposite in L and R), none at hard pan | new (mono out) |
 | CV PWM | TIM1, 46.9 kHz, 10 bit + 2-bit dither, 0–3.3 V; dither by DMA burst (16-halfword circular table, 4 phases × 4 channels, into TIM1->DMAADR) instead of the 46.9 kHz interrupt: board 1 frees ~9 % of the CPU (the interrupt cost ~90 cycles per call), DAC refill −8 %, and 164 B of RAM | interrupt, 0–5 V |
 | Audio loopback | divider to the 3.3 V ADC (PC4) | 5 V ADC, PD5 |
@@ -172,7 +172,8 @@ format 3 burst is complete by CNT 82 (request at 64, top at 128).
 
 All logic at 3.3 V (both MCUs).
 
-**Programming header**, 1×3 (card top, left, above the MCU): +5 V, SWIO, GND, the rev 0.1 order. The WCH-LinkE's 5 V powers the whole
+**Programming header**, 1×3 (card top, left, above the MCU): +5 V, SWIO, GND, the rev 0.1 order. The WCH-LinkE's 5 V
+powers the whole
 card (about 10 mA), analog part included, so a card runs on the bench with only the programmer attached. The
 console works over SWIO as on rev 0.1.
 
@@ -188,13 +189,14 @@ The backplane connector (2×8 right-angle male header, 20 mm long) sits centred 
 the edge, pins protruding, and plugs into a vertical 2×8 socket on the backplane at 10 mm pitch. Seen from the
 parts side with the connector down, **pin 1 is on the right**: the supply and audio pins (1–8) are on the right
 half, the bus (9–16) on the left, so the analog core and the supply input sit on the right and the MCU on the left.
-AUDIO_GND (pin 6) is joined to the output bleeder's ground by its own track. The top edge carries the three LEDs,
+The top edge carries the three LEDs,
 the programming header and the line-out header (right-angle, pointing out of the edge). All parts on the top side,
 at most about 6 mm high; 1.5 mm along both side edges stays free of parts for the card guides. From bottom to top:
 analog core, MCU and DAC filter, LEDs and headers. The R difference amp and both output stages sit beside J1
 pins 1–8, the steering pairs on the VCA pair; SWIO runs along the left and bottom edges (pre-routed). AUDIO_GND
-(pin 6) is joined to the ground pads of both output bleeders by its own track. VREF (128 mm) and the VBIAS divider
-node (102 mm, filtered DC) are long tracks: candidates for a VREF region on In2 in the next revision. Silkscreen: name, rev, labels for
+(pin 6) reaches both output bleeders' ground pads (one track). VREF (128 mm) and the VBIAS divider
+node (102 mm, filtered DC) are long tracks: candidates for a VREF region on In2 in the next revision. Silkscreen: name,
+rev, labels for
 headers, LEDs, test points and blocks on the top; artwork, the J1 pinout and the project URL on the bottom.
 
 ### 3.4 Standalone mode
@@ -207,7 +209,8 @@ console like board 1 (notes, tunes, patches, calibration via the loopback). The 
 
 The high byte (TIM2 CH2) enters the reconstruction filter's input through its 11 kΩ, the low byte (TIM2 CH4)
 through 1 MΩ + 330 kΩ = 1.33 MΩ: 7 + 7 bit on the 187.5 kHz carrier. Error sources of the weight ratio: resistor
-tolerance (1 %) and the pins' output resistance (tens of Ω, 0.25–0.5 % of 11 kΩ); both pins share VDD and the timer, so the supply and the
+tolerance (1 %) and the pins' output resistance (tens of Ω, 0.25–0.5 % of 11 kΩ); both pins share VDD and the timer, so
+the supply and the
 pulse timing cancel. A ratio error ε gives a step error of ε × one high-byte step at every high-byte transition:
 1 % = 1/12 800 of full scale, about −82 dB, at the option's noise floor (S9b already ran with a 1 % error). So
 calibration only matters beyond ~2 %, but it is cheap:
@@ -225,7 +228,8 @@ calibration only matters beyond ~2 %, but it is cheap:
 
 ## 4. Backplane
 
-Two-layer PCB. The bottom layer is a ground pour, broken only by short crossings; the slot connectors sit in a row
+Four-layer PCB (planned as two layers; backplane.md 7.1: In1 GND, In2 +3V3 under the controller strip and GND
+under the slots). The slot connectors sit in a row
 with the voice bus (RX, TX, SYNC) as a straight bus along it and each slot's NRST and SWIO line fanned out
 towards the controller. The sensitive parts stay small and local: the cards bring their own references and
 regulators, so the backplane carries only 5 V, ground and line-level audio. The mixer and line out sit at one end,
@@ -248,7 +252,8 @@ impedance is not critical at that rate and length.
     dual mode, oversampled and decimated in firmware. A recording path without the oscilloscope; the internal
     ADC limits it to roughly 60–70 dB, about the synth's own noise floor.
 - **Voice bus:** USART TX (broadcast), USART RX (open-drain return, pull-up), SYNC (timer output, 1 kHz), one NRST
-  and one SWIO line per slot (direct GPIOs: 16 for 8 slots), a 24 MHz clock to CLK_IN (option: TIM3 CH4,
+  line per slot from a 74HC595 on SPI1 and one SWIO line per slot (8 direct GPIOs), a 24 MHz clock to CLK_IN (option:
+  TIM3 CH4,
   144 MHz / 6, locked to the crystal; MCO cannot give 24 MHz, and the V006's PLL is a fixed ×2).
 - **In-system programming:** the controller drives each slot's SWIO line (the 1-wire debug protocol, as the
   WCH-LinkE does); the host sends the voice firmware over CDC. Until that exists each card's own programming
@@ -262,8 +267,11 @@ impedance is not critical at that rate and length.
   8 cards × ~10 mA + controller ~30 mA ≈ 110 mA, well inside 500 mA. 3.3 V LDO for the controller; the cards have
   their own.
 - **Mixer** (S12, two buses, docs/results/s12_mixer_2bus.csv; the earlier one-output version with fixed pan
-  positions in s12_mixer.csv): stereo, two MCP6002 inverting summing amplifiers on VREF 2.5 V (CJ431 from the 5 V
-  through 2.2 kΩ, 10 kΩ / 10 µF, MCP6002 follower; second half spare), op-amp rail through 47 Ω / 22 µF. The pan is
+  positions in s12_mixer.csv): stereo, two MCP6002 inverting summing amplifiers (one package) on VREF 2.41 V (10 kΩ / 27
+  kΩ
+  from the controller's +3V3 with 10 µF and a second 10 kΩ / 10 µF stage, unbuffered; 0.2 had a CJ431 and a
+  follower), op-amp rail through 47 Ω /
+  22 µF. The pan is
   on the cards (S13), so the mixer has no fixed pan.
   - Each slot: AUDIO_L → 10 µF → 56k into L, AUDIO_R → 10 µF → 56k into R (the input capacitors keep the cards'
     100 kΩ bleeders off the 2.5 V summing nodes); Rf = 20 kΩ ∥ 47 pF C0G: 0.357 per card, the same for every slot.
@@ -272,15 +280,16 @@ impedance is not critical at that rate and length.
     So out = VREF − 0.357 Σ (AUDIO_x_k − AUDIO_GND_k) for any set of populated slots.
   - Line out: 220 Ω + 10 µF to the 3.5 mm jack, 100 kΩ bleeder. ADC tap: 15k / 27k with 330 pF C0G into ADC1 /
     ADC2, dual mode at 384 kHz (the 187.5 kHz carrier does not fold into the band), decimated by 8.
-  - Simulated: 8 cards hard left in phase at the capped level (1.38 Vpp each) give 3.95 Vpp, 1.9 dB below
+  - Simulated: 8 cards hard left in phase at the capped level (1.38 Vpp each) give 3.95 Vpp, 2.0 dB below
     clipping; 8 centred cards 2.79 Vpp per channel (5.0 dB). Without the firmware cap on CV_VCA (1.95 Vpp per card)
     8 hard-panned cards clip. A centred voice is about 4 dB quieter than with the one-output mixer (the gain is
     sized for 8 hard-panned cards); the cards' own signal-to-noise is unchanged. Flat 20 Hz – 20 kHz (−0.1 dB);
     mixer noise 8–17 µV (+0.6 dB on one centred card with 8 slots fitted); ground rejection 45 dB typical, 29 dB
     worst case with 1 % resistors (26 dB at 20 Hz with capacitors ±20 %); L/R crosstalk below −105 dB with or
-    without empty slots; supply rejection −69 dB; 1.7 mA. USB audio: one centred card at −23 dBFS, 8 hard-panned
+    without empty slots; supply rejection −71 dB; 0.34 mA. USB audio: one centred card at −23 dBFS, 8 hard-panned
     cards at −2.3 dBFS.
-  - 7 parts per slot (56) plus 31, about 45 mm² per slot (one row of 0603 parts between two sockets); the 3.5 mm
+  - 7 parts per slot (56) plus 30 (VREF from +3V3 through two RC stages, no CJ431; backplane.md 5), about 45 mm² per
+    slot (one row of 0603 parts between two sockets); the 3.5 mm
     jack is hand-soldered. Route each channel's − and + feed side by side (pickup common to both).
 - **USB host for MIDI keyboards:** USB-A, full-speed host on USBFS (PB6/PB7, LQFP-48 pins 42/43; the V203
   datasheet's LQFP-48 pin table: USBD on PA11/PA12, USBFS on PB6/PB7, so both run at the same time). Class-
@@ -317,7 +326,8 @@ datasheet covers both), and isochronous transfers with the chosen USB stack.
 - **SYNC:** a 1 kHz pulse from a controller timer. It is the timing reference for the clock synchronisation and
   marks frames.
 - **Enumeration:** at power-up the controller holds all NRST lines low and releases one slot at a time. Each
-  released card synchronises (section 6) and is then told its address. About 2 s for 8 slots.
+  released card synchronises (section 6) and is then told its address. About 1 s for 8 cards plus 0.3 s per empty
+  slot (bus.md 6).
 
 The protocol (frames, timed events, presentation delay, packets, enumeration) is in [bus.md](bus.md).
 
@@ -335,7 +345,8 @@ The HSI is specified at ±2 % (−10 to 70 °C). Untrimmed, voices would be up t
 1. **Coarse, at start-up:** the card timestamps SYNC edges with SysTick over ~100 periods and sets HSITRIM so its
    clock is within one trim step of the controller's. Board 1: 0.21 % per step (reference manual: ~0.25 %),
    monotonic, range −4.2 % to +2.3 % around the default 16, so the residual is at most ±0.1 % (1.8 cent)
-   (docs/results/hw_board1_hsitrim.csv). Only then does it start listening on RX: at 1 Mbaud the USART divider is fixed (3.0, resolution 1/16), so the
+   (docs/results/hw_board1_hsitrim.csv). Only then does it start listening on RX: at 1 Mbaud the USART divider is fixed
+   (3.0, resolution 1/16), so the
    baud accuracy comes from this trim (bus.md 2).
 2. **Fine, continuous:** the card keeps measuring the SYNC period and scales its oscillators' phase steps by the
    ratio (the oscillator tables are in 1/16 semitone; the scaling is exact arithmetic). This tracks temperature
@@ -364,7 +375,7 @@ multiplies by exactly 2 (48 MHz); the V203's MCO can only give 8 or 72 MHz.
 | HSITRIM, HSI jitter | measured on board 1 |
 | Kettle on the 187.5 kHz carrier | board 1 |
 | Voice card PCB (hw/gen_pcb.py: 50 × 50 mm, 4 layers, routed) | DRC 0 errors, 0 unconnected, schematic parity OK |
-| Voice card schematic (hw/voice.py, hand-laid out in hw/layouts_voice.py) | ERC clean; KiCad netlist = design (104 nets); all 134 simulated elements match S10 v5c |
+| Voice card schematic (hw/voice.py, hand-laid out in hw/layouts_voice.py) | ERC clean; KiCad netlist = design (114 nets); all 158 simulated elements match S13 variant A on S10 v5c |
 | DAC loading formats (single and dual PWM, once or twice per period), half rate | board 1: all formats exact in read-back and on the pins; half rate: polyBLEP aliasing at C5 (−51 against −56 dB re the fundamental); the takes above C5 came from a faulty experiment build (docs/results/hw_board1_half_rate.csv) |
 | Voice firmware phase 1: format 4, 256-period halves rendered in the DMA interrupt, touch UI removed | board 1: 0 overruns over tunes 33–40, worst render 87 % of a half, control tick enters within 28 cycles during a render, 6.9 KB static RAM, same level and inharmonic content as the committed firmware (docs/results/hw_board1_fw_phase1.csv) |
 | CV dither by TIM1 DMA burst; DMA request table | board 1: burst works (all request variants), CV pattern exact (register read-back), DAC + CV burst + USART1 RX ring together without errors or overruns |
@@ -381,7 +392,7 @@ multiplies by exactly 2 (48 MHz); the V203's MCO can only give 8 or 72 MHz.
 - DAC formats 4 and 3 (once per period, ch1): a start sequence that cannot pick up a stale request; the ADC
   without DMA.
 - Dual PWM's audio benefit is still unmeasured (board 1 has no low-byte resistor): first card.
-- Spare pins: only PC5 (and PA1 without the clock option) are left on the TSSOP-20.
+- Spare pins: none left on the TSSOP-20 since PC5 drives the pan (PA1 only without the clock option).
 - RAM: 8 KB is tight (a test build on board 1 kept only ~430 B of stack); the voice firmware without the touch UI
   and the tunes must free room.
 - USB stack on the V203: MIDI + CDC first; isochronous audio second.

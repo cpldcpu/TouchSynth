@@ -5,8 +5,12 @@ small plug-in card: a CH32V006 generates the oscillators digitally on a PWM DAC 
 controls an analog transistor-ladder filter and VCA. A backplane with a CH32V203 holds the USB interface
 (USB-MIDI), the voice bus, the 5 V supply and the stereo mixer.
 
-**Status (2026-10-18):** architecture and simulations; nothing of the new hardware is built yet. The voice
-firmware's oscillator engine runs on TouchSynth board 1 (rev 0.1), which served as the test bed.
+**Status (2026-10-19):** both boards are designed, simulated and laid out, nothing of the new hardware is built
+yet: the voice card (50 × 50 mm, 4 layers) and the backplane (100 × 100 mm, 4 layers) are routed and DRC clean. The
+voice bus runs on the bench (a CH32V203 development board as controller, a CH32V006 evaluation board as voice card,
+plus 7 virtual voices for load tests), and the controller is a USB-MIDI + CDC device there. The voice firmware's
+oscillator engine was developed on TouchSynth board 1 (rev 0.1). The design report collects it all:
+[docs/report/touchsynth_poly_report.pdf](docs/report/touchsynth_poly_report.pdf).
 
 This project is a fork of [TouchSynth](https://github.com/cpldcpu/TouchSynth) (rev 0.1: a monophonic touch synth
 with an analog DCO), whose history is on `master`. The digital oscillators were developed and measured on its
@@ -18,25 +22,27 @@ Design: cpldcpu & Claude Opus 5.5.
 
 | Document | Content |
 |---|---|
+| [docs/report/touchsynth_poly_report.pdf](docs/report/touchsynth_poly_report.pdf) | design report (LaTeX, 62 pages): architecture, both boards, simulations, voice bus, firmware, verification, BOM, schematics |
 | [docs/design.md](docs/design.md) | requirements, architecture, budgets, verification plan, open points |
-| [docs/backplane.md](docs/backplane.md) | backplane / controller PCB proposal |
+| [docs/backplane.md](docs/backplane.md) | backplane / controller PCB (0.3, drawn in KiCad) |
 | [docs/controller.md](docs/controller.md) | controller plan (hardware, firmware, development path) |
 | [docs/midi.md](docs/midi.md) | MIDI implementation, parts and patches (proposal) |
-| [docs/bus.md](docs/bus.md) | voice bus protocol (proposal) |
+| [docs/bus.md](docs/bus.md) | voice bus protocol, as built and measured on the bench (section 9) |
 | [docs/spec.md](docs/spec.md) | architecture: voice card, backplane, voice bus, clock synchronisation, decisions, open points |
 | [docs/devlog.md](docs/devlog.md) | development log since the fork |
-| [docs/README.md](docs/README.md) | index of the documents, results, figures and audio |
+| [docs/README.md](docs/README.md) | index of the documents, schematics, results, figures and audio |
 
 ## Repository layout
 
 ```
-docs/        specification, devlog, results (CSV), figures, audio examples
-sim/         ngspice studies (S8 PWM DAC, S9 oscillators, S10 5 V analog core, S11 reconstruction filter) and the
-             behavioural model
-firmware/    voice/: CH32V006 voice firmware (from TouchSynth rev 0.1); ch32fun (git submodule)
-hw/          schematic / PCB generator scripts (still the rev 0.1 description, to be replaced by the new boards)
+docs/        specification, devlog, results (CSV), figures, schematics (PDF), the design report, audio examples
+sim/         ngspice studies (S8 PWM DAC, S9 oscillators, S10 5 V analog core, S11 reconstruction filter, S12 mixer,
+             S13 stereo pan) and the behavioural model
+firmware/    voice/: CH32V006 voice card firmware (bus receiver, voice engine, PWM DAC); bench_ctrl/: CH32V203
+             bench controller (bus master, USB-MIDI + CDC, SWIO programmer); ch32fun (git submodule)
+hw/          schematic / PCB generators (KiCad 10) of the voice card and the backplane; rev 0.1 for reference
 parts/       JLCPCB Basic / Promotional Extended part lists
-tools/       bench tools: SWIO console, oscilloscope recording, hardware tests, multitrack mixing
+tools/       bench tools: voice bus and USB tests, SWIO console, oscilloscope recording, hardware tests, mixing
 ```
 
 Constraints: JLCPCB Basic and Promotional Extended parts only; MCUs (own stock), headers and connectors

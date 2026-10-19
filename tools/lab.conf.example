@@ -1,6 +1,7 @@
 # Bench setup for the hardware tools (hwtest.py, scope.py, synthtest.py, record_parts.sh).
 # Copy to lab.conf (gitignored) and edit. Environment variables of the same name override these values.
-# Copy synthtest.py, scope.py, labconf.py, record_parts.sh and lab.conf to LAB_DIR on the lab PC as well.
+# Copy synthtest.py, scope.py, labconf.py, record_parts.sh, buslib.py, bustest.py and lab.conf to LAB_DIR on the lab
+# PC as well.
 
 # Linux PC with the WCH-LinkE programmer (SSH target, key login) and its working directory
 LAB_HOST=user@labpc
@@ -16,3 +17,12 @@ SCOPE_HOST=192.168.0.10
 # the tools pass them to minichlink as MINICHLINK_LINKE_SERIAL
 LINKE_BOARD1=
 LINKE_V203=
+
+# bench controller port for tools/bustest.py (default: the LinkE of LINKE_V203,
+# /dev/serial/by-id/usb-wch.cn_WCH-Link_<serial>-if01)
+BENCH_PORT=
+
+# [2026-10-19] tools/usbtest.py: the bench controller's USB ID (firmware default 1209:0001) and its CDC port
+# (default: /dev/serial/by-id/usb-TouchSynth_TouchSynth_Poly_<serial>-if02)
+USB_ID=
+USB_CDC_PORT=

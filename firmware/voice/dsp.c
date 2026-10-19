@@ -28,9 +28,10 @@
 
 typedef struct {
 	int32_t a1[MAXM], a2[MAXM], b[MAXM], y1[MAXM], y2[MAXM];
-	int32_t vel;                                    /* Q24 */
+	int32_t vel, pvel;                              /* Q24; pvel: of a staged strike */
 	uint16_t k;                                     /* mallet sample index */
 	uint8_t note, n, on;
+	uint8_t pnew;                                   /* staged strike of a new note: the bank starts from rest */
 	uint32_t age;
 } voice_t;
 
@@ -39,7 +40,7 @@ static const dsp_osc_t osc_tab[] = DSP_OSC_TABLE;
 static const dsp_patch_t patches[] = DSP_PATCH_TABLE;
 static const dsp_patch_t *cur;                      /* 0 while a patch is being set up: the renderer is silent */
 static voice_t voices[MAXV];
-static uint16_t mallet[MAXMALLET];                  /* Q20, unit sum */
+static uint16_t mallet[MAXMALLET];                  /* Q16, unit sum (Q20 overflowed 16 bit below 32 samples) */
 static uint32_t age;
 static int32_t sd1, sd2;                            /* error feedback state, 1/256 code */
 static int32_t c_prev = 16384;                      /* previous sample (1/256 code), for the interpolation */
@@ -82,17 +83,51 @@ static inline int32_t mulh(int32_t a, int32_t b) { return (int32_t)(((int64_t)a 
 static void osc_init(const dsp_patch_t *p);
 static void mallet_init(const dsp_patch_t *p);
 
-static float cos_poly(float w)                      /* |w| <= 1.2 rad: error < 1e-7 */
+/* ------------------------------------------------------------------ voice state queue (dsp.h) */
+#define DSP_CYC (2 * DSP_ARR)                       /* HCLK cycles per carrier period */
+#define VQ 16                                       /* queued states: D + 2 at most (one per tick) */
+enum { VS_GATE = 1, VS_PHASE = 2, VS_STRIKE0 = 4 }; /* strike of bank i: VS_STRIKE0 << i */
+typedef struct { uint32_t t; uint16_t pitch; uint8_t flags; } vstate_t;
+static vstate_t vq[VQ];
+static volatile uint8_t vq_w, vq_r;                 /* written by the tick / by the renderer */
+static uint16_t st_pitch;                           /* staged by this tick */
+static uint8_t st_flags;
+static uint16_t late_n;
+static uint32_t clk_scale = 1u << 16;               /* pitch lock, Q16 */
+static uint16_t q_pitch;                            /* the last queued state: an unchanged one is not queued again */
+static uint8_t q_flags = 0xFF;                      /* (saves the renderer three osc_rate per tick); 0xFF: none */
+static void vs_apply(const vstate_t *v);
+
+/* Fixed point for the strike and the mallet table: they run in the control tick (soft float took ~60 k cycles for
+   the kettle's 17 modes, longer than a DAC buffer half), and the divisions are reciprocals (-Os would call the
+   software divide). sin y and cos y for 0 <= y < 0.79 (w / 2 for the strike, w <= 1.2; half a mallet step) in Q31,
+   Taylor to y^7 and y^6 (errors below 1e-6, below 3e-8 for y < 0.61), mulh only: the V006's multiplier takes
+   several cycles, and a 64-bit product needs two of them */
+#define Q31_ONE 0x7FFFFFFF
+static void sincos_half_q31(int32_t y, int32_t *s, int32_t *c)
 {
-	float w2 = w * w;
-	return 1.0f - w2 * (0.5f - w2 * (1.0f / 24 - w2 * (1.0f / 720 - w2 * (1.0f / 40320))));
+	int32_t y2 = mulh(y, y) << 1;
+	int32_t t = Q31_ONE - (mulh(y2, 51130563) << 1);                   /* 1 - y^2 / 42 */
+	t = Q31_ONE - (mulh(mulh(y2, t) << 1, 107374182) << 1);            /* 1 - y^2 / 20 t */
+	t = Q31_ONE - (mulh(mulh(y2, t) << 1, 357913941) << 1);            /* 1 - y^2 / 6 t */
+	*s = mulh(y, t) << 1;
+	int32_t u = Q31_ONE - (mulh(y2, 71582788) << 1);                   /* 1 - y^2 / 30 */
+	u = Q31_ONE - (mulh(mulh(y2, u) << 1, 178956971) << 1);            /* 1 - y^2 / 12 u */
+	*c = Q31_ONE - mulh(y2, u);                                        /* 1 - y^2 / 2 u */
 }
 
-static float sin_poly(float w)
+static uint32_t ratio_q24(float r)                  /* a mode table ratio (float constant, < 128) in Q24, from its
+                                                       bits: no float arithmetic */
 {
-	float w2 = w * w;
-	return w * (1.0f - w2 * (1.0f / 6 - w2 * (1.0f / 120 - w2 * (1.0f / 5040 - w2 * (1.0f / 362880)))));
+	union { float f; uint32_t u; } c = { .f = r };
+	int e = (int)((c.u >> 23) & 255) - 127;
+	uint32_t m = (c.u & 0x7FFFFF) | 0x800000;       /* r = m 2^(e - 23) */
+	return e > 6 ? 0xFFFFFFFF : e >= -1 ? m << (e + 1) : e > -25 ? m >> (-1 - e) : 0;
 }
+
+/* note frequencies of MIDI octave 0 (8.1758 Hz x 2^(k / 12)), Q16 */
+static const uint32_t note_f0[12] = { 535809, 567670, 601425, 637188, 675077, 715219, 757749, 802807, 850544, 901120,
+                                      954703, 1011473 };
 
 /* called from the main loop while the renderer (DMA interrupt) may run: cur stays 0 until the patch is set up */
 void dsp_select(int p)
@@ -100,8 +135,11 @@ void dsp_select(int p)
 	const dsp_patch_t *np = (p > 0 && p <= (int)(sizeof patches / sizeof patches[0])) ? &patches[p - 1] : 0;
 	cur = 0;
 	__asm volatile("" ::: "memory");
+	vq_r = vq_w;                                    /* states of the old patch are void */
+	st_flags &= VS_GATE;
+	q_flags = 0xFF;
 	for (int i = 0; i < MAXV; i++)
-		voices[i].on = 0;
+		voices[i].on = voices[i].pnew = 0;
 	if (!np)
 		return;
 	if (np->kind == DSP_OSC)
@@ -112,19 +150,32 @@ void dsp_select(int p)
 	cur = np;
 }
 
+/* raised cosine 0.5 - 0.5 cos(x) = sin^2(x / 2) over L samples, unit sum (Q16): sin((k + 1/2) pi / L) by the
+   recurrence s(k + 1) = 2 cos(pi / L) s(k) - s(k - 1) in Q29 (2 cos s < 2 fits), started from sin(pi / 2L) */
 static void mallet_init(const dsp_patch_t *p)
 {
 	int L = p->mallet < MAXMALLET ? p->mallet : MAXMALLET;
-	float sum = 0;
-	for (int pass = 0; pass < 2; pass++)            /* raised cosine 0.5 - 0.5 cos(x) = sin^2(x / 2), unit sum */
+	if (L < 2) {                                    /* one sample takes the whole unit */
+		mallet[0] = 0xFFFF;
+		return;
+	}
+	int32_t s0, c0;
+	sincos_half_q31((int32_t)(3373259426u / (uint32_t)L), &s0, &c0);   /* pi / 2L: (pi / 2) 2^31 / L */
+	int32_t cstep = Q31_ONE - (mulh(s0, s0) << 2);  /* cos(pi / L) = 1 - 2 sin^2(pi / 2L) */
+	uint32_t sum = 0;
+	for (int pass = 0; pass < 2; pass++) {
+		int32_t prev = -(s0 >> 2), cur = s0 >> 2;
 		for (int k = 0; k < L; k++) {
-			float h = 3.1415927f * (k + 0.5f) / L;  /* x / 2 in (0, pi) */
-			float sn = sin_poly(h < 1.5707963f ? h : 3.1415927f - h);
+			uint32_t sq = (uint32_t)mulh(cur, cur) >> 4;   /* sin^2, Q22 */
 			if (pass == 0)
-				sum += sn * sn;
+				sum += sq;
 			else
-				mallet[k] = (uint16_t)(sn * sn / sum * 1048576.0f);
+				mallet[k] = (sq << 6) / (sum >> 10);       /* sq / sum in Q16 */
+			int32_t next = (mulh(cstep, cur) << 2) - prev;
+			prev = cur;
+			cur = next;
 		}
+	}
 }
 
 void dsp_strike(uint8_t note, uint8_t vel)
@@ -133,41 +184,44 @@ void dsp_strike(uint8_t note, uint8_t vel)
 		return;
 	voice_t *v = 0;
 	for (int i = 0; i < MAXV && i < cur->voices; i++)
-		if (voices[i].on && voices[i].note == note)
+		if ((voices[i].on || voices[i].pnew) && voices[i].note == note)
 			v = &voices[i];
 	if (v) {                                        /* restrike: more energy into the ringing bank */
-		v->k = 0;
-		v->vel = (int32_t)vel << 16;
+		v->pvel = (int32_t)vel << 16;
+		st_flags |= VS_STRIKE0 << (v - voices);
 		return;
 	}
-	for (int i = 0; i < MAXV && i < cur->voices; i++)         /* a free bank, else the oldest */
-		if (!v || (v->on && (!voices[i].on || voices[i].age < v->age)))
+	for (int i = 0; i < MAXV && i < cur->voices; i++) {       /* a free bank, else the oldest */
+		int busy = voices[i].on || voices[i].pnew;
+		if (!v || ((v->on || v->pnew) && (!busy || voices[i].age < v->age)))
 			v = &voices[i];
-	float f = 8.1757989f;                           /* MIDI 0 */
-	for (int i = 0; i < note / 12; i++)
-		f *= 2;
-	static const float semi[12] = { 1.0f, 1.0594631f, 1.1224620f, 1.1892071f, 1.2599210f, 1.3348399f, 1.4142136f,
-	                                1.4983071f, 1.5874011f, 1.6817929f, 1.7817974f, 1.8877486f };
-	f *= semi[note % 12];
+	}
+	v->on = 0;                                      /* a stolen bank stops now; the renderer may still be inside its
+	                                                   sample (it runs below the tick): the strike clears y1 / y2 */
+	uint32_t f = note_f0[note % 12] << (note / 12); /* Hz, Q16 */
 	int n = 0;
 	for (int m = 0; m < cur->n_modes && m < MAXM; m++) {
 		const dsp_mode_t *md = &modes[cur->first + m];
-		float w = 6.2831853f * f * md->ratio / DSP_FS;
-		if (w > 1.2f)                               /* above ~6 kHz: not needed for drums */
+		uint64_t fr = (uint64_t)f * ratio_q24(md->ratio);      /* mode frequency, Hz Q40 */
+		if ((fr >> 40) > 2984)                      /* w > 1.2 (above ~3 kHz): not needed for drums */
 			continue;
-		float r = md->r / 1073741824.0f;
-		v->a1[n] = (int32_t)(2 * r * cos_poly(w) * 1073741824.0f);
+		int32_t w = (int32_t)(((fr >> 24) * 1768559438ull) >> 30);   /* 2 pi fr / DSP_FS, Q28 */
+		int32_t s, c;
+		sincos_half_q31(w << 2, &s, &c);            /* of w / 2, Q31 */
+		int32_t cosw = Q31_ONE - (mulh(s, s) << 2); /* 1 - 2 sin^2(w / 2) */
+		int32_t sinw = mulh(s, c) << 2;             /* 2 sin(w / 2) cos(w / 2) */
+		v->a1[n] = mulh(md->r, cosw) << 2;          /* 2 r cos w, Q30 (r < 1: no overflow) */
 		v->a2[n] = mulh(md->r, md->r) << 2;
-		v->b[n] = (int32_t)(md->gain * sin_poly(w));   /* level Q30 * sin(w): impulse amplitude = level */
+		v->b[n] = mulh(md->gain, sinw) << 1;        /* level Q30 * sin(w): impulse amplitude = level */
 		v->y1[n] = v->y2[n] = 0;
 		n++;
 	}
 	v->n = n;
 	v->note = note;
-	v->vel = (int32_t)vel << 16;
-	v->k = 0;
+	v->pvel = (int32_t)vel << 16;
 	v->age = ++age;
-	v->on = 1;
+	v->pnew = 1;
+	st_flags |= VS_STRIKE0 << (v - voices);        /* sounds from its V_n on (vs_apply) */
 }
 
 /* hot loop: own function (registers) and run from RAM (no flash wait states), like the TIM1 interrupt */
@@ -182,7 +236,7 @@ __attribute__((noinline, section(".srodata"))) static void modal_fill(uint8_t *d
 				if (!v->on)
 					continue;
 				if (v->k < cur->mallet && v->k < MAXMALLET) {          /* mallet contact: excite */
-					int32_t x = mulh(v->vel, (int32_t)mallet[v->k++] << 4) << 8;   /* vel Q24 * pulse Q24 */
+					int32_t x = mulh(v->vel, (int32_t)mallet[v->k++] << 8) << 8;   /* vel Q24 * pulse Q24 */
 					for (int m = 0; m < v->n; m++) {
 						int32_t y = (mulh(v->a1[m], v->y1[m]) - mulh(v->a2[m], v->y2[m]) + mulh(v->b[m], x)) << 2;
 						v->y2[m] = v->y1[m];
@@ -255,16 +309,78 @@ static void osc_rate(int32_t p, osc_t *o)
 	uint32_t inc = osc_inc_top[i] + (((osc_inc_top[i + 1] - osc_inc_top[i]) * f) >> 4);
 	uint32_t inv = osc_inv_top[i] - (((osc_inv_top[i] - osc_inv_top[i + 1]) * f) >> 4);
 	o->inv = inv << oct;
-	o->inc = inc >> oct;
+	o->inc = (uint32_t)(((uint64_t)(inc >> oct) * clk_scale) >> 16);   /* pitch lock to the controller's crystal */
 }
 
-void dsp_pitch(int32_t p, int gate)
+void dsp_pitch(int32_t p, int gate)                 /* staged: applied with the state (vs_apply) */
 {
-	if (!cur || cur->kind != DSP_OSC)
+	st_pitch = p < 0 ? 0 : p > 0xFFFF ? 0xFFFF : p;
+	st_flags = gate ? st_flags | VS_GATE : st_flags & ~VS_GATE;
+}
+
+void dsp_phase_reset(void) { st_flags |= VS_PHASE; }
+
+void dsp_clock(uint32_t q8)
+{
+	int32_t dq = (int32_t)q8 - (FRAME_CYCLES << 8); /* scale = 1 / (1 + dq / N) ~ 1 - dq / q8 (|dq / N| < 1/32) */
+	if (dq > -(FRAME_CYCLES << 3) && dq < (FRAME_CYCLES << 3)) {
+		clk_scale = 65536 - (dq << 8) / (int32_t)(q8 >> 8);
+		q_flags = 0xFF;                             /* the next state applies the new scale */
+	}
+}
+
+uint16_t dsp_late(void) { return late_n; }
+
+/* the state V_n takes effect: oscillator rates and gate, staged strikes (renderer, or the tick when immediate) */
+static void vs_apply(const vstate_t *v)
+{
+	if (!cur)
 		return;
-	for (int i = 0; i < n_osc; i++)
-		osc_rate(p + osc_tab[cur->first + i].offset, &osc[i]);
-	osc_gate = gate;
+	if (cur->kind == DSP_OSC) {
+		for (int i = 0; i < n_osc; i++) {
+			osc_rate((int32_t)v->pitch + osc_tab[cur->first + i].offset, &osc[i]);
+			if (v->flags & VS_PHASE)
+				osc[i].ph = (uint32_t)i * 0x55555555u;
+		}
+		osc_gate = v->flags & VS_GATE;
+		return;
+	}
+	for (int i = 0; i < MAXV; i++) {
+		if (!(v->flags & (VS_STRIKE0 << i)))
+			continue;
+		voice_t *b = &voices[i];
+		if (b->pnew) {
+			for (int m = 0; m < MAXM; m++)
+				b->y1[m] = b->y2[m] = 0;
+			b->pnew = 0;
+		}
+		b->k = 0;
+		b->vel = b->pvel;
+		b->on = 1;
+	}
+}
+
+void dsp_commit(uint32_t t)                         /* control tick */
+{
+	vstate_t v = { t, st_pitch, st_flags };
+	st_flags &= VS_GATE;                            /* strikes and the phase reset are one-shot */
+	if (!t || !hw_dac_active() || !cur) {           /* nothing renders a queue: now */
+		vq_r = vq_w;
+		vs_apply(&v);
+		q_flags = 0xFF;
+		return;
+	}
+	if (v.pitch == q_pitch && v.flags == q_flags && !(v.flags & ~VS_GATE))   /* unchanged: nothing to switch */
+		return;
+	q_pitch = v.pitch;
+	q_flags = v.flags;
+	uint8_t w = vq_w, nw = (w + 1) % VQ;
+	if (nw == vq_r) {                               /* full (D too large for VQ): dropped */
+		late_n++;
+		return;
+	}
+	vq[w] = v;
+	vq_w = nw;
 }
 
 static inline uint32_t mulhu(uint32_t a, uint32_t b) { return (uint32_t)(((uint64_t)a * b) >> 32); }
@@ -335,7 +451,7 @@ void dsp_carrier(uint16_t *arr, uint16_t *half)
 	*half = (cur && cur->kind == DSP_OSC) ? DAC_HALF : DAC_HALF / DSP_UPS * DSP_UPS;   /* modal: 21 samples */
 }
 
-void dsp_fill(uint8_t *dst, int n)
+static void fill_seg(uint8_t *dst, int n)
 {
 	if (cur && cur->kind == DSP_OSC) {
 		osc_fill(dst, n);
@@ -344,6 +460,38 @@ void dsp_fill(uint8_t *dst, int n)
 	} else {                                        /* no patch (being set up): mid-scale */
 		for (int k = 0; k < n; k++)
 			dst = dac_out(dst, DSP_ARR << 7, &sd1, &sd2);
+	}
+}
+
+/* render n periods from time t, switching to each queued V_n at its period (modal: the nearest sample boundary) */
+void dsp_fill(uint8_t *dst, int n, uint32_t t)
+{
+	uint32_t t_start = t;
+	while (n > 0) {
+		int m = n;
+		while (vq_r != vq_w) {
+			const vstate_t *v = &vq[vq_r];
+			int32_t d = (int32_t)(v->t - t);
+			if (d > 0) {
+				int k = (d + DSP_CYC - 1) / DSP_CYC;         /* the first period at or after v->t */
+				if (cur && cur->kind == DSP_MODAL)
+					k = (k + DSP_UPS / 2) / DSP_UPS * DSP_UPS;
+				if (k > 0) {
+					if (k < m)
+						m = k;
+					break;
+				}
+			}
+			if ((int32_t)(v->t - t_start) < -DSP_UPS * DSP_CYC)   /* more than a sample before this half: missed */
+				late_n++;                        /* by the last render (one at the very end of a half rounds up to
+				                                    the next half's first period: not late) */
+			vs_apply(v);
+			vq_r = (vq_r + 1) % VQ;
+		}
+		fill_seg(dst, m);
+		dst += m * DAC_BPP;
+		t += (uint32_t)m * DSP_CYC;
+		n -= m;
 	}
 }
 

@@ -1,0 +1,1998 @@
+% TouchSynth Poly design report
+% build: python3 gen_tables.py && latexmk -pdf touchsynth_poly_report.tex   (in WSL; see the last appendix)
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{textcomp}
+\usepackage{microtype}
+\usepackage[a4paper,textwidth=16cm,top=2.5cm,bottom=2.7cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs,longtable,tabularx,array,multirow}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,calc,shapes.geometric,decorations.pathreplacing,patterns,backgrounds}
+\usepackage[siunitx,american]{circuitikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\usepackage{caption,subcaption}
+\usepackage{enumitem}
+\usepackage{pdfpages}
+\usepackage[section]{placeins}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\hypersetup{pdftitle={TouchSynth Poly - design report}}
+\graphicspath{{../figures/}}
+\captionsetup{font=small,labelfont=bf}
+\setlist{nosep,leftmargin=1.4em}
+\sisetup{range-phrase=\,\ldots\,,range-units=single}
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\sub}[1]{\textsubscript{#1}}
+\newcommand{\placeholder}[1]{\par\smallskip\noindent\fcolorbox{orange!70!black}{orange!8}{\parbox{0.97\linewidth}{%
+  \small\textbf{Placeholder.} #1}}\par\smallskip}
+\input{generated/stats.tex}
+
+\pagestyle{fancy}
+\fancyhf{}
+\setlength{\headheight}{14pt}
+\lhead{\small TouchSynth Poly -- design report}
+\rhead{\small draft 0.1}
+\cfoot{\small\thepage}
+
+\title{\textbf{TouchSynth Poly}\\[4pt]\large A polyphonic analog synthesizer:\\ voice cards with digital oscillators
+and analog filters on a USB backplane\\[10pt]\normalsize Design report, draft 0.1}
+\author{}
+\date{19 October 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+\vspace{-2em}
+
+\begin{abstract}
+\noindent TouchSynth Poly is a polyphonic synthesizer with four to eight voices. Each voice is a plug-in card with its
+own CH32V006 microcontroller. The firmware generates up to three band-limited oscillators (or a modal drum) and writes
+them to a \SI{187.5}{kHz} PWM DAC. The analog part of the card follows TouchSynth rev 0.1, redesigned for a single
+\SI{5}{V} supply:
+\begin{itemize}
+  \item a reconstruction filter,
+  \item a four-pole transistor ladder filter with voltage-controlled resonance,
+  \item a differential-pair VCA,
+  \item a current-steering stereo pan stage.
+\end{itemize}
+A four-layer backplane carries a CH32V203 controller, the power entry, USB, the voice bus and a two-bus stereo mixer.
+The voice bus is a \SI{1}{Mbaud} UART broadcast with a \SI{1}{kHz} SYNC line. Every card computes its control tick on
+the same SYNC edge and presents the result a fixed number of frames later, so all voices are aligned to a few
+microseconds and their pitch is locked to the controller's crystal.
+
+This report describes the design as it stands on 19 October 2026: requirements, architecture, both boards, the bus
+protocol, the firmware, the simulations (S9--S13) and the bench tests of the bus with a CH32V203 development board
+as controller and a CH32V006 as one voice. Both boards are drawn and routed (DRC clean), but neither has been built
+yet. The bench tests show that, with the bus active, a card has too little CPU for a three-oscillator patch; two
+oscillators or a cheaper render are needed (Section~\ref{sec:cpu}). Open points are listed in
+Section~\ref{sec:open}.
+\end{abstract}
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.43\textwidth}\includegraphics[width=\linewidth]{voice_pcb/render_iso.png}
+    \caption{voice card, 50\,$\times$\,50\,mm, 4 layers}\end{subfigure}\hfill
+  \begin{subfigure}{0.43\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/render_iso.png}
+    \caption{backplane, 100\,$\times$\,100\,mm, 4 layers}\end{subfigure}
+  \caption{KiCad 3D renders of the two boards, generated from the board files by \file{hw/pcb\_figures.py}.
+  Not-fitted parts are left out.}
+  \label{fig:hero}
+\end{figure}
+
+\clearpage
+\tableofcontents
+\clearpage
+
+% =====================================================================================================================
+\section{Overview}\label{sec:overview}
+
+\subsection{What the instrument is}
+TouchSynth Poly is a polyphonic analog synthesizer with 4 to 8 voices. It is played and edited from a computer
+over USB, or from a class-compliant USB-MIDI keyboard. There are no controls on the instrument itself.
+\begin{itemize}
+  \item \textbf{Voice cards.} Each voice is an identical plug-in card of 50\,$\times$\,50\,mm. It carries:
+    \begin{itemize}
+      \item a CH32V006 that computes the oscillators and drives a PWM DAC and four PWM control voltages;
+      \item the analog filter, resonance loop and VCA of TouchSynth rev 0.1, redesigned for \SI{5}{V};
+      \item a stereo pan stage.
+    \end{itemize}
+    A card also runs on its own on the bench: it is powered and programmed by a WCH-LinkE and played from the
+    SWIO console.
+  \item \textbf{Backplane.} A board of 100\,$\times$\,100\,mm with eight slots. It carries:
+    \begin{itemize}
+      \item the CH32V203 controller with its crystal, the master clock of the instrument;
+      \item USB-C (device: MIDI and CDC) and a USB-A host port for a keyboard (drawn, not fitted);
+      \item the voice bus;
+      \item the power entry;
+      \item the two-bus stereo mixer with the line output.
+    \end{itemize}
+\end{itemize}
+The project is the successor of TouchSynth rev 0.1, a monophonic synthesizer with an analog DCO on one board, whose
+report is on the \texttt{master} branch. The analog voice circuit and much of the firmware come from there; board~1 of
+rev 0.1 served as the test bed for the oscillator engine, the DAC and the clock trimming.
+
+\subsection{Constraints}
+\begin{itemize}
+  \item \textbf{Parts:} only JLCPCB \emph{Basic} and \emph{Promotional Extended} parts are assembled; the MCUs (own
+    stock), connectors, headers and the few parts missing from the lists are hand-soldered.
+  \item \textbf{MCUs:} CH32V006F8P7 (TSSOP-20, \SI{48}{MHz} from the internal HSI, \SI{8}{KB} RAM, \SI{62}{KB} flash)
+    on the cards; CH32V203C8T6 (LQFP-48, \SI{144}{MHz} from an \SI{8}{MHz} crystal) on the backplane.
+  \item \textbf{Supply:} a single \SI{5}{V} supply from USB-C or an external adapter, within \SI{500}{mA}.
+  \item \textbf{Size:} voice cards at most 50\,$\times$\,50\,mm on 4 layers, at a slot pitch of \SI{10}{mm} (parts on one
+    side, at most about \SI{6}{mm} high); backplane within 100\,$\times$\,100\,mm, planned as 2 layers, drawn and routed with 4.
+  \item \textbf{Tools:} ch32fun, KiCad 10, ngspice. Schematics and boards are generated by Python scripts in
+    \file{hw/} and checked against the simulation netlists.
+\end{itemize}
+
+\subsection{Requirements}
+Tables~\ref{tab:reqf}--\ref{tab:reqp} summarise the requirements of \file{docs/design.md}. The status is
+\emph{met} (measured on board~1 or simulated, as noted), \emph{design} (follows from the design, to be confirmed on
+hardware) or \emph{open} (not yet shown).
+
+\begin{table}[htbp]
+\centering\small
+\caption{Functional requirements (\file{docs/design.md} 2.1).}\label{tab:reqf}
+\begin{tabularx}{\textwidth}{@{}l X >{\raggedright\arraybackslash}p{4.3cm}@{}}
+\toprule
+ID & Requirement & Status \\
+\midrule
+F1 & 4 to 8 voices on identical cards; any slot may be empty; the controller finds the populated slots at power-up
+  & design (enumeration over per-slot NRST) \\
+F2 & Played from a computer over USB-MIDI, class compliant & open \\
+F3 & Played from a class-compliant USB-MIDI keyboard on a USB host port & open (port drawn, not fitted) \\
+F4 & Configuration, presets and firmware updates over USB (CDC), cards included (SWIO from the controller)
+  & open; SWIO programming through a V203 shown on the bench \\
+F5 & Per voice: 3 oscillators, noise, modal drums; 4-pole ladder with resonance to self-oscillation; VCA; envelopes
+  and modulation in firmware & met on board~1 (oscillators, drums, filter); with the bus running, three oscillators
+  exceed the card's CPU (Section~\ref{sec:cpu}) \\
+F6 & Multitimbral: up to 8 parts, each with channel, key range, voices, mode and patch & open (\file{midi.md}) \\
+F7 & Stereo line out & design (pan on the card, S13) \\
+F8 & Each card runs on its own (programmer power, SWIO console, own line out) & design \\
+F9 & Each card calibrates itself through its audio loopback & met on board~1 (rev 0.1); to redo at \SI{5}{V} \\
+F10 & Option: the mix as a USB audio input & open (ADC taps fitted) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Performance requirements (\file{docs/design.md} 2.2).}\label{tab:reqp}
+\begin{tabularx}{\textwidth}{@{}l X l >{\raggedright\arraybackslash}p{5.0cm}@{}}
+\toprule
+ID & Requirement & Target & Status \\
+\midrule
+P1 & Pitch agreement between voices after start-up & $\leq$ 2\,cent & design: HSITRIM leaves $\leq \pm$1.8\,cent, then
+  phase steps scaled to SYNC; HSI wander 0.35\,cent rms remains \\
+P2 & Oscillator quality & as an analog DCO & met: equal to the DCO on board~1 (C2--C7) \\
+P3 & DAC carrier at the line out & $\leq$ $-$70\,dB FS & met in simulation: \statSelevenCarrier\,dB (S11) \\
+P4 & Signal-to-noise per voice & $\geq$ 65\,dB & met in simulation: \statStenSnrLo--\statStenSnrHi\,dB (S10) \\
+P5 & Distortion at full drive, filter open & $\leq$ 1\,\% & met in simulation: \statStenThd\,\% (S10) \\
+P6 & Cutoff range & 20\,Hz--20\,kHz & met in simulation: \statStenFcLow\,Hz--\statStenFcHigh\,kHz (S10) \\
+P7 & Supply rejection 100\,Hz--10\,kHz & $\geq$ 60\,dB & met in simulation: 66--77\,dB (S10) \\
+P8 & Latency, USB-MIDI note to sound & constant, $\leq$ 10\,ms & design: 6--7\,ms; bench: $D$ frames + 1--2 carrier
+  periods \\
+P9 & Power-up to playable, 8 cards & $\leq$ 3\,s & design: about 1\,s plus 0.3\,s per empty slot; bench: one card
+  found 0.3--0.5\,s after a reset \\
+P10 & Timing alignment between voices & $\leq$ 10\,\textmu s & design: a few \textmu s; bench (one card): latency
+  spread 5--8\,\textmu s against SYNC, alignment between cards not yet measured \\
+P11 & Long-term pitch drift between voices & none & design: locked to the controller's crystal \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{System block diagram}
+Figure~\ref{fig:system} shows the whole instrument. Table~\ref{tab:keyfig} lists its key figures; the numbers
+marked as generated come from the design sources (\file{hw/voice.py}, \file{hw/backplane.py}) and the result files.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\small\sffamily, >={Stealth[length=2mm]},
+  blk/.style={draw, rounded corners=2pt, fill=#1, minimum height=9mm, align=center}, blk/.default=white]
+  \node[blk=gray!12, minimum width=30mm] (pc) at (0,2.4) {computer\\\scriptsize USB-MIDI, CDC};
+  \node[blk=gray!12, minimum width=30mm] (kbd) at (0,0.6) {MIDI keyboard\\\scriptsize USB host (DNP)};
+  \node[blk=orange!15, minimum width=30mm] (pwr) at (0,-2.9) {5\,V: USB-C VBUS\\\scriptsize or external (JP1)};
+  \node[blk=blue!18, minimum width=34mm, minimum height=44mm] (mcu) at (5.2,1.1)
+    {\textbf{CH32V203}\\\scriptsize 144\,MHz, 8\,MHz crystal\\[3pt]\scriptsize MIDI router, parts\\\scriptsize voice
+     allocation\\\scriptsize patch library\\\scriptsize bus scheduler\\\scriptsize SWIO programmer};
+  \node[blk=red!12, minimum width=34mm] (ps) at (5.2,-2.9) {F1, TVS, LDO 3.3\,V\\\scriptsize +5\,V slot rail};
+  \draw[->] (pc.east) -- node[above,font=\scriptsize]{USB-C} (pc.east -| mcu.west);
+  \draw[->] (kbd.east) -- node[above,font=\scriptsize]{USB-A} (kbd.east -| mcu.west);
+  \draw[->] (pwr) -- (ps);
+  \draw[->] (ps.north) -- node[right,font=\scriptsize]{3.3\,V} (mcu.south);
+  % cards
+  \foreach \n/\y in {1/2.8, 2/1.4, 8/-1.4}
+    \node[blk=yellow!20, minimum width=44mm, minimum height=10mm] (c\n) at (12.6,\y)
+      {voice card \n\\\scriptsize CH32V006, DAC, ladder, VCA, pan};
+  \node at (12.6,0.15) {\large$\vdots$};
+  % broadcast and SYNC
+  \draw[->, thick] (6.9,2.0) -- node[above,font=\scriptsize]{BCAST, SYNC} (9.0,2.0);
+  \draw[thick] (9.0,2.8) -- (9.0,-1.4);
+  \foreach \n in {1,2,8} \draw[->, thick] (c\n.west -| 9.0,0) -- (c\n.west);
+  \fill (9.0,2.0) circle (0.6mm);
+  % return
+  \draw[dashed] (9.6,2.8) -- (9.6,-1.4);
+  \foreach \n in {1,2,8} \fill (c\n.west -| 9.6,0) circle (0.5mm);
+  \draw[->, dashed] (9.6,0.6) -- node[below,font=\scriptsize]{RETURN} (6.9,0.6);
+  % NRST, SWIO
+  \draw[->] (6.9,-0.6) -- node[above,font=\scriptsize]{NRST$_k$, SWIO$_k$} (8.5,-0.6) -- (8.5,-1.7) -- (10.4,-1.7);
+  % mixer and out
+  \node[blk=green!18, minimum width=26mm, minimum height=48mm] (mix) at (18.0,0.7)
+    {\textbf{two-bus}\\\textbf{stereo mixer}\\[3pt]\scriptsize MCP6002\\\scriptsize VREF 2.41\,V\\\scriptsize
+     pseudo-differential};
+  \foreach \n in {1,2,8} \draw[->] (c\n.east) -- node[above,font=\scriptsize]{L, R, GND} (c\n.east -| mix.west);
+  \node[align=center] (out) at (21.6,0.7) {line out\\\scriptsize 3.5\,mm jack};
+  \draw[->] (mix) -- (out);
+  \draw[->, dashed] (mix.south) -- (18.0,-2.2) -- node[below,font=\scriptsize]{ADC taps (USB audio option)}
+    (6.3,-2.2) -- (6.3,-1.1);
+  \draw[->] (ps.east) -- node[below,font=\scriptsize]{+5\,V to all slots} (10.0,-2.9);
+\end{tikzpicture}}
+\caption{System architecture. The controller is the only clock reference and the only bus master; the cards
+receive one broadcast line and the SYNC frame clock and answer on a shared open-drain return line only when asked.
+Each card returns its stereo signal and its own audio ground to the mixer.}
+\label{fig:system}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Key figures. \emph{gen.}: generated from the design sources or result files at build time.}\label{tab:keyfig}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright}p{7.4cm} >{\raggedright}X l@{}}
+\toprule
+Item & Value & Source \\
+\midrule
+Voices & 4--8 cards, 8 slots & design \\
+Voice card: parts, nets, schematic sheets & \statVoiceParts, \statVoiceNets, \statVoiceSheets & gen. \\
+Voice card: assembled parts, BOM lines, parts cost & \statVoiceAsm, \statVoiceLines, USD \statVoiceCost & gen. \\
+Backplane: parts, nets, schematic sheets & \statBpParts, \statBpNets, \statBpSheets & gen. \\
+Backplane: assembled parts, BOM lines, parts cost & \statBpAsm, \statBpLines, USD \statBpCost & gen. \\
+Oscillators per voice & up to 3 (saw / pulse, polyBLEP), or modal drum & firmware \\
+DAC & 7 bit, \SI{187.5}{kHz}, 2nd-order error feedback & firmware \\
+Cutoff range (card, simulated) & \statStenFcLow\,Hz -- \statStenFcHigh\,kHz & gen.\ (S10) \\
+Signal-to-noise, THD (card, simulated) & \statStenSnrLo--\statStenSnrHi\,dB, \statStenThd\,\% & gen.\ (S10) \\
+DAC carrier at the line out (simulated) & \statSelevenCarrier\,dB re full scale & gen.\ (S11) \\
+Stereo separation at hard pan, centre level (simulated) & \statSthirteenSep\,dB, \statSthirteenCentre\,dB per channel & gen.\ (S13) \\
+Mixer: 8 cards hard-panned, in phase & \statStwelveHard\,V\sub{pp}, \statStwelveHardMargin\,dB below clipping & gen.\ (S12) \\
+Voice bus & \SI{1}{Mbaud} 8N1, SYNC \SI{1}{kHz}, COBS, CRC-8 & bus.md \\
+Latency MIDI $\to$ sound & 6--7\,ms, constant; alignment a few \textmu s & bus.md, bench \\
+Supply & \SI{5}{V}, about 110--120\,mA for 8 cards & backplane.md \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tool flow}
+Every artefact is generated by scripts in the repository (Table~\ref{tab:tools}). For each board, one Python design
+description is the single source of truth: schematic, PCB netlist and the simulation cross-check are derived from it.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Tool flow and where each step lives in the repository.}\label{tab:tools}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright}p{3.0cm} >{\raggedright}p{4.0cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Step & Tool & Files \\
+\midrule
+Part selection & JLCPCB parts list (Basic + Promotional) & \file{parts/jlcpcb\_basic\_and\_promotional\_parts.csv}, \file{hw/lcsc.py} \\
+Circuit simulation & ngspice-42 (WSL), Python & \file{sim/s10\_5v}, \file{s11\_recon}, \file{s12\_mixer}, \file{s13\_pan} \\
+Behavioural model & Python + numba & \file{sim/behav/}, \file{sim/s9\_osc/} \\
+Circuit description & Python & \file{hw/voice.py}, \file{hw/backplane.py} (\texttt{BOARD=backplane}) \\
+Schematic & generated KiCad 10 schematic, hand-laid-out sheets & \file{hw/gen\_sch2.py}, \file{hw/layouts\_voice.py}, \file{hw/layouts\_backplane.py} \\
+Checks & kicad-cli ERC, netlist and simulation cross-check & \file{hw/check\_netlist.py}, \file{hw/check\_sim.py} \\
+PCB & KiCad 10 Python API, Freerouting, own maze router & \file{hw/gen\_pcb.py}, \file{hw/gen\_pcb\_bp.py}, \file{hw/pcb\_*.py} \\
+Fabrication data, figures & kicad-cli & \file{hw/fab.py}, \file{hw/pcb\_figures.py} \\
+Firmware & ch32fun, riscv64-unknown-elf-gcc (WSL) & \file{firmware/voice/}, \file{firmware/bench\_ctrl/} \\
+Bench tests & Python, minichlink, oscilloscope over LAN & \file{tools/bustest.py}, \file{tools/buslib.py} \\
+This report & Python, pdflatex & \file{docs/report/gen\_tables.py}, \file{touchsynth\_poly\_report.tex} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% =====================================================================================================================
+\section{System architecture}\label{sec:arch}
+
+\subsection{Partitioning}
+Table~\ref{tab:part} gives the division of work between the controller and the cards.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Partitioning (\file{docs/design.md} 3.1).}\label{tab:part}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright}p{2.6cm} >{\raggedright}X >{\raggedright\arraybackslash}X@{}}
+\toprule
+Block & Responsibility & Why here \\
+\midrule
+Controller (backplane) & USB device and host, MIDI parsing, voice allocation, patch storage, bus master, clock
+  reference, programming the cards & the only crystal; USB needs one; one place for the whole instrument's state \\
+Voice card MCU & oscillators, envelopes, modulation, CV generation, self-calibration & \SI{48}{MHz} is enough for one
+  voice, not for two; with the bus running, three oscillators do not fit (Section~\ref{sec:cpu}) \\
+Voice card analog & reconstruction filter, expo converter, ladder, VCA, pan, loopback & the analog sound of rev 0.1;
+  local references make the card independent of backplane ground \\
+Mixer (backplane) & sum, line out, ADC feed & one stage for all cards, at the quiet end of the backplane \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The main design choices and their basis:
+\begin{itemize}
+  \item \textbf{Digital oscillators on a PWM DAC instead of the analog DCO.} On board~1 the DAC saw and the DCO saw
+    measure the same inharmonic content (S9, Section~\ref{sec:dac}). The DAC gives three oscillators, any waveform and
+    the modal drums without extra parts.
+  \item \textbf{\SI{187.5}{kHz} carrier, one sample per carrier period, second-order error feedback.} The sampling
+    images, not the bit depth, limit the quality. At this rate 7 bits reach the quality of an ideal DAC in the model,
+    and a \SI{31}{kHz} two-pole filter takes the carrier to \statSelevenCarrier\,dB (S11).
+  \item \textbf{Single \SI{5}{V}.} Rail-to-rail MCP6002 op-amps replace the TL072s of rev 0.1. The core simulates
+    within 1--2\,dB of rev 0.1 at less than half the current (S10).
+  \item \textbf{UART broadcast with a SYNC line instead of SPI.} On the V006, SPI1 receive shares DMA channel~2 with
+    the timer request that rev 0.1 used for the DAC; the UART receive ring runs on channel~5 beside the DAC and the CV
+    burst (Section~\ref{sec:mcu}).
+  \item \textbf{Synchronised HSI instead of a clock line.} Each card trims its oscillator to the SYNC pulses and scales
+    its pitch to the measured frame period. A crystal-locked \SI{24}{MHz} clock line (CLK\_IN) remains as a fallback,
+    fitted on demand.
+  \item \textbf{Pan on the card, two mixing buses.} The card steers its VCA current into a left and a right output
+    (S13); the backplane only sums (S12). Every slot is identical, and the stereo position is a firmware parameter.
+\end{itemize}
+
+\subsection{Clock and time base}\label{sec:clock}
+There are two kinds of clock domain (Table~\ref{tab:clocks}).
+
+\begin{table}[htbp]
+\centering\small
+\caption{Clock domains.}\label{tab:clocks}
+\begin{tabularx}{\textwidth}{@{}l >{\raggedright}p{4.6cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Domain & Source & Use \\
+\midrule
+Controller & \SI{8}{MHz} crystal, PLL $\times$18 = \SI{144}{MHz} & USB, bus baud rate, SYNC \SI{1}{kHz} (TIM1 CH1),
+  \SI{24}{MHz} fallback clock (TIM3 CH4 = 144/6) \\
+Each voice & own HSI, \SI{48}{MHz} after the fixed $\times$2 PLL, trimmed to SYNC & DAC carrier \SI{187.5}{kHz}, CV PWM
+  \SI{46.875}{kHz}, UART divider, oscillator phase steps scaled by the measured SYNC period \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{SYNC.} The controller outputs a \SI{1}{kHz} square wave; its rising edge starts a \emph{frame}. Each card
+takes its control tick (envelopes, LFOs, glide, CV laws, bus parsing) from this edge, so all cards compute on the same
+ticks. Global LFOs take their phase from the frame number and stay phase-locked across voices without messages.
+
+\paragraph{Clock trimming.} The HSI is specified at $\pm$\SI{2}{\percent}. A card first timestamps 100 SYNC periods
+and sets HSITRIM; one trim step is about \SI{0.2}{\percent} (board~1: \SI{0.21}{\percent}, bench V006: $+0.19$ /
+$-0.25$\,\%), so the residual is at most about $\pm$\SI{0.1}{\percent} or 1.8\,cent. Only then does it listen to the
+bus: at \SI{1}{Mbaud} its USART divider is exactly 3.0 and cannot correct the clock itself. Afterwards the card keeps
+measuring the SYNC period (filtered over about 64 frames) and scales its oscillators' phase steps by
+48\,000\,/\,$\bar P$, so the pitch follows the crystal. What remains is the HSI's own short-term wander: board~1
+showed flicker frequency noise with an Allan deviation of about $2\times10^{-4}$ from \SI{1}{ms} to \SI{0.5}{s}, i.e.
+0.35\,cent rms, a slight independent wander of each voice similar to analog VCOs.
+
+\paragraph{Presentation delay.} What a card computes in tick $n$ reaches its outputs at frame $n + D$, on every card:
+CVs through a delay line, the oscillator state through a queue that the DAC renderer applies at the exact carrier
+period. The controller stamps every event with its execution frame $L$ frames ahead. With $D = 4$ and $L = 2$ the
+latency is 6--7\,ms and constant (details in Section~\ref{sec:bus}).
+
+\subsection{Operating sequence}
+\begin{enumerate}
+  \item \textbf{Power-up:} the controller shifts zeros into the 74HC595, enables its outputs (all cards in reset)
+    and starts SYNC and FRAME.
+  \item \textbf{Enumeration:} slot by slot it releases NRST. The card measures SYNC, trims its HSI, starts its
+    receiver and answers ASSIGN with HELLO (its 64-bit chip ID). A slot without HELLO within \SI{300}{ms} is empty.
+    About \SI{1}{s} for 8 cards, plus \SI{0.3}{s} per empty slot.
+  \item \textbf{Calibration} (on request): each card runs its loopback calibration; the controller keeps a copy of
+    the results by chip ID.
+  \item \textbf{Play:} MIDI events become timed voice messages on the broadcast line.
+  \item \textbf{Update:} the controller reprograms a card over its SWIO line with an image received over CDC.
+\end{enumerate}
+A card that sees no SYNC within \SI{200}{ms} of reset runs standalone as a mono synth on its own HSI, controlled from
+the SWIO console. This is also its state while the controller is in reset or in its bootloader: the 595 outputs are
+then off, and the NRST lines float high through the cards' internal pull-ups.
+
+\subsection{Power budget}\label{sec:power}
+Table~\ref{tab:power} gives the current budget (\file{docs/backplane.md} 4.3).
+
+\begin{table}[htbp]
+\centering\small
+\caption{Current budget at \SI{5}{V}.}\label{tab:power}
+\begin{tabularx}{\textwidth}{@{}l r >{\raggedright\arraybackslash}X@{}}
+\toprule
+Load & Current & Basis \\
+\midrule
+8 voice cards & 80\,mA & about 10\,mA each: analog \statSthirteenCurrent\,mA (S13), MCU about 5\,mA, LEDs \\
+CH32V203 at \SI{144}{MHz} & 12--20\,mA & datasheet: 11.8\,mA typical, plus USB and I/O \\
+Mixer op-amps & \statStwelveSupply\,mA & S12 \\
+LEDs & about 3\,mA & PWR, ACT (and HOST if fitted) \\
+SWIO pull-up held low & 3.3\,mA & only while a card is being programmed \\
+SPI flash (if fitted) & \textmu A standby & up to about 25\,mA while programming \\
+\midrule
+Synth & about 110--120\,mA & \\
+Keyboard on USB-A (port not fitted at first) & 50--200\,mA & limited at 0.5\,A by the TPS2051C \\
+Total & at most about 425\,mA & inside a USB 2.0 port's 500\,mA \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Inrush.} Each card filters its analog rail with \SI{22}{\ohm} and three \SI{100}{\micro F} X5R capacitors
+(about \SI{35}{\micro F} each at \SI{5}{V}). Each card therefore limits its own inrush to about \SI{230}{mA},
+decaying with $\tau \approx \SI{2.3}{ms}$; eight cards draw about \SI{1.8}{A} for a few milliseconds at plug-in. This
+exceeds the USB attach allowance, but most ports tolerate it. The backplane keeps a P-channel soft-start switch as a
+footprint, bridged by a \SI{0}{\ohm} resistor (Section~\ref{sec:bppower}). Before USB configuration the synth draws
+about \SI{115}{mA} against the nominal \SI{100}{mA} limit; hosts rarely enforce it.
+
+\paragraph{Supply margin.} The card works fully down to about \SI{4.3}{V} on its analog rail. Below that, full cutoff
+combined with full resonance saturates the expo and resonance V$\to$I transistors; the audio path itself holds down
+to \SI{4.0}{V}. With the \SI{22}{\ohm} rail filter (\SI{0.1}{V} drop) full function needs about \SI{4.4}{V} at the card
+input, which a USB port's \SI{4.75}{V} minimum provides with typical cable loss.
+
+\subsection{Card connector}
+The card plugs into the backplane with a 2$\times$8 right-angle header on its bottom edge (Table~\ref{tab:conn}). All
+logic is at \SI{3.3}{V} on both sides. Pin~6 carries the card's audio ground reference, joined on the card to the
+ground pads of both output bleeders by its own track; the mixer uses it as the reference of its pseudo-differential
+input.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Backplane connector, card side (J1 of \file{hw/voice.py}) and slot side (socket of \file{hw/backplane.py});
+generated.}\label{tab:conn}
+\input{generated/connector.tex}
+\end{table}
+
+% =====================================================================================================================
+\section{Voice card}\label{sec:voice}
+
+\subsection{Signal path}
+Figure~\ref{fig:voicepath} shows the signal path. The firmware computes the oscillators at the carrier rate and writes
+one 7-bit duty code per carrier period. A two-pole Sallen-Key filter removes the carrier, and the result drives the
+ladder filter like rev 0.1's saw. Cutoff, resonance, VCA level, VCA trim and pan position are PWM outputs filtered by
+RC networks. The schematic (\statVoiceSheets\ sheets) is reproduced in Appendix~\ref{app:sch}.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\small\sffamily, node distance=5mm and 6mm, >={Stealth[length=2mm]},
+  blk/.style={draw, rounded corners=2pt, fill=#1, minimum height=9mm, minimum width=15mm, align=center},
+  blk/.default=white]
+  \node[blk=blue!18, minimum height=50mm, minimum width=22mm, align=center] (mcu) at (0,-1.6)
+    {CH32V006\\\scriptsize 48\,MHz\\[3pt]\scriptsize 3 oscillators\\\scriptsize or modal\\\scriptsize SDM2, 7 bit\\[3pt]
+     \scriptsize envelopes,\\\scriptsize LFO, CV laws\\[3pt]\scriptsize bus, SYNC};
+  \node[blk=orange!15, right=12mm of mcu.north east, anchor=north west, yshift=-2mm] (sk) {Sallen-Key\\\scriptsize 31\,kHz, C0G};
+  \node[blk=white, right=of sk] (mx) {mixer\\\scriptsize 240\,k$\Omega$};
+  \node[blk=yellow!25, right=of mx] (lad) {ladder\\\scriptsize 4 pole, 10\,nF};
+  \node[blk=green!15, right=of lad] (ina) {INA\\\scriptsize G = 11};
+  \node[blk=teal!15, right=10mm of ina] (vca) {VCA\\\scriptsize diff.\ pair};
+  \node[blk=teal!25, right=of vca] (pan) {steering\\\scriptsize pairs L/R};
+  \node[blk=green!12, right=of pan, yshift=7mm] (dl) {diff.\ amp L\\\scriptsize G = 3};
+  \node[blk=green!12, right=of pan, yshift=-7mm] (dr) {diff.\ amp R\\\scriptsize G = 3};
+  \node[right=5mm of dl, align=left] (ol) {AUDIO\_L};
+  \node[right=5mm of dr, align=left] (or) {AUDIO\_R};
+  \draw[->] (sk) -- (mx); \draw[->] (mx) -- (lad); \draw[->] (lad) -- (ina); \draw[->] (ina) -- node[above,font=\scriptsize]{LPF} (vca);
+  \draw[->] (vca) -- (pan); \draw[->] (pan) -- (dl); \draw[->] (pan) -- (dr); \draw[->] (dl) -- (ol); \draw[->] (dr) -- (or);
+  \draw[->] (mcu.east |- sk) -- node[above,font=\scriptsize]{PC2} (sk);
+  % lower row
+  \node[blk=yellow!12, below=10mm of lad] (expo) {expo conv.\\\scriptsize BC847BS + LM324};
+  \node[blk=green!22, below=10mm of ina, xshift=4mm] (res) {resonance\\\scriptsize VCA + diff.\ amp};
+  \node[blk=cyan!12, below=10mm of vca] (vi) {V$\to$I\\\scriptsize LM324};
+  \node[blk=cyan!10, below=10mm of pan] (pnet) {pan bias\\\scriptsize RC, 66\,Hz};
+  \draw[->] (expo) -- (lad);
+  \draw[->] (ina.south) -- ++(0,-4mm) -| (res.north);
+  \draw[->] (res.west) -- ++(-3mm,0) |- ($(lad.south east)+(0,1.5mm)$);
+  \draw[->] (vi) -- (vca); \draw[->] (pnet) -- (pan);
+  % CV networks
+  \node[blk=cyan!8, minimum width=80mm] (cvf) at ($(expo.south)!0.5!(vi.south)+(0,-16mm)$) {PWM CV filters (TIM1, 46.875\,kHz, 10 bit + 2-bit dither)};
+  \draw[->] (cvf.north -| expo) -- node[left,font=\scriptsize]{CUT} (expo);
+  \draw[->] (cvf.north -| res) -- node[left,font=\scriptsize]{RES} (res);
+  \draw[->] (cvf.north -| vi) -- node[left,font=\scriptsize]{VCA} (vi);
+  \draw[->] (cvf.east) -| node[pos=0.75,right,font=\scriptsize]{PAN (TIM2 CH1)} (pnet.south);
+  \draw[->] (mcu.east |- cvf) -- node[above,font=\scriptsize]{PC7, PC0, PD3, PC5} (cvf.west);
+  % loopback
+  \draw[->, dashed] (vca.north) ++(0,0) -- ++(0,12mm) -| node[pos=0.25,above,font=\scriptsize]{loopback VCAOUT $\to$ ADC (PC4)} (mcu.north);
+  % references
+  \node[blk=red!10, below=6mm of mcu, minimum width=22mm] (ref) {CJ431 2.5\,V\\\scriptsize VREF, VBIAS,\\\scriptsize VEXP\_REF};
+\end{tikzpicture}}
+\caption{Voice card signal path. Dashed: the audio loopback used for calibration. Not drawn: the VCA trim (PC6, into
+the VCA's second input) and the DAC low byte of the dual-PWM option.}
+\label{fig:voicepath}
+\end{figure}
+
+\subsection{Digital oscillators and the PWM DAC (S9)}\label{sec:dac}
+\paragraph{DAC.} TIM2 counts up and down over $2\times128$ ticks at \SI{48}{MHz}, a \SI{187.5}{kHz} carrier with
+129 duty levels; the pulses are centred on the bottom of the count, so the signal does not modulate the pulse
+position. The firmware computes one sample per carrier period and quantises it to 7 bits with second-order error
+feedback (noise transfer function $(1-z^{-1})^2$).
+\begin{itemize}
+  \item \textbf{Loading (format 4):} in centre-aligned mode 2 a CH3 compare at 64 requests DMA1 channel~1 once per
+    period, on the up-count only. The DMA writes the next code into the CH2 preload, which the update at the top of the
+    count loads, so the pulse around the bottom stays symmetric. One byte per period: \SI{187500}{transfers/s}.
+  \item \textbf{Start sequence:} TIM2 is reset through RCC and configured while stopped; the preloads are loaded with
+    UG and the flags cleared; the DMA channel is armed and CC3DE set with the counter at 0; CEN comes last. On board~1,
+    1000 starts in format~4 and 470 in format~3 showed no transfer before the first compare and exactly one entry at
+    the first request; the read-back was exact over 2.0\,M and 0.96\,M requests.
+  \item \textbf{Dual-PWM option:} TIM2 CH4 (PC1) drives a low byte into the filter input through
+    \SI{1.33}{M\ohm} (\SI{1}{M\ohm} + \SI{330}{k\ohm}, not fitted) next to the high byte's \SI{11}{k\ohm}: 7 + 7 bits on
+    the same carrier. A TIM2 DMA burst from the same request writes [high, 64, low] (format~3). The low-byte span is
+    about 6\,\% larger than one high-byte step, so no tolerance leaves a gap; the firmware splits each sample with a
+    ratio measured through the card's own loopback (null method, \file{docs/spec.md} 3.5).
+\end{itemize}
+
+\paragraph{Oscillators.} Up to three saw or pulse oscillators per voice (a pulse is the difference of two saws), each
+with a two-point polyBLEP at the wrap; noise comes from an LFSR. A modal engine (resonator banks for drums, in fixed
+point) renders \SI{15.625}{kHz} samples and interpolates them over 12 carrier periods. The rev 0.1 analog DCO, sub and
+noise outputs are gone.
+
+\paragraph{S9: DAC against DCO.} The behavioural model compared the analog DCO with several DAC variants on the same
+filter, VCA and output (Table~\ref{tab:s9}, Figure~\ref{fig:s9}). The metric is the inharmonic content of a scale note
+(aliasing and quantisation noise relative to the total, \SIrange{20}{20000}{Hz}). The rev 0.1 DAC mode (\SI{15.6}{kHz}
+samples, interpolated) aliases at $-20$ to $-35$\,dB. One sample per carrier period at \SI{187.5}{kHz} with
+second-order shaping comes within a few dB of the DCO. In the three-oscillator voice (Table~\ref{tab:s9moog}) the
+\SI{93.75}{kHz} variants stay at $-22$ to $-38$\,dB whatever their resolution, because their sample-and-hold images
+pass the filter; the \SI{187.5}{kHz} carrier reaches $-67$ to $-87$\,dB.
+
+\begin{table}[htbp]
+\centering\small
+\caption{S9: inharmonic content [dB re total] of an open-filter saw in the behavioural model
+(\file{docs/results/s9\_osc.csv}); generated. The card uses (h).}\label{tab:s9}
+\input{generated/s9_osc.tex}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\caption{S9b: residual [dB] of a three-oscillator voice against an ideal DAC with the same filter
+(\file{docs/results/s9\_moog.csv}); generated.}\label{tab:s9moog}
+\input{generated/s9_moog.tex}
+\end{table}
+
+\begin{figure}[p]
+\centering\includegraphics[width=0.92\textwidth]{s9_osc.pdf}
+\caption{S9: spectrograms of the open-filter program (scale, glide C3$\to$C7) for the oscillator variants of
+Table~\ref{tab:s9} in the behavioural model.}\label{fig:s9}
+\end{figure}
+
+\paragraph{Board~1.} The DAC was implemented on board~1 (rev 0.1 hardware, CH32V006), with the pulse output as the
+DAC pin and the ladder as the only reconstruction filter. Saws from C2 to C7 through the open filter show the same
+inharmonic content from the DCO and the DAC within about $\pm$2\,dB, and the same floor with the VCA closed
+(Table~\ref{tab:hwdac}, Figure~\ref{fig:s9hw}). The DAC is about 3\,dB quieter there because board~1 feeds it through
+\SI{470}{k\ohm}; the card uses \SI{240}{k\ohm} for the drive of rev 0.1's saw.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Board~1: saw C2--C7 from the analog DCO and from the PWM DAC, filter open
+(\file{docs/results/hw\_board1\_dco\_vs\_dac.csv}); generated.}\label{tab:hwdac}
+\input{generated/hw_dco_dac.tex}
+\end{table}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=0.92\textwidth]{s9_hwcmp.pdf}
+\caption{Board~1: (a, b) spectrograms of the saw scale C2--C7 from the DCO and from the DAC; (c) inharmonic content;
+(d) line-out level.}\label{fig:s9hw}
+\end{figure}
+
+\subsection{Reconstruction filter (S11)}
+The DAC pin swings \SIrange{0}{3.3}{V}. A unity-gain Sallen-Key filter (one half of an MCP6002) removes the carrier
+(Figure~\ref{fig:sk}):
+\begin{itemize}
+  \item \textbf{Values:} \SI{11}{k\ohm} / \SI{11}{k\ohm}, $C_1 = 2\times\SI{330}{pF}$ (feedback),
+    $C_2 = \SI{330}{pF}$, all C0G. This is a Butterworth response at \SI{31}{kHz}; the simulated design used
+    \SI{10}{k\ohm}, \SI{750}{pF}, \SI{375}{pF} (\SI{30}{kHz}). The C0G values on the JLCPCB lists near this range are
+    \SI{100}{pF}, \SI{330}{pF} and \SI{2.2}{nF}, which set the values.
+  \item \textbf{Result (S11):} the \SI{187.5}{kHz} carrier at \statSelevenCarrier\,dB re full scale at the line out,
+    against \statSelevenCarrierNone\,dB without the filter; droop \statSelevenDroopTen\,dB at \SI{10}{kHz} and
+    \statSelevenDroopTwenty\,dB at \SI{20}{kHz} (Table~\ref{tab:s11}).
+  \item \textbf{Mixer resistor:} \SI{240}{k\ohm} (E24; S11 computed \statSelevenRmix\,k$\Omega$) gives the DAC's
+    \SI{3.3}{V_{pp}} full scale the drive of rev 0.1's saw (\SI{2}{V_{pp}} through \SI{150}{k\ohm}).
+  \item \textbf{Why not \SI{93.75}{kHz}:} that carrier would leave \statSelevenCarrierLow\,dB at the line out through
+    the same filter. The dual-PWM option therefore runs on the \SI{187.5}{kHz} carrier as well.
+  \item \textbf{Fixed cutoff:} the firmware shapes everything below Nyquist; the filter only removes carrier and
+    images, so a voltage-controlled reconstruction filter is not needed.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{circuitikz}[scale=0.8, transform shape, font=\small]
+  \draw (0,0) node[left]{PC2 (PWM\_DAC)} to[R, l=11\,k$\Omega$, o-*] (2.6,0) coordinate(sk1)
+        to[R, l=11\,k$\Omega$, -*] (5.2,0) coordinate(sk2) -- (6.0,0) coordinate(pin);
+  \draw (sk2) to[C, l_=330\,pF] (5.2,-2) node[ground]{};
+  \draw (7.2,-0.5) node[op amp, noinv input up](OA){\scriptsize MCP6002};
+  \draw (pin) |- (OA.+);
+  \draw (OA.-) -- ++(-0.4,0) |- (8.8,-2.0) -- (8.8,-0.5);
+  \draw (OA.out) -- (8.8,-0.5) node[circ]{} -- (9.6,-0.5) coordinate(daf);
+  \draw (sk1) -- (2.6,1.6) to[C, l=2 $\times$ 330\,pF] (8.8,1.6) -- (8.8,-0.5);
+  \draw (daf) node[above]{DAC\_F} to[R, l=240\,k$\Omega$, *-*] (12.2,-0.5) coordinate(mix) node[above]{MIX}
+        to[C, l=1\,\textmu F, -o] (14.6,-0.5) node[right]{ladder BIN1};
+  \draw (mix) to[R, l_=10\,k$\Omega$, -o] (12.2,-2.6) node[below]{VB0};
+\end{circuitikz}
+\caption{Reconstruction filter and mixer into the ladder input (all filter capacitors C0G). The dual-PWM low byte
+joins at the first node through \SI{1.33}{M\ohm} (not fitted).}
+\label{fig:sk}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\small
+\caption{S11: carrier at the line out [dB re a full-scale tone] and in-band droop [dB] for reconstruction filter
+variants on the \SI{5}{V} core (\file{docs/results/s11\_recon.csv}); generated.}\label{tab:s11}
+\input{generated/s11.tex}
+\end{table}
+
+\subsection{The \SI{5}{V} ladder core (S10)}
+The analog core of rev 0.1 ran from \SIrange{8.6}{11.6}{V} with TL072s and a \SI{4.5}{V} reference. S10 redesigned it
+for \SI{5}{V} in steps (variants v5, v5r, v5m) and checked the card as built (v5c). The changes:
+\begin{itemize}
+  \item \textbf{Op-amps:} MCP6002 (rail-to-rail) for the VREF buffer, the instrumentation amplifier, the difference
+    amplifiers and the reconstruction filter (four packages including the pan stage); the LM324 keeps the three
+    V$\to$I converters and buffers VBIAS.
+  \item \textbf{References:} VREF = \SI{2.5}{V} from a CJ431 (fed by \SI{1}{k\ohm} from the analog rail, then
+    \SI{10}{k\ohm} / \SI{10}{\micro F}, buffered); VEXP\_REF = \SI{1.25}{V} (VREF/2) at the expo reference transistor's
+    collector; VBIAS = \SI{1.0}{V}, buffered by the LM324's fourth unit. The buffer is needed: the expo divider's CV
+    current would move a bare divider by up to \SI{0.6}{V}.
+  \item \textbf{CV range:} the MCU runs at \SI{3.3}{V}, so the PWM CVs span \SIrange{0}{3.3}{V}. The expo divider is
+    \SI{18}{k\ohm} / \SI{1.5}{k\ohm} to VBIAS; the linear networks end in \SI{12}{k\ohm} (resonance) and \SI{3}{k\ohm}
+    (VCA).
+  \item \textbf{Ladder:} four poles with \SI{10}{nF} (rev 0.1: \SI{33}{nF}) and \SI{470}{k\ohm} from VREF for the expo
+    reference current, so the same cutoffs are reached at a third of the tail current and the expo op-amp keeps room
+    at the top. Bias chain \SI{620}{\ohm} / 4$\times$\SI{1.5}{k\ohm} / \SI{3.3}{k\ohm} from the analog rail: VB0 =
+    \SI{1.66}{V}, stage spacing \SI{0.76}{V}, so the rungs keep about \SI{0.1}{V} of reverse $V_\mathrm{CB}$ (at
+    \SI{0.6}{V} spacing they touch saturation and distort).
+  \item \textbf{Instrumentation amplifier:} two MCP6002 units, gain 11, output referenced to VREF. Its inputs sit at
+    \SIrange{4.04}{4.24}{V} over the whole cutoff range, above the MCP6002's input-stage transition (typically near
+    $V_\mathrm{DD} - \SI{1.1}{V}$).
+  \item \textbf{Analog rail:} VA behind \SI{22}{\ohm} and $3\times\SI{100}{\micro F}$ X5R 1206 (no \SI{220}{\micro F}
+    part on the lists; about \SI{35}{\micro F} each at \SI{5}{V}).
+\end{itemize}
+Table~\ref{tab:s10} compares rev 0.1 with the \SI{5}{V} core and the card as built; Figure~\ref{fig:s10} shows the
+cutoff law and the distortion. The card covers \statStenFcLow\,Hz to \statStenFcHigh\,kHz, self-oscillates from the
+same resonance CV as rev 0.1, and stays within about 1--2\,dB of it, at \statStenCurrent\,mA analog current instead of
+\SI{9.1}{mA}. The vendor MCP6002 macromodel used for v5m and v5c (Microchip MCP6001/2/4, REV G) is licensed for use
+with Microchip parts and is not in the repository; it has one NMOS input pair and therefore no input crossover and no
+distortion detail.
+
+\begin{table}[htbp]
+\centering\small
+\caption{S10: the analog core at \SI{5}{V} against rev 0.1 (\file{docs/results/s10\_5v.csv}); generated. CV values
+are fractions of the PWM full scale expressed on a \SI{5}{V} scale; drive levels are saw equivalents
+(\SI{2}{V_{pp}} = full DAC scale).}\label{tab:s10}
+\setlength{\tabcolsep}{4pt}
+\input{generated/s10.tex}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{\input{generated/s10_plot.tex}}
+\caption{S10: (left) $-3$\,dB cutoff versus CV\sub{CUT}; (right) THD at the line out versus drive, filter open
+(generated from \file{docs/results/s10\_5v.csv}).}\label{fig:s10}
+\end{figure}
+
+\subsection{Resonance}
+The resonance loop is a voltage-controlled amplifier of its own, as in rev 0.1:
+\begin{itemize}
+  \item the filter output (LPF) is AC coupled through \SI{1}{\micro F} and \SI{120}{k\ohm} into a BC847BS differential
+    pair biased from VB2;
+  \item its tail current comes from CV\sub{RES} through an LM324 V$\to$I converter (\SI{12}{k\ohm} last network stage,
+    $R_E$ = \SI{3.6}{k\ohm});
+  \item the collectors (\SI{4.7}{k\ohm}) feed an MCP6002 unity difference amplifier, whose output returns through
+    \SI{4.7}{\micro F} and \SI{22}{k\ohm} into the ladder's second input. The difference amplifier removes the
+    common-mode step of the collectors when the tail current changes. Its inputs sit at
+    \SIrange{3.2}{3.75}{V}, below the MCP6002 input transition.
+\end{itemize}
+
+\subsection{VCA and trim}
+\begin{itemize}
+  \item \textbf{Core:} a BC847BS pair, input attenuated by \SI{33}{k\ohm} into \SI{1}{k\ohm} to VCA\_BIAS = \SI{1.89}{V}
+    (\SI{2.4}{k\ohm} / \SI{7.5}{k\ohm} from VREF). The low base bias leaves room for the steering pairs stacked on
+    the collectors.
+  \item \textbf{Tail:} an LM324 V$\to$I converter ($R_E$ = \SI{1.2}{k\ohm}, \SI{0.6}{mA} full scale, as before). A
+    \SI{240}{k\ohm} resistor from VREF to the emitter makes the current truly zero at CV = 0 despite the op-amp
+    offset.
+  \item \textbf{Trim:} rev 0.1 trimmed the CV feed-through with an 8-bit R-2R DAC on a 74HC595. The card uses the
+    former CV\sub{AMP} PWM channel (TIM1 CH1, PC6) through $2\times$(\SI{10}{k\ohm}, \SI{1}{\micro F}) and
+    \SI{680}{k\ohm} into the second base, with \SI{5.1}{M\ohm} from the first base to ground: about
+    $\pm$\SI{2.4}{mV} at the pair input around mid scale. S13 found the nulling trim at about \SI{0.92}{V} and a
+    residual of \SI{0.03}{mV} for the mono VCA.
+  \item \textbf{Difference amplifiers:} the VCA difference amplifiers have matched \SI{33}{k\ohm} from both inputs to
+    ground. This keeps their inputs at \SIrange{2.44}{3.13}{V}, below the MCP6002 input transition, which they would
+    otherwise cross during every attack (an offset step of about \SI{1.6}{mV} at the output).
+  \item \textbf{Loopback:} \SI{10}{k\ohm} / \SI{15}{k\ohm} with \SI{1}{nF} from VCAOUT (left channel) to PC4 (ADC A2)
+    for the calibration.
+\end{itemize}
+
+\subsection{Stereo pan stage (S13)}\label{sec:pan}
+S13 compared two ways to give each card a stereo output (Table~\ref{tab:s13}):
+\begin{itemize}
+  \item \textbf{A, current steering (built):} two more BC847BS pairs sit on the VCA collectors (Figure~\ref{fig:pan}).
+    The L transistors' bases are at VREF, the R transistors' bases at PAN\_B = VREF $-143 \ldots +149$\,mV, set by
+    the PC5 PWM (TIM2 CH1) through \SI{27}{k\ohm}, with \SI{24}{k\ohm} to +3V3, \SI{3}{k\ohm} to VREF and
+    \SI{1}{\micro F} (\SI{66}{Hz}, centre at 49\,\% duty). The left output receives $\alpha\,\Delta I$, the right
+    $(1-\alpha)\,\Delta I$: a linear law.
+  \item \textbf{B, a second VCA:} a complete second pair with its own CV.
+\end{itemize}
+A was chosen: one envelope CV (the fine 10 + 2-bit channel), calibration from the existing loopback and fewer parts.
+Its costs:
+\begin{itemize}
+  \item the VCA is re-biased (bases at \SI{1.89}{V});
+  \item a fourth MCP6002 is needed (the R difference amplifier; its other unit is a spare follower);
+  \item the linear pan law is corrected in firmware: CV\sub{VCA} is raised towards the centre for constant power and
+    capped at 70.6\,\% at hard pan;
+  \item a steering-pair mismatch gives a click at the centre, about \statSthirteenClick\,mV per mV of mismatch (opposite
+    in L and R), and none at hard pan.
+\end{itemize}
+Both difference amplifiers run at a gain of 3.0 (\SI{10}{k\ohm} / \SI{30}{k\ohm}) and drive the outputs through
+\SI{100}{\ohm} and \SI{10}{\micro F} with a \SI{100}{k\ohm} bleeder. Simulated at \SI{5}{V}: centre
+\statSthirteenCentre\,dB per channel, separation \statSthirteenSep\,dB, THD \statSthirteenThd\,\%, SNR
+\statSthirteenSnr\,dB, \statSthirteenCurrent\,mA analog current, \statSthirteenParts\ parts added.
+
+\begin{figure}[htbp]
+\centering
+\begin{circuitikz}[scale=0.64, transform shape, font=\small]
+  % VCA pair
+  \draw (0,0) node[npn](QA1){} (8.1,0) node[npn, xscale=-1](QA2){};
+  \draw (QA1.E) -- ++(0,-0.5) coordinate(e1) -- (e1 -| QA2.E) coordinate(e2) -- (QA2.E);
+  \draw ($(e1)!0.5!(e2)$) node[circ]{} to[I, l_=$I_\mathrm{tail}$ (CV\sub{VCA})] ++(0,-2.0) node[ground]{};
+  \draw (QA1.B) -- ++(-0.6,0) node[left]{\shortstack[r]{VCA\_IN1\\(audio, 1.89\,V)}};
+  \draw (QA2.B) -- ++(0.6,0) node[right]{\shortstack[l]{VCA\_IN2\\(trim)}};
+  % steering pairs on each collector
+  \draw (QA1.C) -- ++(0,0.4) coordinate(c1);
+  \draw (-1.4,2.1) node[npn](SL1){} (1.4,2.1) node[npn, xscale=-1](SR1){};
+  \draw (SL1.E) |- (c1); \draw (SR1.E) |- (c1);
+  \draw (QA2.C) -- ++(0,0.4) coordinate(c2);
+  \draw (6.7,2.1) node[npn](SL2){} (9.5,2.1) node[npn, xscale=-1](SR2){};
+  \draw (SL2.E) |- (c2); \draw (SR2.E) |- (c2);
+  \draw (SL1.B) -- ++(-0.3,0) node[left]{VREF};
+  \draw (SR1.B) -- ++(0.3,0) node[right]{PAN\_B};
+  \draw (SL2.B) -- ++(-0.3,0) node[left]{VREF};
+  \draw (SR2.B) -- ++(0.3,0) node[right]{PAN\_B};
+  \foreach \t/\l in {SL1/L1, SR1/R1, SL2/L2, SR2/R2}
+    \draw (\t.C) -- ++(0,0.4) node[above]{\l};
+  \node[draw, rounded corners=2pt, align=left, font=\scriptsize, anchor=west] at (12.0,1.0)
+    {L1, L2, R1, R2: 4.7\,k$\Omega$ to VA\\
+     L1 $-$ L2 $\to$ difference amp L (G = 3) $\to$ AUDIO\_L\\
+     R1 $-$ R2 $\to$ difference amp R (G = 3) $\to$ AUDIO\_R\\[2pt]
+     PAN\_B = VREF $-$143 \ldots\ +149\,mV:\\
+     PC5 PWM $\to$ 27\,k$\Omega$, 24\,k$\Omega$ to +3V3,\\
+     3\,k$\Omega$ to VREF, 1\,\textmu F};
+\end{circuitikz}
+\caption{Stereo pan stage (S13 variant A, simplified): two steering pairs on the VCA collectors divide each collector
+current between the left and the right load resistors.}
+\label{fig:pan}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\small
+\caption{S13: pan stage variants at \SI{5}{V}, one card (\file{docs/results/s13\_pan.csv}); generated. The click is the
+step at the line out when the VCA opens, per \SI{1}{mV} of steering-pair mismatch (A) or for an untrimmed second VCA
+(B).}\label{tab:s13}
+\input{generated/s13.tex}
+\end{table}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\textwidth]{s13_pan.pdf}
+\caption{S13: (a) pan law of variant A over the PC5 duty, with the VCA at full level (linear law) and with the
+firmware's constant-power correction; (b) the step at the line out when the VCA opens, for \SI{1}{mV} of mismatch.}
+\label{fig:s13}
+\end{figure}
+
+\subsection{References and supply}
+\begin{itemize}
+  \item \textbf{\SI{5}{V} input:} from the backplane (pins 1/2), or from the programmer's \SI{5}{V} through a B5819W
+    Schottky diode (no back-feeding into the backplane). On programmer power the card runs at about \SI{4.6}{V};
+    S10 (v5c46) shows the same figures there, with the smallest $V_\mathrm{CE}$ at \SI{0.37}{V}.
+  \item \textbf{Analog rail VA:} \SI{22}{\ohm} + $3\times\SI{100}{\micro F}$. \SI{47}{\ohm} would halve the inrush but
+    cost \SI{0.22}{V} permanently, so \SI{22}{\ohm} stays.
+  \item \textbf{MCU:} XC6206 \SI{3.3}{V} LDO. The PWM outputs are duty $\times\,V_\mathrm{DD}$, so the CVs and the DAC
+    depend on this rail; their ratios to VREF are absorbed by the calibration.
+  \item \textbf{CJ431 pinout:} the SOT-23 CJ431 has the TL432 pinout (1 REF, 2 K, 3 A), not KiCad's TL431DBZ; the
+    schematic uses the TL432 symbol.
+  \item \textbf{Supply rejection} of the card as built: $-69$ / $-66$ / $-77$\,dB at \SI{100}{Hz} / \SI{1}{kHz} /
+    \SI{10}{kHz} (S10 v5c); the CJ431 filter gains 8\,dB at \SI{100}{Hz}.
+\end{itemize}
+
+\subsection{MCU pin map}\label{sec:mcu}
+The board~1 pin functions carry over: TIM1 and TIM2 keep remap~2 (TIM1\_RM = 0010, TIM2\_RM = 010), USART1 its default
+pins. All 18 GPIO of the TSSOP-20 are assigned (Table~\ref{tab:pinsvoice}). Reset is PD7; PA4 is bonded to the same
+pin inside the package and is never configured as an output. KiCad's CH32V003 TSSOP-20 symbol fits, as the pinout is
+the same.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\caption{Voice card MCU (\statVoiceMcu, TSSOP-20) pin map: nets from \file{hw/voice.py}, port names from the KiCad
+symbol; generated.}\label{tab:pinsvoice}
+\input{generated/pins_voice.tex}
+\end{table}
+
+\paragraph{DMA.} The V006 has seven DMA channels with fixed request mappings (reference manual table 8-2). The card
+uses:
+\begin{itemize}
+  \item channel~1: the DAC (TIM2 CC3 request, once per carrier period); the ADC therefore runs without DMA;
+  \item channel~5: the USART1 receive ring of the voice bus (it shares channel~5 with TIM1\_UP);
+  \item channel~4: USART1 transmit (replies on the return line);
+  \item channel~6 (planned): the CV dither burst, a 16-halfword circular table written into TIM1 on the CC3 request
+    with CCDS = 1. On board~1 it works and frees about 9\,\% of the CPU against the \SI{46.875}{kHz} interrupt; the
+    voice firmware still uses the interrupt.
+\end{itemize}
+All three DMA uses (DAC, CV burst, UART ring) ran together on board~1 during a tune: 1353 of 1353 bytes received, no
+UART errors, no DAC overruns, CV pattern intact.
+
+\subsection{PCB}\label{sec:voicepcb}
+The card is 50\,$\times$\,50\,mm with four layers (Table~\ref{tab:stackvoice}), all parts on the top side:
+\begin{itemize}
+  \item \textbf{Orientation:} the backplane connector sits centred on the bottom edge. Seen from the part side with the
+    connector down, pin~1 is on the right, so the supply and audio pins (1--8) and the analog core are on the right,
+    the bus pins (9--16) and the MCU on the left.
+  \item \textbf{Top edge:} the three LEDs (power, playing, status), the 1$\times$3 programming header (+5\,V, SWIO, GND,
+    the rev 0.1 order) and the 1$\times$3 line-out header (L, R, GND), both right-angle.
+  \item \textbf{Passives:} 0402 where the JLCPCB lists have the value; 0603 did not fit (ten parts found no place).
+    Values missing in 0402 (\SI{11}{k\ohm}, \SI{240}{k\ohm}, \SI{3.6}{k\ohm}, \SI{620}{\ohm},
+    \SI{680}{k\ohm}, \SI{3}{k\ohm}, \SI{30}{k\ohm}, \SI{5.1}{M\ohm}), the \SI{33}{nF} and the \SI{10}{\micro F} bias
+    capacitors stay 0603. \statVoiceTp\ test points.
+  \item \textbf{Routing:} Freerouting with repair passes and pre-routes (SWIO along the left and bottom edges, the
+    VCA collectors into the steering pairs). The routed board has \statVoiceFootprints\ footprints,
+    \statVoiceSegments\ track segments (\statVoiceLenF\,m on F.Cu, \statVoiceLenB\,m on B.Cu) and \statVoiceVias\
+    vias. The KiCad DRC reports 0 errors and 0 unconnected pads; the remaining warnings are the three locally
+    modified header footprints.
+  \item \textbf{Known weak spot:} VREF (\SI{128}{mm}) and the VBIAS divider node (\SI{102}{mm}) are long tracks; a
+    VREF region on In2 is a candidate for the next revision.
+\end{itemize}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Voice card layer stack (JLCPCB standard 4-layer, 1.6\,mm).}\label{tab:stackvoice}
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+\toprule
+Layer & Use \\
+\midrule
+F.Cu & all parts, signals \\
+In1.Cu & solid GND \\
+In2.Cu & supply planes: VA under the analog part, +3V3 under the MCU and the top edge, +5V in a strip along the right
+  and bottom edges \\
+B.Cu & signals only \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[p]
+\centering
+\begin{subfigure}{0.48\textwidth}\includegraphics[width=\linewidth]{voice_pcb/fcu.png}\caption{F.Cu}\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}\includegraphics[width=\linewidth]{voice_pcb/in1.png}\caption{In1.Cu (GND)}\end{subfigure}\\[6pt]
+\begin{subfigure}{0.48\textwidth}\includegraphics[width=\linewidth]{voice_pcb/in2.png}\caption{In2.Cu (VA / +3V3 / +5V)}\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}\includegraphics[width=\linewidth]{voice_pcb/bcu.png}\caption{B.Cu}\end{subfigure}
+\caption{Voice card copper layers, seen from the top (\file{docs/figures/voice\_pcb/}).}\label{fig:voicelayers}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\begin{subfigure}{0.48\textwidth}\includegraphics[width=\linewidth]{voice_pcb/place.png}\caption{placement (silk, fab, courtyards)}\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}\includegraphics[width=\linewidth]{voice_pcb/render_top.png}\caption{3D render, top}\end{subfigure}\\[6pt]
+\begin{subfigure}{0.48\textwidth}\includegraphics[width=\linewidth]{voice_pcb/render_bottom.png}\caption{3D render, bottom}\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}\includegraphics[width=\linewidth]{voice_pcb/bsilk.png}\caption{bottom silkscreen (seen from the back)}\end{subfigure}
+\caption{Voice card placement and renders.}\label{fig:voicerender}
+\end{figure}
+
+% =====================================================================================================================
+\section{Backplane}\label{sec:bp}
+
+\subsection{Overview}
+The backplane (\file{hw/backplane.py}, \statBpSheets\ schematic sheets, \statBpParts\ parts) carries the controller,
+power, USB, the voice bus with eight slots and the mixer (Figure~\ref{fig:bpblock}). The sensitive parts stay small
+and local: the cards bring their own references and regulators, so the backplane carries only \SI{5}{V}, ground and
+line-level audio. The design follows \file{docs/backplane.md}, status 0.3.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\small\sffamily, >={Stealth[length=2mm]},
+  blk/.style={draw, rounded corners=2pt, fill=#1, minimum height=9mm, align=center}, blk/.default=white,
+  lab/.style={font=\scriptsize, above}]
+  \node[blk=red!12, minimum width=150mm] (pwr) at (8.2,4.0)
+    {VBUS\_C or J4 (ext.\ 5\,V) $\to$ JP1 $\to$ F1 PTC $\to$ D1 SMAJ5.0A $\to$ +5V\_IN $\to$ R\_BYP (Q1 soft start, DNP)
+     $\to$ +5V slot rail\\\scriptsize U2 XC6206: +3V3 for the MCU, logic, pull-ups and the mixer VREF};
+  \node[blk=blue!18, minimum width=32mm, minimum height=46mm] (mcu) at (6,0)
+    {\textbf{U1}\\\textbf{CH32V203C8T6}\\\scriptsize LQFP-48\\\scriptsize Y1 8\,MHz\\\scriptsize 144\,MHz};
+  \node[blk=orange!15, minimum width=36mm] (usbc) at (0,1.8) {J1 USB-C\\\scriptsize U3 SRV05-4A, 5.1\,k$\Omega$ CC};
+  \node[blk=gray!15, minimum width=36mm] (usba) at (0,0.6) {J2 USB-A (DNP)\\\scriptsize U4 TPS2051C, U5 ESD};
+  \node[blk=gray!10, minimum width=36mm] (prog) at (0,-0.6) {J5 SWD, JP2 BOOT0\\\scriptsize J6 USART1, MIDI (DNP)};
+  \node[blk=violet!12, minimum width=36mm] (flash) at (0,-1.8) {U7 SPI flash (DNP)};
+  \draw[<->] (usbc.east) -- node[lab]{PA11/12} (usbc.east -| mcu.west);
+  \draw[<->] (usba.east) -- node[lab]{PB6/7} (usba.east -| mcu.west);
+  \draw[<->] (prog.east) -- node[lab]{PA13/14, PA9/10} (prog.east -| mcu.west);
+  \draw[<->] (flash.east) -- node[lab]{SPI1} (flash.east -| mcu.west);
+  \node[blk=violet!20, minimum width=34mm] (sr) at (12.6,1.8) {U6 74HC595\\\scriptsize SER, SRCLK on SPI1};
+  \node[blk=cyan!15, minimum width=34mm] (bus) at (12.6,0.3) {bus drivers\\\scriptsize 33\,$\Omega$; 1\,k$\Omega$ RETURN pull-up};
+  \node[blk=violet!10, minimum width=34mm] (swio) at (12.6,-1.2) {SWIO 1--8\\\scriptsize 1\,k$\Omega$ pull-ups};
+  \draw[->] (sr.west -| mcu.east) -- node[lab]{SPI1, PC13/14} (sr.west);
+  \draw[<->] (bus.west -| mcu.east) -- node[lab]{PB10/11, PA8, PB1} (bus.west);
+  \draw[<->] (swio.west -| mcu.east) -- node[lab]{PA2--7, PB12/13} (swio.west);
+  \node[blk=yellow!20, minimum width=26mm, minimum height=46mm] (slots) at (18.0,0)
+    {J10--J17\\8 slot\\sockets\\\scriptsize 2$\times$8, 10\,mm pitch};
+  \draw[->] (sr.east) -- node[lab]{NRST$_k$} (sr.east -| slots.west);
+  \draw[<->] (bus.east) -- (bus.east -| slots.west);
+  \draw[<->] (swio.east) -- (swio.east -| slots.west);
+  \node[blk=green!18, minimum width=44mm] (mix) at (17.0,-3.8) {mixer: U8 MCP6002\\\scriptsize 56\,k$\Omega$ per slot and
+    channel, mirror on AUDIO\_GND};
+  \draw[->] (slots.south -| 18.0,0) -- node[right,font=\scriptsize]{L, R, GND $\times$8} (mix.north -| 18.0,0);
+  \node[blk=green!10, minimum width=34mm] (out) at (10.6,-3.8) {J3 line out\\\scriptsize 220\,$\Omega$, 10\,\textmu F,
+    100\,k$\Omega$};
+  \draw[->] (mix) -- (out);
+  \draw[->, dashed] (mix.south) -- ++(0,-0.5) -| node[pos=0.25,below,font=\scriptsize]{ADC taps (PA0, PA1)} (6.0,-2.3);
+  \draw[->] (pwr.south -| 6.0,0) -- (mcu.north);
+\end{tikzpicture}}
+\caption{Backplane blocks with the controller pins they use.}
+\label{fig:bpblock}
+\end{figure}
+
+\subsection{Controller and pin map}
+The CH32V203C8T6 (\SI{64}{KB} flash, \SI{20}{KB} SRAM) runs from its \SI{8}{MHz} crystal at \SI{144}{MHz}: HCLK
+\SI{144}{MHz}, PCLK1 = PCLK2 = \SI{72}{MHz}, so USART3 divides exactly to \SI{1}{Mbaud} and TIM3 gives exactly
+\SI{24}{MHz} for the clock option. \statBpGpioUsed\ of its 37 GPIO are used; \statBpGpioFree\ (PC15, PB0, PB14) are
+left as test pads. Table~\ref{tab:pinsbp} gives the pin map; the full rationale is in \file{docs/backplane.md}~3.
+The main decisions:
+\begin{itemize}
+  \item \textbf{Bench pins kept:} USART3 (PB10 TX, PB11 RX) for the bus, SYNC on PA8 (TIM1 CH1), USART1 (PA9/PA10)
+    free for the bootloader and a debug UART, SWD on PA13/PA14.
+  \item \textbf{CLK\_IN from a timer, not MCO:} MCO exists only on PA8 (taken by SYNC) and can only give 8 or
+    \SI{72}{MHz}. The V006's PLL is a fixed $\times$2, so a card on the external clock needs \SI{24}{MHz}: TIM3 CH4 on
+    PB1 with ARR = 5 gives exactly that, locked to the crystal.
+  \item \textbf{SPI1 remap 1} (PA15, PB3, PB4, PB5) for the flash and the 74HC595, so that the default SPI1 pins
+    PA4--PA7 stay free for SWIO.
+  \item \textbf{BOOT1 (PB2)} must be low at reset for the bootloader, so it drives the activity LED with a
+    \SI{10}{k\ohm} pull-down; a slot line or VBUS\_DET cannot sit there.
+  \item \textbf{PC13--PC15} source no current and switch at \SI{2}{MHz} at most; they carry the 595's latch and output
+    enable only.
+  \item \textbf{MIDI DIN} (not fitted) shares USART1 RX (PA10) with the debug header through jumper JP3, as none of the
+    free pins is a USART RX.
+  \item \textbf{5\,V tolerance:} the USB pins are protected by SRV05-4A arrays; SYNC, RETURN and SWIO 7/8 are on 5\,V
+    tolerant pins, SWIO 1--6 are not. Only a card plugged in reversed could drive them; the card guides are meant to
+    prevent that mechanically.
+\end{itemize}
+
+\begin{table}[htbp]
+\centering\scriptsize
+\setlength{\tabcolsep}{2.6pt}
+\caption{Controller (CH32V203C8T6, LQFP-48) pin map: nets from \file{hw/backplane.py}, port names from the KiCad
+symbol; generated.}\label{tab:pinsbp}
+\input{generated/pins_bp.tex}
+\end{table}
+
+\subsection{Power entry and soft-start option}\label{sec:bppower}
+\begin{itemize}
+  \item \textbf{Source:} USB-C VBUS (sink, \SI{5.1}{k\ohm} on CC1 and CC2) or an external \SI{5}{V} adapter on J4,
+    selected by a 3-pin jumper JP1. A jumper instead of diodes avoids a diode drop, which the cards' supply margin
+    could not afford. With the external supply selected, VBUS only feeds the VBUS sense divider (self-powered device).
+  \item \textbf{Protection:} a \SI{0.75}{A} PTC (hand-soldered; none on the lists) followed by an SMAJ5.0A TVS: an
+    overvoltage or a reversed external supply makes the TVS conduct and the PTC trip.
+  \item \textbf{\SI{3.3}{V}:} an XC6206 (\SI{200}{mA}, load about \SI{30}{mA}) from +5V\_IN for the MCU, the logic, the
+    pull-ups and the mixer's VREF.
+  \item \textbf{Slot rail:} $2\times\SI{47}{\micro F}$ at the rail and \SI{10}{\micro F} at each socket.
+  \item \textbf{Soft start (not fitted):} an AO3401A P-channel MOSFET between +5V\_IN and the slot rail, bridged by a
+    \SI{0}{\ohm} 1206 resistor R\_BYP. If a port or hub drops out at plug-in, R\_BYP is removed and Q1 fitted with
+    $R_{GS} = \SI{1}{M\ohm}$, $R_G = \SI{220}{k\ohm}$ to ground and $C_{GD} = \SI{100}{nF}$. By hand estimate the drain
+    then ramps at about \SI{116}{V/s} (\SI{5}{V} in about \SI{40}{ms}), the charging current of the slot capacitance
+    (about \SI{0.95}{mF}) stays near \SI{110}{mA}, and $R_{DS(on)}$ of about \SI{60}{m\ohm} costs \SI{30}{mV} at
+    \SI{0.5}{A}. This estimate is to be simulated before the option is used (proposed S14).
+  \item \textbf{VBUS sense:} \SI{22}{k\ohm} / \SI{33}{k\ohm} to PB15 (\SI{3.0}{V} at \SI{5.0}{V}), so the device
+    enables its D+ pull-up only with a computer present.
+\end{itemize}
+
+\subsection{USB device and host}
+\begin{itemize}
+  \item \textbf{Device} on USBD (PA11/PA12) through \SI{0}{\ohm} series positions: a composite of class-compliant
+    USB-MIDI, CDC (configuration, presets, firmware, a bridge to each card's console) and, as an option, UAC1 audio
+    input of the mix. Full speed needs no controlled impedance at this length. The USBD D+ pull-up is expected inside
+    the chip (\textbf{unverified}); a \SI{1.5}{k\ohm} footprint is not fitted.
+  \item \textbf{Host} on USBFS (PB6/PB7), so device and host run at the same time. The whole port is drawn but not
+    fitted in the first build: TPS2051C current-limited switch (SOT-23-5, fixed \SI{0.5}{A}, hand-soldered: no such
+    switch on the lists), USB-A receptacle, ESD array, $2\times\SI{47}{\micro F}$ on VBUS\_HOST (about
+    \SI{40}{\micro F} at \SI{5}{V} against the \SI{120}{\micro F} USB 2.0 asks for), enable (PB8, \SI{100}{k\ohm}
+    pull-down: off until the firmware decides) and fault (PB9, open drain, red LED). Host-mode pull-downs on D+/D$-$
+    are expected inside (\textbf{unverified}); two \SI{15}{k\ohm} footprints are not fitted.
+\end{itemize}
+
+\subsection{Voice bus drivers, NRST and SWIO}
+\begin{itemize}
+  \item \textbf{Broadcast} (USART3 TX, push-pull) and \textbf{SYNC} (TIM1 CH1) through \SI{33}{\ohm} series resistors
+    to every slot; the \textbf{return line} (USART3 RX) with a \SI{1}{k\ohm} pull-up (the cards drive it open drain;
+    about \SI{0.3}{\micro s} rise time on \SI{150}{pF}, against a \SI{1}{\micro s} bit). The \SI{24}{MHz} CLK line has
+    its own \SI{33}{\ohm} resistor and is off by default.
+  \item \textbf{NRST through a 74HC595} (Table~\ref{tab:slots}). The eight NRST lines come from the outputs of U6, whose
+    SER and SRCLK share SPI1 with the flash; RCLK and OE are GPIOs. The outputs drive NRST directly, without series
+    resistors or pull-downs. At power-up the storage register is undefined, so a \SI{10}{k\ohm} pull-up on OE keeps
+    the outputs off until the firmware has shifted zeros in and drives OE low. While the controller is in reset, in
+    its bootloader or halted, the NRST lines float and the cards run standalone; the firmware takes them back through
+    the 595 or over SWIO. Every flash transfer also clocks the 595's shift register, so the firmware always shifts all
+    8 bits directly before a latch.
+  \item \textbf{SWIO:} each slot has its own SWIO line from a controller GPIO with a \SI{1}{k\ohm} pull-up: the card has
+    none, and the one-wire protocol samples about \SI{0.6}{\micro s} after each edge. On the bench, without a pull-up,
+    every read returned 0. Until the controller programs the cards, each card's own programming header stays
+    reachable at its top edge; there is no SWIO header on the backplane.
+\end{itemize}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Slot lines (generated from \file{hw/backplane.py}).}\label{tab:slots}
+\input{generated/slots_bp.tex}
+\end{table}
+
+\subsection{Two-bus stereo mixer (S12)}\label{sec:mixer}
+Figure~\ref{fig:mixer} shows one channel with one slot. Two MCP6002 inverting summing amplifiers (one package, U8) add
+the left and the right outputs of all slots. Every slot has the same seven parts; the pan is on the cards.
+\begin{itemize}
+  \item \textbf{Per slot:} AUDIO\_L and AUDIO\_R each through \SI{10}{\micro F} and \SI{56}{k\ohm} into the L and R
+    summing nodes. The input capacitors keep the cards' \SI{100}{k\ohm} output bleeders off the \SI{2.4}{V} summing
+    nodes; without them the outputs would sit at \SI{4.9}{V} (S12).
+  \item \textbf{Pseudo-differential input:} AUDIO\_GND of each slot goes through one \SI{10}{\micro F} (shared by L and R)
+    to node $Y_k$, and from there through \SI{56}{k\ohm} to each amplifier's + input. Each + input has
+    \SI{20}{k\ohm}\,$\parallel$\,\SI{47}{pF} to VREF, mirroring the feedback network $R_F$ = \SI{20}{k\ohm}\,$\parallel$\,\SI{47}{pF}. Hence
+    \begin{equation}
+      v_\mathrm{out} = V_\mathrm{REF} - 0.357 \sum_k \left(v_{\mathrm{AUDIO},k} - v_{\mathrm{AUDIO\_GND},k}\right)
+    \end{equation}
+    for any set of populated slots: ground currents along the backplane do not add to the audio.
+  \item \textbf{Gain:} \statStwelveGain\ per card, sized so that 8 cards hard-panned in phase at the capped level
+    (\statStwelveCardHard\,V\sub{pp} each) give \statStwelveHard\,V\sub{pp}, \statStwelveHardMargin\,dB below clipping.
+    Without the firmware cap on CV\sub{VCA} (\statStwelveCardUncapped\,V\sub{pp} per card) 8 hard-panned cards would
+    clip.
+  \item \textbf{Op-amp rail:} \SI{47}{\ohm} + \SI{22}{\micro F} from the slot rail. The MCP6002 rejects supply noise
+    poorly at the noise gain of 3.9 that eight inputs give.
+  \item \textbf{Line out} on the west edge: \SI{220}{\ohm} + \SI{10}{\micro F} per channel to a \SI{3.5}{mm} stereo jack,
+    \SI{100}{k\ohm} bleeder. The mixer, the line-out stage and the jack sit together at the west end of the slot row,
+    so the line-out run is short.
+  \item \textbf{ADC taps} (USB audio option): \SI{15}{k\ohm} / \SI{27}{k\ohm} with \SI{330}{pF} C0G at PA0 / PA1. The
+    V203's two ADCs in dual mode at \SI{384}{kHz}, decimated by 8, keep the \SI{187.5}{kHz} carrier out of the band
+    (\SI{-111}{dBFS}). The internal ADC limits this path to about \SI{60}{dB} signal-to-noise for one centred card.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{circuitikz}[scale=0.72, transform shape, font=\small]
+  \draw (8,0) node[op amp](OA){\scriptsize U8A};
+  % inverting side
+  \draw (OA.-) -- (6.4,0.5) coordinate(nm);
+  \draw (nm) to[R, l_=56\,k$\Omega$, *-] (4.0,0.5) to[C, l_=10\,\textmu F, -o] (1.4,0.5) node[left]{AUDIO\_L$_k$};
+  \draw (nm) -- (6.4,2.0) to[R, l=20\,k$\Omega$] (9.8,2.0) -- (9.8,0);
+  \draw (6.4,2.0) -- (6.4,3.4) to[C, l=47\,pF] (9.8,3.4) -- (9.8,2.0);
+  \draw (OA.out) -- (9.8,0) node[circ]{} -- (10.6,0) node[circ]{} node[above]{MIX\_L};
+  % non-inverting side
+  \draw (OA.+) -- (6.4,-0.5) coordinate(np);
+  \draw (np) to[R, l=56\,k$\Omega$, *-*] (4.0,-0.5) coordinate(y) to[C, l=10\,\textmu F, -o] (1.4,-0.5)
+        node[left]{AUDIO\_GND$_k$};
+  \node[above left] at (y) {$Y_k$};
+  \draw (y) to[R, l=56\,k$\Omega$, -o] (4.0,-3.0) node[below]{to R+};
+  \draw (np) -- (6.4,-1.4) coordinate(vt);
+  \draw (vt) to[R, l_=20\,k$\Omega$] (6.4,-3.4) coordinate(vr);
+  \draw (vt) -- (7.8,-1.4) to[C, l=47\,pF] (7.8,-3.4) -- (vr);
+  \draw (vr) node[circ]{};
+  \node[left] at (6.3,-3.75) {VREF};
+  % VREF generation: +3V3 -> 10k -> (27k, 10u) -> 10k -> VREF (10u)
+  \draw (vr) -- (6.4,-4.2) to[C, l_=10\,\textmu F] (6.4,-5.9) node[ground]{};
+  \draw (6.4,-4.2) to[R, l=10\,k$\Omega$, *-*] (9.4,-4.2) coordinate(va) to[R, l=10\,k$\Omega$, -o] (12.6,-4.2)
+        node[right]{+3V3};
+  \draw (va) to[R, l_=27\,k$\Omega$] (9.4,-5.9) node[ground]{};
+  \draw (va) -- (10.8,-4.2) to[C, l=10\,\textmu F] (10.8,-5.9) node[ground]{};
+  % output
+  \draw (10.6,0) to[R, l=220\,$\Omega$] (12.8,0) to[C, l=10\,\textmu F, -*] (15.0,0) -- (15.6,0) node[right]{LINE\_L (J3)};
+  \draw (15.0,0) to[R, l=100\,k$\Omega$] (15.0,-2.0) node[ground]{};
+  % per-slot box
+  \draw[dashed, blue!60!black, rounded corners] (-2.9,-3.9) rectangle (5.2,1.5);
+  \node[blue!60!black, font=\scriptsize, anchor=north west] at (-2.8,-4.0) {per slot $k$ = 1\ldots8 (R channel alike)};
+\end{circuitikz}
+\caption{Mixer, left channel, one slot drawn. AUDIO\_L of every slot sums into the $-$ input; AUDIO\_GND of every slot
+is mirrored onto the $+$ input through the same resistor value, and node $Y_k$ also feeds the right channel's $+$
+input. VREF comes from the controller's +3V3 through two RC stages, unbuffered. The ADC tap (\SI{15}{k\ohm} /
+\SI{27}{k\ohm}, \SI{330}{pF}) on MIX\_L is not drawn.}
+\label{fig:mixer}
+\end{figure}
+
+\paragraph{Simulation (S12).} Table~\ref{tab:s12} and Figure~\ref{fig:s12} give the results of the two-bus mixer with
+all 8 slots populated. The mirror network rejects ground differences by \SI{65}{dB} nominally at \SI{1}{kHz}; with
+1\,\% resistors the worst case is about \SI{29}{dB} and the typical case \SI{45}{dB}. The shared \SI{10}{\micro F}
+mirror capacitor per slot is needed: \SI{4.7}{\micro F} would halve the low-frequency ground rejection. With separate
+L and R pins the crosstalk between the channels is below \SI{-105}{dB}, with or without empty slots.
+
+\begin{table}[htbp]
+\centering\small
+\caption{S12: two-bus mixer, 8 slots (\file{docs/results/s12\_mixer\_2bus.csv}); generated.}\label{tab:s12}
+\input{generated/s12.tex}
+\end{table}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=\textwidth]{s12_mixer_2bus.pdf}
+\caption{S12, two buses: (a) response to the line out and to the ADC pin; (b) ground rejection of the mirror
+variants, nominal and with 1\,\% resistors and $\pm$20\,\% capacitors; (c) the L output with 8 hard-panned cards in
+phase versus their level, and its THD.}\label{fig:s12}
+\end{figure}
+
+\paragraph{VREF from +3V3 with two RC stages.} Revision 0.2 of the backplane had its own CJ431 reference
+(\SI{2.5}{V} from the \SI{5}{V}, \SI{10}{k\ohm} / \SI{10}{\micro F}) and an MCP6002 follower. In 0.3 VREF is a divider
+from the controller's \SI{3.3}{V} LDO, \SI{10}{k\ohm} / \SI{27}{k\ohm} with \SI{10}{\micro F}, followed by a second
+\SI{10}{k\ohm} / \SI{10}{\micro F} stage: \statStwelveVref\,V, corners at 2.2 and \SI{1.6}{Hz}, unbuffered. The
+reasoning:
+\begin{itemize}
+  \item the summing amplifiers' + inputs are VREF's only DC load (picoamperes; the mirror network is AC coupled), so no
+    buffer is needed;
+  \item VREF reaches the line out about 1:1 (divided by 3.9 through $R_F'$, then the noise gain of 3.9), so its
+    noise and ripple matter;
+  \item the LDO rejects low-frequency ripple of the \SI{5}{V}; the two RC stages take out the MCU's own load steps on
+    +3V3 (USB frames and the SYNC tick at \SI{1}{kHz}, the activity LED);
+  \item the ADC tap's DC then follows the ADC's own \SI{3.3}{V} reference.
+\end{itemize}
+S12 compared the variants (Table~\ref{tab:vref}, Figure~\ref{fig:vref}). Two stages give \SI{-72}{dB} at \SI{100}{Hz}
+and \SI{-112}{dB} at \SI{1}{kHz} from +3V3 to the line out, against \SI{-36}{dB} / \SI{-56}{dB} with one stage. From
+the \SI{5}{V} rail, all three variants reach \SIrange{-69}{-73}{dB}; the reference without the CJ431 is
+slightly better, because the CJ431's own supply rejection no longer enters. At a \SI{4.6}{V} supply all three
+variants keep 8 hard-panned cards undistorted at the capped level. The CJ431, its feed resistor and the follower
+are saved.
+
+\begin{table}[htbp]
+\centering\small
+\caption{S12: the mixer's reference variants (\file{docs/results/s12\_mixer\_2bus.csv}); generated. Ripple
+transfer to the line out in dB; ``--'': not applicable.}\label{tab:vref}
+\input{generated/s12_vref.tex}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\input{generated/s12_vref_plot.tex}
+\caption{Ripple on +3V3 at the line out for one and two RC stages in the VREF divider (generated from
+\file{docs/results/s12\_mixer\_2bus.csv}).}\label{fig:vref}
+\end{figure}
+
+\subsection{Mechanics and floorplan}
+\begin{itemize}
+  \item \textbf{Slots:} slot $k$ has its socket centre at $x_k = 20 + 10(k-1)$\,mm along the south part of the board.
+    The cards stand over the slot row and cover \SI{50}{mm} of its depth; the controller strip of about \SI{42}{mm}
+    along the rear edge stays uncovered.
+  \item \textbf{Orientation:} socket pin~1 is at the south-west corner of each socket; the cards' part side faces west
+    (toward slot~1 and the mixer). The supply and audio end of every socket faces away from the controller strip, the
+    bus end towards it. The card-plane offset from the socket centre line (about \SI{3.3}{mm}) assumes standard
+    right-angle header geometry and is still to be checked with the chosen parts.
+  \item \textbf{Card guides:} two 3D-printed slotted rails along the slot row, at the cards' side edges. The grooves
+    sit at the card plane, so a card turned by \SI{180}{\degree} does not enter them. For the first build the headers
+    alone hold the cards; four M3 holes are provided.
+  \item \textbf{Zones:} analog in the west (mixer common block, line-out jack on the west edge), USB and power in the
+    east, the MCU in between. The USB-A and USB-C receptacles and the SWD header sit on the rear edge, the power entry
+    (JP1, J4) on the east edge. The summing nodes run along the slot row as a band on the bottom layer, the L$-$/L+ and R+/R$-$ tracks
+    side by side so that pickup is common to both inputs, with guard tracks.
+\end{itemize}
+Figure~\ref{fig:floorbp} is drawn from the placement script; it shows the placement regions and anchored parts as
+they stand when this report is built.
+
+\begin{figure}[htbp]
+\centering
+\input{generated/floorplan_bp.tex}
+\caption{Backplane floorplan (KiCad orientation: rear edge at the top), generated from \file{hw/pcb\_place\_bp.py}:
+placement regions, anchored ICs and connectors (yellow), the 8 slot sockets (pin~1 marked), card area (light blue),
+card-guide bands (hatched), the +5\,V trunk and rail and the summing band.}
+\label{fig:floorbp}
+\end{figure}
+
+\subsection{PCB}
+The backplane is a 4-layer board of 100\,$\times$\,100\,mm (JLCPCB, \SI{1.6}{mm}). It was planned as a 2-layer
+board; routed on two layers, the area around the MCU left a few nets open in every run (+3V3 to the VDD pins, the
+SPI and SWD lines) and the bottom pour broke into islands there, so the stack became:
+\begin{itemize}
+  \item \textbf{F.Cu:} all parts and most signals; ground fill in the free areas.
+  \item \textbf{In1:} GND, solid over the whole board.
+  \item \textbf{In2:} +3V3 under the controller strip, GND under the slot area, so the summing band on B.Cu sits
+    directly against ground.
+  \item \textbf{B.Cu:} signals and the summing band; ground fill. +5\,V stays on its pre-routed trunk and rail
+    (110\,mA).
+\end{itemize}
+The other layout rules of \file{docs/backplane.md}~7 carry over:
+\begin{itemize}
+  \item \textbf{Bus in the socket field:} each bus track runs in its own gap between socket pin positions (SYNC 4|5,
+    BCAST 5|6, RETURN 6|7, CLK 7|8), so each reaches its pin with a short jog and no crossing.
+  \item \textbf{Separation:} the analog zone (mixer, line out, summing band) in the west and south; the USB ports, the
+    power entry and the LDO in the north and east; the MCU in the middle of the controller strip with a free fan-out
+    zone around it.
+  \item \textbf{Placement by function:} one region per function (power, USB, SPI flash and 595, ADC dividers, bus
+    resistors, SWIO pull-ups, MIDI option), explicit anchors for connectors, ICs and decoupling. The flash and the 595
+    sit together west of the MCU, the crystal at its west pins, the UART header east of it.
+  \item \textbf{Scripted placement and pre-routes} (\file{hw/pcb\_place\_bp.py}, \file{hw/gen\_pcb\_bp.py}): the
+    \SI{5}{V} trunk and rail, the bus tracks in the socket field, the per-slot audio fan-out and the summing band are
+    laid before Freerouting runs; GND connects through the planes and stitching vias.
+\end{itemize}
+\textbf{Result:} \statBpSegments{} track segments, \statBpLenF{}\,m on F.Cu and \statBpLenB{}\,m on B.Cu, \statBpVias{} vias
+(\statBpGndVias{} of them GND); DRC with schematic parity: 0 violations, 0 unconnected pads, no isolated copper. As a check, the same placement routed on two layers (\texttt{BP\_LAYERS=2}) leaves a
+single connection open (+3V3 at one MCU supply pin) with 7\,\% more track: the placement is sound, and the four
+layers buy solid planes, short return paths and a ground reference for the summing band.
+Figures~\ref{fig:bplayers} and~\ref{fig:bprender} show the board as generated by \file{hw/pcb\_figures.py}.
+
+\begin{figure}[p]
+\centering
+\begin{subfigure}{0.43\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/top.png}\caption{F.Cu with silkscreen}\end{subfigure}\hfill
+\begin{subfigure}{0.43\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/bcu.png}\caption{B.Cu}\end{subfigure}\\[6pt]
+\begin{subfigure}{0.43\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/in1.png}\caption{In1: GND}\end{subfigure}\hfill
+\begin{subfigure}{0.43\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/in2.png}\caption{In2: +3V3 (strip), GND (slots)}\end{subfigure}\\[6pt]
+\begin{subfigure}{0.43\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/silk.png}\caption{top silkscreen}\end{subfigure}\hfill
+\begin{subfigure}{0.43\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/bsilk.png}\caption{bottom silkscreen (seen from the back)}\end{subfigure}
+\caption{Backplane layers, seen from the top unless noted (\file{docs/figures/backplane\_pcb/}, generated by
+\file{hw/pcb\_figures.py}).}\label{fig:bplayers}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\begin{subfigure}{0.64\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/render_top.png}\caption{top}\end{subfigure}\\[6pt]
+\begin{subfigure}{0.64\textwidth}\includegraphics[width=\linewidth]{backplane_pcb/render_bottom.png}\caption{bottom}\end{subfigure}
+\caption{Backplane 3D renders (not-fitted parts left out).}\label{fig:bprender}
+\end{figure}
+
+% =====================================================================================================================
+\section{Voice bus protocol}\label{sec:bus}
+The protocol is specified in \file{docs/bus.md}. Its goals, in order:
+\begin{enumerate}
+  \item \textbf{Synchronisation first:} every card turns the same event into sound at the same moment, to within a few
+    microseconds, independent of when the bytes reach it, how busy it is or where it is in its DAC buffer.
+  \item \textbf{Fixed latency instead of minimal latency:} a constant delay of a few milliseconds is accepted; jitter
+    between voices is not.
+  \item \textbf{Simple and robust:} broadcast without acknowledgements; lost packets are repaired by periodic
+    refreshes; one card talks at a time on the return line, and only when asked.
+\end{enumerate}
+
+\subsection{Physical layer}
+\begin{table}[htbp]
+\centering\small
+\caption{Bus lines.}\label{tab:busphy}
+\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\toprule
+Line & Driver & Electrical \\
+\midrule
+BCAST (card RX) & controller USART3 TX, push-pull & \SI{1}{Mbaud} 8N1, \SI{33}{\ohm} series resistor at the controller,
+  \SI{100}{\ohm} on the card \\
+RETURN (card TX) & the addressed card only, open drain & \SI{1}{k\ohm} pull-up to \SI{3.3}{V} on the backplane \\
+SYNC & controller TIM1 CH1, push-pull & \SI{1}{kHz} square; the rising edge starts a frame; \SI{100}{k\ohm} pull-down
+  on the card (standalone detection) \\
+NRST & 74HC595 output per slot, direct & reset and enumeration; no series resistor or pull-down \\
+SWIO & controller GPIO per slot, open drain & programming (WCH one-wire debug protocol) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+At \SI{1}{Mbaud} a card's USART divider is exactly 3.0 (\SI{48}{MHz}/16) and its fractional resolution cannot correct
+the HSI. The baud accuracy therefore comes from the HSITRIM coarse trim: within $\pm$\SI{0.1}{\percent} of the crystal
+plus about \SI{0.02}{\percent} of wander, far inside the UART's $\pm$\SI{2}{\percent}. A card does not listen to the
+bus until it has trimmed.
+
+\subsection{Frames, lead and presentation delay}
+\begin{itemize}
+  \item \textbf{Frame:} the \SI{1}{ms} between two rising SYNC edges, numbered by the controller with a 16-bit counter
+    sent in the FRAME packet at the start of each frame. All timing in the protocol is in frames; USB-MIDI delivers
+    events in \SI{1}{ms} USB frames without timestamps, so finer timestamps would gain nothing.
+  \item \textbf{Bus lead $L$:} the controller stamps each timed event with its execution frame, $L = 2$ frames after
+    the frame in which it arrived. The event is sent at the start of the next frame; the cards parse what arrived before
+    a tick in that tick and run the events that are due.
+  \item \textbf{Presentation delay $D$:} what tick $n$ computes appears at the outputs at frame $n + D$. The CVs go
+    through a delay line of $D$ ticks. The oscillator state $V_n$ (pitch, gate, phase reset, staged drum strikes) is
+    queued with its target time $b_n = t_n + D\,\bar P$ in SysTick cycles; SysTick and TIM2 both count HCLK, so the
+    renderer knows which carrier period each ring entry is played in and splits its block at $b_n$: oscillators exact
+    to one carrier period (\SI{5.3}{\micro s}), the modal engine to one \SI{64}{\micro s} sample.
+  \item \textbf{Choice of $D$:} $D$ must cover the DAC's render lead (two buffer halves) plus the tick's run time.
+    With 256-period buffer halves (\SI{1.37}{ms}) $D = 4$; the 1024-period halves of rev 0.1 would need $D = 12$.
+    The short halves also free \SI{3}{KB} of RAM.
+\end{itemize}
+Figure~\ref{fig:timing} shows the resulting timeline. From an event's arrival at the controller to sound:
+$L + D$ frames plus the fraction of the arrival frame, \SIrange{6}{7}{ms}, the same for every event and every voice.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1.85cm, y=1cm, font=\small\sffamily, >={Stealth[length=2mm]}]
+  % frame grid
+  \foreach \i in {0,...,7} {
+    \draw[black!20] (\i,0.4) -- (\i,-5.3);
+  }
+  \foreach \i/\l in {0/a, 1/a+1, 2/a+2, 3/a+3, 4/a+4, 5/a+5, 6/a+6} {
+    \node[font=\scriptsize] at (\i+0.5,0.75) {frame $\l$};
+  }
+  % SYNC
+  \node[anchor=east] at (-0.1,0) {SYNC};
+  \draw[thick] (-0.05,-0.3) \foreach \i in {0,...,6} { -- (\i,-0.3) -- (\i,0.2) -- (\i+0.5,0.2) -- (\i+0.5,-0.3) } -- (7.05,-0.3);
+  % MIDI arrival
+  \node[anchor=east] at (-0.1,-1.1) {USB-MIDI in};
+  \draw[->, thick, orange!80!black] (0.35,-0.75) -- (0.35,-1.2) node[below, font=\scriptsize]{note arrives};
+  % BCAST
+  \node[anchor=east] at (-0.1,-2.2) {BCAST};
+  \foreach \i in {0,...,6} { \fill[cyan!30] (\i+0.02,-2.4) rectangle (\i+0.12,-2.0); }
+  \fill[orange!50] (1.13,-2.4) rectangle (1.28,-2.0);
+  \node[font=\scriptsize, align=left, anchor=west] at (1.3,-2.2) {NOTE\_ON, frame byte = $a+2$};
+  \node[font=\scriptsize, anchor=north] at (0.07,-2.45) {FRAME};
+  % card tick
+  \node[anchor=east] at (-0.1,-3.3) {card tick};
+  \foreach \i in {0,...,6} { \fill[blue!35] (\i,-3.5) rectangle (\i+0.07,-3.1); }
+  \draw[->] (2.03,-3.55) -- (2.03,-3.95) node[below, font=\scriptsize, align=center]{parse + run:\\$V_{a+2}$ queued};
+  % output
+  \node[anchor=east] at (-0.1,-4.9) {DAC / CVs};
+  \draw[thick] (-0.05,-4.9) -- (6.0,-4.9) -- (6.0,-4.55) -- (7.05,-4.55);
+  \node[font=\scriptsize, anchor=west] at (6.05,-4.35) {note sounds};
+  % braces
+  \draw[decorate, decoration={brace, amplitude=4pt, mirror}] (0,-5.45) -- (2,-5.45) node[midway, below=4pt, font=\scriptsize]{lead $L$ = 2};
+  \draw[decorate, decoration={brace, amplitude=4pt, mirror}] (2,-5.45) -- (6,-5.45) node[midway, below=4pt, font=\scriptsize]{presentation delay $D$ = 4};
+\end{tikzpicture}
+\caption{Timing of one note. An event arriving in frame $a$ is stamped for frame $a + L$, transmitted after FRAME at
+the start of frame $a + 1$, parsed and executed by every card at the tick of frame $a + 2$, and appears at the DAC and
+CV outputs at the SYNC edge of frame $a + L + D$, exact to one carrier period.}
+\label{fig:timing}
+\end{figure}
+
+\paragraph{What limits the alignment.} The SYNC timestamp (EXTI entry, less than \SI{1}{\micro s} of jitter), the block
+split (one carrier period) and the prediction of $b_n$ from $\bar P$ over $D$ frames (HSI wander of $2\times10^{-4}$
+over 750 periods, a fraction of a period). Together a few microseconds.
+
+\subsection{Framing: COBS and CRC-8}
+Figure~\ref{fig:packet} shows the packet. Packets are COBS encoded and terminated by 0x00, so a receiver
+resynchronises at the next zero byte after any error; a packet may also begin with 0x00 (the cards' replies do), and
+empty packets are ignored. The decoded content is
+\begin{itemize}
+  \item controller $\to$ cards: \texttt{dst type [frame] payload crc8};
+  \item card $\to$ controller: \texttt{src type payload crc8}.
+\end{itemize}
+\texttt{dst} is a voice bitmask (bit $k$ = the card with address $k$; 0xFF = all, including unaddressed cards;
+0x00 = unaddressed cards, for enumeration). Timed messages carry the low 8 bits of the execution frame, read relative
+to the card's counter: late events run at once and are counted, events more than 32 frames ahead are dropped. The
+CRC is CRC-8 with polynomial 0x07, initial value 0, MSB first, no final XOR (CRC-8/SMBUS); the CRC over a whole packet
+including its CRC byte is 0. Multi-byte values are little-endian; pitch is in 1/256 semitone. Unknown types are ignored.
+Cards accept packets of up to 64 decoded bytes.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[font=\small\sffamily, >={Stealth[length=2mm]},
+  f/.style={draw, minimum height=7mm, minimum width=#1, inner sep=1pt, fill=white}, f/.default=12mm]
+  \node[f, fill=cyan!15] (dst) at (0,0) {dst};
+  \node[f, right=0pt of dst, fill=cyan!15] (type) {type};
+  \node[f, right=0pt of type, fill=orange!20] (fr) {frame};
+  \node[f=34mm, right=0pt of fr] (pay) {payload (0--60 bytes)};
+  \node[f, right=0pt of pay, fill=green!15] (crc) {crc8};
+  \node[anchor=east, font=\scriptsize] at (dst.west) {decoded:\ };
+  \node[above=1pt of fr, font=\scriptsize] {timed only};
+  \node[f=10mm, fill=gray!15] (code) at (0.6,-1.6) {code};
+  \node[f=58mm, right=0pt of code] (enc) {encoded bytes, no 0x00 inside};
+  \node[f=10mm, right=0pt of enc, fill=black!70, text=white] (del) {0x00};
+  \node[anchor=east, font=\scriptsize] at (code.west) {on the wire:\ };
+  \draw[->] ($(pay.south)+(0,0)$) -- node[right, font=\scriptsize]{COBS} ($(enc.north)+(0,0)$);
+\end{tikzpicture}
+\caption{Packet structure. CRC-8 covers dst to the last payload byte; COBS replaces every zero byte and adds one code
+byte per 254 bytes; the 0x00 delimiter ends the packet.}
+\label{fig:packet}
+\end{figure}
+
+\subsection{Messages}
+Table~\ref{tab:msgs} lists the messages. Replies (HELLO, STATUS, CAL\_DATA, COUNTERS) are sent only in answer to a
+REQUEST or ASSIGN. Only one request is outstanding at a time; the card answers within 2 frames and the controller
+times out after 5. The chip ID in HELLO (the V006's 64-bit unique ID from its electronic signature) lets the controller
+keep each card's calibration and identity even if cards change slots.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Bus messages (\file{docs/bus.md} 5).}\label{tab:msgs}
+\begin{tabularx}{\textwidth}{@{}l l c >{\raggedright}p{4.2cm} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Type & Name & Timed & Payload & Use \\
+\midrule
+0x01 & FRAME & & frame u16 & first packet of every frame; the cards check their counter \\
+0x02 & CONFIG & & $D$, $L$, tuning i16, flags & system settings \\
+0x03 & ASSIGN & & address & to dst 0x00: the released card takes the address and answers HELLO \\
+0x10 & NOTE\_ON & yes & pitch u16, velocity, flags & flags: retrigger, phase reset, legato \\
+0x11 & NOTE\_OFF & yes & velocity & release \\
+0x12 & PITCH & yes & pitch u16 & glide target, per-voice bend \\
+0x13 & VOICE\_STATE & yes & gate, pitch u16 & refresh; repairs a lost NOTE\_ON / NOTE\_OFF \\
+0x20 & CTRL & yes & id, value i16 & bend, mod wheel, pressure, expression, tempo, LFO reset \\
+0x21 & PARAM & yes & id, value i16 & one patch parameter (IDs 0--63, \file{midi.md}); 64--79 per voice \\
+0x22 & PATCH\_DATA & & slot, offset, count, values & into one of the card's 4 patch slots \\
+0x23 & PATCH\_SELECT & yes & slot & program change on the same tick on all addressed voices \\
+0x24 & PATCH\_PRESET & & slot, preset & interim: a built-in preset into a patch slot \\
+0x30 & REQUEST & & what, arg & STATUS, CAL\_DATA, HELLO, COUNTERS \\
+0x31 & CALIBRATE & yes & what & loopback calibration \\
+0x5x, 0x6x & per-voice records & yes & one record per set bit of dst & NOTE\_ON, NOTE\_OFF, PITCH, VOICE\_STATE, CTRL,
+  PARAM for several voices with different payloads in one packet \\
+\midrule
+0x80 & HELLO & & chip ID (8 bytes), fw version, capabilities & reply \\
+0x81 & STATUS & & flags, HSITRIM, clock error, counters, CPU load & reply \\
+0x82 & CAL\_DATA & & block, values & reply \\
+0x83 & COUNTERS & & all diagnostic counters & reply (extension) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Bandwidth.} At \SI{1}{Mbaud} 8N1 a frame carries 100 bytes. Table~\ref{tab:sizes} gives the encoded sizes,
+computed from the packet format; the bench measured exactly these sizes. An 8-voice chord with its FRAME packet is
+\statBusChord\ bytes and just fits one frame; as per-voice records the 8 NOTE\_ONs are one packet of
+\statBusMultiChord\ bytes. The refreshes use idle room: a VOICE\_STATE for one voice every \SI{6}{ms} (each voice every
+\SI{50}{ms}) and a slow round-robin resend of the active patch.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Packet sizes in bytes (generated: COBS overhead and delimiter included).}\label{tab:sizes}
+\input{generated/bus_sizes.tex}
+\end{table}
+
+\subsection{Enumeration}
+Until the controller firmware runs, the 595 outputs are off and the cards run standalone; they never send unless
+addressed. The controller then resets every card through the 595, starts SYNC and FRAME and goes slot by slot:
+\begin{enumerate}
+  \item release NRST of slot $k$; the card boots, timestamps 100 SYNC periods (\SI{100}{ms}), sets HSITRIM,
+    configures its USART, waits for a 0x00 delimiter and starts parsing;
+  \item from \SI{120}{ms} on, the controller sends ASSIGN (address $k$) to dst 0x00 every \SI{10}{ms}; the card takes it
+    and answers HELLO;
+  \item without HELLO within \SI{300}{ms} slot $k$ is empty; the next slot follows at once.
+\end{enumerate}
+Then CONFIG and the patch go to all cards. Address = slot index, so the controller knows each voice's place.
+
+\paragraph{Error handling.} A bad CRC drops the packet (counted); a corrupted dst byte loses the packet as a CRC error
+would. A lost NOTE\_ON or NOTE\_OFF is repaired by the next VOICE\_STATE refresh. A FRAME that does not match the
+card's counter resynchronises it (counted as a slip). A single missing SYNC edge is bridged by SysTick \SI{0.25}{ms}
+later; after \SI{10}{ms} without SYNC the card mutes its VCA and re-locks when SYNC returns. SYNC edges less than
+3/4 frame after the last are ignored as glitches. Firmware updates go over SWIO, not over the bus.
+
+\subsection{Bench results}\label{sec:benchbus}
+The protocol runs on the bench: a CH32V203 development board with \file{firmware/bench\_ctrl} as controller and a
+CH32V006 evaluation board with the card build of the voice firmware (\texttt{make BOARD=card}) as voice 0, driven by
+\file{tools/bustest.py}. The bench return line has no \SI{1}{k\ohm} pull-up, so the bench card build drives it
+push-pull during its own replies (\texttt{BUS\_TX\_PP=1}); NRST is not wired, so the bench controller also re-sends
+ASSIGN every \SI{500}{ms} to find a card reset over SWIO.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Measured latency on the bench (oscilloscope: SYNC on one channel, the DAC pin PC2 on the other; NOTE\_ON with
+phase reset on a DAC patch; \file{docs/bus.md} 9.3).}\label{tab:latency}
+\begin{tabular}{@{}l l r r@{}}
+\toprule
+Reference edge & Setting & Mean & Spread \\
+\midrule
+SYNC of the execution frame & $D = 4$ & 4.008\,ms & 8\,\textmu s (10 notes) \\
+ & $D = 3$ & 3.008\,ms & \\
+ & $D = 6$ & 6.009\,ms & \\
+SYNC of the transmitting frame & $L = 2$, $D = 4$ & 5.008\,ms & \\
+ & $L = 3$, $D = 4$ & 6.009\,ms & \\
+\bottomrule
+\end{tabular}
+\end{table}
+The 8--9\,\textmu s above $D$ frames are one to two carrier periods; from the transmitting frame the delay is
+$L - 1 + D$ frames, as designed.
+Further results with one card (\file{docs/bus.md} 9.3):
+\begin{itemize}
+  \item \textbf{Error handling:} a corrupted NOTE\_ON is dropped and counted; the VOICE\_STATE refresh restores the
+    note within 50 frames.
+  \item \textbf{Throughput:} \SI{1}{Mbaud} on both lines, 28\,k packets in \SI{20}{s} with notes, bend and controllers
+    every \SI{14}{ms}: no CRC, COBS, UART, late or slip errors.
+  \item \textbf{Clock:} the bench V006's HSI was within $\pm$0.06\,\% of the crystal at the factory trim (no trim step
+    taken); a card started at trim 19 corrected itself to 16 in one step.
+  \item \textbf{Tick run time} (V006, \SI{48}{MHz}): the synth tick 1.1\,k cycles, the $V_n$ commit 0.4--1\,k, a modal
+    strike 5.5\,k, a REQUEST with its reply up to 10\,k, PATCH\_SELECT of the modal patch 24\,k cycles.
+\end{itemize}
+The load test with eight voices is in Section~\ref{sec:load}.
+
+% =====================================================================================================================
+\section{Firmware}\label{sec:fw}
+
+\subsection{Voice card firmware}
+The card firmware (\file{firmware/voice/}) grew out of the TouchSynth rev 0.1 firmware on ch32fun; the touch UI is removed, the board~1 build keeps the analog-DCO
+code and its MIDI input. One code base builds for board~1 and, with \texttt{make BOARD=card}, for the card's pin map
+with the bus receiver.
+\begin{table}[htbp]
+\centering\small
+\caption{Card firmware modules.}\label{tab:fwmod}
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+\toprule
+File & Content \\
+\midrule
+\file{board.h} & pin maps (board~1, card), timer remap codes \\
+\file{touchsynth.c} & main loop, control tick (SYNC edge on the card, SysTick on board~1), interrupt levels \\
+\file{hw.c} & TIM1 CV PWM with 2-bit dither, TIM2 DAC with its DMA ring and start sequence, SYNC EXTI, USART1 bus
+  receiver (DMA ring) and transmitter, loopback ADC capture \\
+\file{dsp.c} & oscillators (polyBLEP saw / pulse, noise), modal drum engine in fixed point, second-order error feedback,
+  the $V_n$ queue and the block split of the presentation delay, pitch lock to SYNC \\
+\file{synth.c} & voice engine at \SI{1}{kHz}: glide, LFO, envelopes, CV laws, pitch envelope, bus event handlers \\
+\file{bus.c} & voice bus: frame counter, HSI trim, COBS / CRC parser, event queue, replies \\
+\file{console.c} & test console over SWIO (\texttt{minichlink -T}) \\
+\file{tables.h} & generated by \file{gen\_tables.py} from the result files and the presets \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Interrupt levels.} The V006 has two preemption levels with nesting (INTSYSCR.INESTEN). The DAC render runs
+at the low level, everything else at the high level (Table~\ref{tab:irq}), so the control tick, the CV PWM and the
+UART preempt a render, and a render preempts the main loop. Measured on board~1: the tick enters within 27--28
+cycles while a render runs; without nesting it waited up to 45\,k cycles.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Card firmware timing.}\label{tab:irq}
+\begin{tabularx}{\textwidth}{@{}l l l X@{}}
+\toprule
+Context & Rate & Level & Work \\
+\midrule
+TIM1 update & \SI{46.875}{kHz} & high & dithered CV PWM: 10 bit + 2-bit dither on four channels (to move to a DMA burst) \\
+Control tick & \SI{1}{kHz} & high & the SYNC edge (EXTI on PD4); SysTick only while SYNC is missing: bus parsing and due
+  events, synth tick, CV commit, $V_n$ commit \\
+DMA1 ch1 half / complete & \SI{732}{Hz} & low & render the 256-period buffer half that has just played (oscillators
+  or modal engine), at most 32 periods per block \\
+Main loop & -- & -- & SWIO console \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{DAC rendering.} The DAC ring holds two halves of 256 carrier periods (512 bytes for single PWM, 1536 for
+dual). At each half or complete transfer the renderer fills the half that has just played. It works in blocks of 32
+periods, splits a block where a queued $V_n$ takes effect, and runs the error feedback over the block. The modal patch
+uses 252-period halves (21 samples of 12 periods). If a $V_n$ arrives after its time it is applied at the start of the
+half and counted as a late tick.
+
+\paragraph{Control tick.} On the card, each SYNC edge runs, in order:
+\begin{enumerate}
+  \item the bus tick: frame counter, SYNC period filter, HSI trim at start-up, SYNC loss detection, parsing of the
+    bytes that arrived before the tick, and the events due in this frame;
+  \item \texttt{synth\_tick}: envelopes, LFO, glide and the CV laws;
+  \item the CV commit into the $D$-tick delay line;
+  \item the $V_n$ commit with its presentation time.
+\end{enumerate}
+The parser drops packets for other cards at their dst byte, before the CRC, and skips to the next 0x00; the COBS
+decoder runs over the RX ring in place. A REQUEST is answered in the tick that parses it, by TX DMA.
+
+\paragraph{Memory.} On board~1 the phase-1 voice firmware used \SI{50.1}{KB} of \SI{62}{KB} flash and \SI{6.94}{KB}
+of static RAM, including a \SI{4}{KB} console capture buffer that also holds the DAC ring. The card build gives
+\SI{512}{bytes} of that buffer to the bus (RX ring, event queue). It takes about \SI{54}{KB} of flash and
+\SI{7.3}{KB} of the \SI{8}{KB} RAM; the free stack stays at 150--200 bytes under bus load (smallest seen: 156), so new
+RAM or deep calls need a check.
+
+\subsection{Controller firmware}
+The controller firmware for the backplane is planned in \file{docs/controller.md}; most of it is not written yet:
+\begin{itemize}
+  \item USB device (MIDI + CDC first, UAC1 audio later; running on the bench, below) and USB host (class-compliant
+    MIDI);
+  \item MIDI router and parts (8 parts, channels, key ranges, CCs, NRPN, program change, MIDI clock;
+    \file{docs/midi.md});
+  \item voice allocator (free voice, else the oldest released, else the oldest held, within a part's slot mask);
+  \item bus scheduler (frame clock, timed events with lead $L$, refreshes, requests);
+  \item enumeration and calibration storage by chip ID, patch library in flash, the SWIO programmer.
+\end{itemize}
+Today \file{firmware/bench\_ctrl} stands in for it on a CH32V203 development board. It runs from the \SI{8}{MHz}
+crystal at \SI{144}{MHz} and provides:
+\begin{itemize}
+  \item the frame engine: in the TIM1 update interrupt (the SYNC rising edge) FRAME first, then enumeration and refresh
+    packets, then queued packets up to a budget of 95 bytes per frame, one DMA transfer per frame;
+  \item a command interface on USART1 (raw bytes, MIDI messages, packet bodies with corrupt-CRC options, requests,
+    status, CONFIG, a scope marker on the SYNC pulse, SYNC gap tests, and the 8-voice load generator);
+  \item an Ardulink-compatible SWIO bridge: \texttt{minichlink -C ardulink} flashes and debugs a CH32V006 through the
+    V203, the path the backplane will use to update the cards. The one-wire protocol is bit-banged at \SI{125}{ns}
+    resolution from the \SI{144}{MHz} SysTick.
+\end{itemize}
+
+\paragraph{USB (bench, 2026-10-19).} The development board's USB-C is wired to the V203's USBFS peripheral (PB6/PB7),
+not to USBD (PA11/PA12), which the backplane uses for its device port. \file{bench\_ctrl} is now a full-speed composite
+device on USBFS: class-compliant USB-MIDI (one cable each way; Linux binds \texttt{snd-usb-audio}) plus a CDC serial
+port that carries the whole command set, the SWIO bridge included. Incoming USB-MIDI packets enter the same MIDI to
+bus path as the serial command, with flow control (the host is held off when the buffers are full). Measured:
+enumeration at the first attempt; the 17 bus checks pass over USART1 and over the CDC port; USB packet to execution
+frame 1.0--2.0\,ms, so a note sounds 5.0--6.0\,ms after its USB packet at $D = 4$, $L = 2$; SYNC timing unchanged by
+USB traffic (0.6--0.9\,ns, the scope's resolution); re-plug in 0.65--0.71\,s, controller reset back on USB in
+0.37\,s. A USBD driver for the backplane's port builds (\texttt{make USB=usbd}) but is untested on this board; the
+V203's internal D+ pull-up on USBD exists and can be switched, whether it suffices against a real host is open (the
+1.5\,k$\Omega$ footprint stays). Through ALSA the bus checks pass with every message sent as USB-MIDI; a flood of
+20\,000 messages arrives without loss (the device holds the host off instead of dropping; beyond the bus capacity
+the events reach the card late, as the bus budget predicts), and the SYNC timing is unchanged under a MIDI flood.
+Not yet tested: a host-side reset.
+
+\subsection{MIDI and patches}
+The patch model (\file{docs/midi.md}, proposal) has these elements:
+\begin{itemize}
+  \item \textbf{Patch:} 64 signed 16-bit parameters plus a 16-character name, stored on the controller (64 programs,
+    about \SI{9}{KB} of flash). The parameters cover:
+    \begin{itemize}
+      \item oscillators: wave, level, coarse, fine, pulse width and PWM per oscillator; noise;
+      \item glide and the pitch envelope;
+      \item LFO: rate, wave, sync (free, key, global frame-locked, tempo), delay, depth on pitch, cutoff and amplitude;
+      \item filter: cutoff, resonance, envelope amount, key tracking, velocity and pressure routing; the filter and
+        amplitude envelopes;
+      \item the modal engine: model, mallet, decay, noise;
+      \item bend range, unison spread, wheel depths.
+    \end{itemize}
+  \item \textbf{Cards:} each card keeps 4 patch slots. A timed PATCH\_SELECT switches sounds without resending a patch,
+    which drum kits and parts sharing cards need.
+  \item \textbf{Parts:} up to 8 parts, each with a MIDI channel, key range, a mask of slots, a mode (poly, mono,
+    legato, unison, kit) and a patch.
+\end{itemize}
+The bench firmware maps the parameter IDs that exist in the current engine; PATCH\_DATA and CALIBRATE are not
+implemented yet, and PATCH\_PRESET stands in for PATCH\_DATA.
+
+\subsection{CPU load and limits}\label{sec:cpu}
+The card CPU, not the bus, is the scarce resource (Table~\ref{tab:cpu}). A buffer half of 256 periods is 65\,536 CPU
+cycles; the render of three oscillators takes 175 cycles per period, about 68\,\%, and with the CV interrupt and the
+tick a half took up to 87\,\% on board~1. The CV DMA burst would win back about 9\,\%; a half-rate mode (oscillators
+at \SI{93.75}{kHz}, interpolated on the \SI{187.5}{kHz} carrier) saves 28\,\% per sample at the cost of polyBLEP
+aliasing ($-51$ instead of $-56$\,dB at C5) and stays a reserve.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Card CPU figures (board~1: \file{docs/results/hw\_board1\_fw\_phase1.csv}; bench V006: \file{docs/bus.md}
+9.3 and 9.5).}\label{tab:cpu}
+\begin{tabularx}{\textwidth}{@{}X l@{}}
+\toprule
+Item & Value \\
+\midrule
+Render, cycles per carrier period: 3 oscillators / 1 saw / modal / gate off & 175 / 97 / 56 / 70 \\
+Render, 3 oscillators, dual-PWM build & 141 (split without error feedback) \\
+Worst render on board~1 (tunes, 3 oscillators), share of a half & 57.3\,k of 65.5\,k cycles (87\,\%), 0 overruns \\
+CPU load on the bench card (tick + render): no DAC / 2 oscillators or modal / 3 oscillators & 3\,\% / 80\,\% / 90\,\% \\
+Tick without replies: no traffic / 71 bytes per frame of foreign traffic & 7\,k / 9\,k cycles \\
+Parser: about 128 cycles per byte before early discard; a fully decoded byte now & 100--125 cycles \\
+Smallest free stack under bus load & 156 bytes \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Limit.} Three-oscillator patches are outside the CPU budget once the bus is active: without traffic they
+already leave only 4--11 carrier periods of slack, and with vibrato (a new $V_n$ every tick) under dense traffic they
+miss buffer halves. Two oscillators and the modal patch miss none. Options: a cheaper oscillator render, the CV DMA
+burst, parsing outside the tick, or at most two oscillators per voice.
+
+% =====================================================================================================================
+\section{Verification}\label{sec:verif}
+
+\subsection{Plan}
+\begin{table}[htbp]
+\centering\small
+\caption{Verification stages (\file{docs/design.md} 6).}\label{tab:vstages}
+\begin{tabularx}{\textwidth}{@{}l X l l@{}}
+\toprule
+Stage & What & Covers & Status \\
+\midrule
+V0 Simulation & S9--S13 and the behavioural model: DAC, oscillators, \SI{5}{V} core, reconstruction filter, mixer, pan
+  & P2--P7 & done \\
+V1 Board~1 & rev 0.1 board as voice test bed: oscillator engine, CPU, DMA, DAC loading, half rate, HSITRIM, HSI
+  jitter, DCO against DAC & P1, P2, F5 & done \\
+V1b Bench bus & V203 development board + V006 as one card: bus, SYNC, latency, errors, 8-voice load & P8, P10 & done \\
+V2 First card & one voice card at \SI{5}{V}: bring-up, the core against S10, carrier, input transitions, loopback
+  calibration, dual PWM & P3--P7, F8, F9 & open \\
+V3 Backplane + 1--2 cards & USB-MIDI, bus, SYNC and HSITRIM against the crystal, enumeration, SWIO from the controller
+  & F1--F4, P1, P8, P9 & open \\
+V4 8 cards & polyphony, allocation, mixer headroom, crosstalk, supply and current & F6, F7, C1 & open \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Simulation summary}
+Table~\ref{tab:simsum} summarises the simulations. All blocks meet their targets in simulation; none has been
+confirmed on new hardware yet.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Simulation summary (results files in \file{docs/results/}).}\label{tab:simsum}
+\begin{tabularx}{\textwidth}{@{}l >{\raggedright}p{2.6cm} >{\raggedright}X >{\raggedright}X l@{}}
+\toprule
+\# & Block & Question & Result & Status \\
+\midrule
+S9 & oscillators on the DAC (model) & carrier, bit depth and filter for DCO quality & \SI{187.5}{kHz}, 7 bit, SDM2:
+  within a few dB of the DCO; $-67$ to $-87$\,dB in the 3-oscillator voice & pass \\
+S10 & analog core at \SI{5}{V} & rev 0.1 performance at \SI{5}{V} & cutoff \statStenFcLow\,Hz--\statStenFcHigh\,kHz, THD
+  \statStenThd\,\%, SNR \statStenSnrLo--\statStenSnrHi\,dB, \statStenCurrent\,mA & pass \\
+S11 & reconstruction filter & carrier $\leq -70$\,dB, droop & \statSelevenCarrier\,dB, \statSelevenDroopTwenty\,dB at
+  \SI{20}{kHz} & pass \\
+S12 & two-bus mixer & headroom, ground rejection, noise, VREF & \statStwelveHardMargin\,dB margin with 8 hard-panned cards;
+  45\,dB typical ground rejection & pass \\
+S13 & pan stage & stereo with one VCA & separation \statSthirteenSep\,dB, THD \statSthirteenThd\,\% & pass \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Cross-checks.} \file{hw/check\_sim.py} compares every simulated element with the schematic: the voice card
+against the S13 variant A netlist (S10 v5c plus the pan stage, 158 elements) and the backplane's mixer sheet against
+the S12 two-bus netlist. \file{hw/check\_netlist.py} compares the KiCad netlist with the design description.
+Both schematics are ERC clean, and both PCBs pass the KiCad DRC with schematic parity (0 violations, 0 unconnected
+pads).
+
+\paragraph{What has been tested.} Nothing of the new hardware has been built. The analog blocks are simulated; the
+oscillator engine, the DAC, the clock trimming and the CPU figures are measured on board~1; the bus protocol is
+measured with a CH32V203 development board and one CH32V006 card build, which also emulates the other seven voices.
+Not yet tested: a voice card at \SI{5}{V}, the backplane, USB, the NRST enumeration, the firmware update over CDC and
+the per-slot SWIO lines (only the bench bridge to one card has run), and the alignment between several real cards.
+
+\subsection{Board~1 results used for the design}
+\begin{itemize}
+  \item \textbf{DAC against DCO:} same inharmonic content (C2--C7, within $\pm$2\,dB) and the same closed-VCA floor
+    (Table~\ref{tab:hwdac}).
+  \item \textbf{DAC loading:} all formats exact in register read-back and on the pins; one DMA request per carrier
+    period (format~4) chosen.
+  \item \textbf{Firmware phase 1:} 256-period halves rendered in the DMA interrupt, 0 overruns over the test tunes,
+    worst render 87\,\% of a half.
+  \item \textbf{Three-oscillator voice:} board~1 takes against the behavioural model (Figure~\ref{fig:s9hwtakes}).
+  \item \textbf{HSITRIM:} \SI{0.21}{\percent} per step, monotonic, range $-4.2$ to $+2.3$\,\%; HSI jitter: Allan deviation
+    about $2\times10^{-4}$, independent of the LDO settings.
+  \item \textbf{Half rate:} saves 28\,\% of the CPU per sample; costs polyBLEP aliasing above C5.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering\includegraphics[width=0.85\textwidth]{s9_hw.pdf}
+\caption{Three-oscillator test tunes on board~1 (left) and in the behavioural model (right).}\label{fig:s9hwtakes}
+\end{figure}
+
+\subsection{Bench tests of the voice bus}
+\file{tools/bustest.py} runs the bus tests against the bench controller and one card. Each test prints PASS / FAIL
+with the numbers it checked (Table~\ref{tab:bustest}); on the bench all pass at \SI{1}{Mbaud}, and also at
+\SI{2}{Mbaud}.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Bus bench tests (\file{tools/bustest.py}).}\label{tab:bustest}
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+\toprule
+Test & Checks \\
+\midrule
+\texttt{enum} & enumeration state, HELLO with the chip ID, STATUS ``synced'' \\
+\texttt{notes} & program change, note on / off, a phrase without CRC, late or slip errors \\
+\texttt{patch} & patch slots and PATCH\_SELECT; modal strikes without late ticks \\
+\texttt{ctrl} & CTRL (bend, wheel, expression) and PARAM reach the voice \\
+\texttt{crc} & a corrupted packet is rejected and counted; a damaged packet loses only itself \\
+\texttt{repair} & a lost NOTE\_ON is restored by VOICE\_STATE \\
+\texttt{late} & late events run at once, far events are dropped, both counted \\
+\texttt{config} & CONFIG changes $D$ \\
+\texttt{sync} & SYNC gaps of several frames: bridging, muting, relock \\
+\texttt{reset} & a card reset over SWIO is found and configured again \\
+\texttt{counters} & the card's counters and STATUS, the controller's status line \\
+\texttt{carrier}, \texttt{latency} & (oscilloscope) the DAC carrier with and without a DAC patch; latency against $D$ and $L$ \\
+\texttt{stress}, \texttt{load} & dense traffic for \SI{20}{s}; the 8-voice load test (Section~\ref{sec:load}) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Eight voices with one card (load test)}\label{sec:load}
+The load test (\file{docs/bus.md} 9.5) emulates a full instrument with the bench hardware. The bench controller treats
+voices 1--7 as populated (no HELLO expected) and sends all their traffic; the card is voice 0 and must discard the
+rest. Notes are allocated as in \file{docs/midi.md} (one poly part) or go to 8 single-voice parts (MIDI channel $k$
+$\to$ voice $k$). A generator in the controller plays chords and controller sweeps through the same MIDI path, and the
+refreshes cover all 8 voices. Unless stated: \SI{1}{Mbaud}, $D = 4$, $L = 2$, the card on a two-oscillator DAC patch.
+
+\paragraph{Bus.} The peak bytes per frame equal the computed sizes. A frame carries 88 bytes of events after FRAME,
+and with $L = 2$ there is no slack: anything that does not fit the next frame is late at the cards by whole frames
+(Table~\ref{tab:loadburst}). Per-voice records halve chords and refreshes.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Load test: bursts from one MIDI command (one execution frame), \file{docs/bus.md} 9.5.}\label{tab:loadburst}
+\begin{tabularx}{\textwidth}{@{}X r r l l@{}}
+\toprule
+Burst & Bytes & Frames & Late at $L = 2$ & \shortstack[l]{Per-voice records:\\bytes, late} \\
+\midrule
+chord of 8 & 87 & 1 & 0 & 45, 0 \\
+legato chord change (8 NOTE\_OFF, 8 NOTE\_ON) & 143 & 2 & 5 packets by 1 frame & 52, 0 \\
+chord + bend, wheel, cutoff, one part & 114 & 2 & 3 by 1 & 72, 0 \\
+chord + bend, wheel, cutoff, 8 parts & 303 & 4 & 24 by up to 3 & 114, 1 by 1 \\
+VOICE\_STATE refresh, 8 voices & 1.5 / frame & & & 0.6 / frame \\
+PATCH\_DATA, 8 values, one every 16 frames & 1.5 / frame & & & \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Sustained traffic on 8 single-voice parts (chords every 250 frames, bend, wheel and cutoff on every part every $N$
+frames) saturates the bus at about 86 bytes per frame: the backlog then grows without limit (late by up to 16 frames)
+and the refreshes, which only use idle room, stop (Table~\ref{tab:loadsust}). Two controller-side measures help:
+\begin{itemize}
+  \item \textbf{Notes ahead of controllers (V\_PRIO):} two queues in the controller; CTRL and PARAM wait behind notes.
+    No protocol change, and no note is late under any controller load.
+  \item \textbf{Per-voice records:} the same events in fewer bytes; saturation only at 24\,000 events per second.
+\end{itemize}
+One poly part, the default setup, needs little: chords with the three controllers every 5 frames take 14 bytes per
+frame, nothing late.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Load test: sustained traffic, 8 single-voice parts, late packets per \SI{5}{s} (\file{docs/bus.md}
+9.5).}\label{tab:loadsust}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}r r r r r r l@{}}
+\toprule
+\shortstack[r]{$N$\\(events/s)} & \shortstack[r]{Bytes\\per frame} & Budget & \shortstack[r]{Late\\$L = 2$} &
+\shortstack[r]{Late\\$L = 3$} & \shortstack[r]{V\_PRIO:\\notes late} & \shortstack[l]{Per-voice records:\\bytes per
+frame, late} \\
+\midrule
+8 (3000) & 35 & 25\,\% & 9\,495 & 3\,825 & 0 & 16, 5 \\
+4 (6000) & 62 & 50\,\% & 18\,993 & 7\,650 & 0 & 25, 10 \\
+3 (8000) & 79 & 66\,\% & 25\,489 & 10\,374 & 0 & 30, 7 \\
+2 (12000) & 86, saturated & 98\,\% & 45\,148 & 45\,124 & 0 & 42, 0 \\
+1 (24000) & 86, saturated & 98\,\% & 45\,240 & & 0 & 75, saturated \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Card.} The card's CPU broke first, not the bus. Parsing in the tick cost about 128 cycles per byte (COBS,
+CRC, then the address check; the V006 runs from flash with 2 wait states), for foreign bytes as for its own. Under
+71 bytes per frame of foreign traffic a two-oscillator patch missed 1297 DAC buffer halves in \SI{10}{s}. Two parser
+changes fixed that (Table~\ref{tab:loadcard}):
+\begin{itemize}
+  \item \textbf{Early discard:} packets for other cards are dropped at their dst byte, before the CRC, and the rest is
+    skipped to the next 0x00 at memory speed;
+  \item \textbf{In-place decoder:} the COBS decoder runs over the RX ring in place with its state in registers (an
+    87-byte burst: 11.1\,k $\to$ 5.2\,k cycles).
+\end{itemize}
+The three-oscillator patch still misses halves. As one of 8 poly voices (14 bytes per frame) the two-oscillator and
+the modal patches miss nothing, the three-oscillator patch 18--372 halves in \SI{10}{s}. The tick without replies takes
+7\,k cycles without traffic and 9\,k under this load; the free stack was at least 156 bytes.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Load test: DAC buffer halves missed in \SI{10}{s} under 71 bytes per frame of foreign traffic (\file{docs/bus.md}
+9.5).}\label{tab:loadcard}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{@{}X r r r r@{}}
+\toprule
+Patch & No traffic: missed, slack & Before & Early discard & + in-place parser \\
+\midrule
+two oscillators (lead\_dac) & 0, 38--43 periods & 1\,297 & 0 & 0 \\
+modal (kettle) & 0, 85 & 0 & 0 & 0 \\
+three oscillators (moog\_bass) & 1--3, 4--11 & 6\,263 & 2\,231 & 1\,003--1\,748 \\
+no DAC (init) & -- & 0 & 0 & 0 \\
+Parser cycles per tick: mean, longest & 1.0\,k, 3.2\,k & 8.8\,k, 11.7\,k & 4.9\,k, 6.6\,k & 3.0--4.1\,k, 5.8\,k \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Latency under load.} On time, the latency does not depend on the load: $D$ frames plus one or two carrier
+periods. A late event is late by whole frames (Table~\ref{tab:loadlat}).
+
+\begin{table}[htbp]
+\centering\small
+\caption{Load test: latency from the SYNC edge of the execution frame to the note on PC2, 10 notes (\file{docs/bus.md}
+9.5).}\label{tab:loadlat}
+\begin{tabularx}{\textwidth}{@{}X l l@{}}
+\toprule
+Load & Mean & Spread \\
+\midrule
+none (5 notes) & 4.0088\,ms & 4.8\,\textmu s \\
+7 parts, controllers every 3 frames (72 bytes/frame), the card's NOTE\_ON alone & 4.91\,ms: 4, 5 or 6\,ms & 2.0\,ms \\
+the same, $L = 3$ & 4.41\,ms: 4 or 5\,ms & 1.0\,ms \\
+the same, per-voice records (29 bytes/frame) & 4.0097\,ms & 5.4\,\textmu s \\
+the same, V\_PRIO & 4.0096\,ms & 4.6\,\textmu s \\
+the card's note in a chord of 8, the part's controllers every 3 frames & 4.0078\,ms & 6.7\,\textmu s \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{\SI{2}{Mbaud}.} With dividers 1.5 on the V006 and 36 on the V203 (both exact), \SI{2}{Mbaud} works on the
+bench wiring: all 17 tests pass without CRC or UART errors. Bursts up to 190 bytes fit one frame, and the bus saturates
+at 183 bytes per frame. A burst then reaches the cards in one tick, however (193 bytes: parser 13.3\,k, tick 17\,k
+cycles), and the two-oscillator patch misses 90--440 halves per \SI{5}{s} even at a 35-byte average, against none at
+\SI{1}{Mbaud}.
+
+\paragraph{Conclusions} (\file{docs/bus.md} 9.5):
+\begin{enumerate}
+  \item notes ahead of controllers in the controller; coalescing queued controller values of the same voice and ID
+    would also bound the backlog;
+  \item per-voice records for chords and the VOICE\_STATE refresh (half the bytes, a legato chord change in one
+    frame). For controllers on several parts they cost card CPU, because every addressed card decodes the whole packet;
+  \item $L = 3$ where per-voice records are not used for legato chords and multi-part controllers (one frame of slack,
+    7--8\,ms latency);
+  \item \SI{1}{Mbaud} until the cards parse outside the tick;
+  \item three-oscillator patches need a cheaper render or must be limited to two oscillators per voice;
+  \item the refresh rates can stay (1.5 bytes per frame for 8 voices).
+\end{enumerate}
+Only testable with 8 real cards: the electrical load on BCAST, RETURN and SYNC, the NRST enumeration, the alignment of
+a chord across cards, and each card's CPU under its own and the other cards' traffic.
+
+% =====================================================================================================================
+\section{Manufacturing}\label{sec:mfg}
+
+\subsection{Parts policy}
+Both boards are assembled by JLCPCB from the \emph{Basic} and \emph{Promotional Extended} lists only, so no
+extended-part fees arise. The part lists were taken from the JLCPCB parts API
+(\file{parts/jlcpcb\_basic\_and\_promotional\_parts.csv}); \file{hw/lcsc.py} picks passives from it (Basic first, then
+by stock), with voltage ratings of at least twice the working voltage and C0G wherever a capacitor is in the audio
+path. Hand-soldered: the MCUs (own stock), connectors and headers, and parts missing from the lists (the polyfuse, the
+host-port switch). The SPI flash is not fitted at first (own stock if fitted later). Table~\ref{tab:promo} lists the Promotional Extended lines; on the voice card most of them
+are 0402 resistor values that are not Basic.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{Promotional Extended lines (generated).}\label{tab:promo}
+\input{generated/promo.tex}
+\end{table}
+
+\subsection{BOM summary and cost}
+\begin{table}[htbp]
+\centering\small
+\caption{BOM summary (generated from \file{hw/voice.py}, \file{hw/backplane.py} and the parts list). Cost: assembled
+parts at the list unit prices, without PCB, assembly fees, MCUs and hand-soldered parts.}\label{tab:bomsum}
+\begin{tabular}{@{}l r r@{}}
+\toprule
+& Voice card & Backplane \\
+\midrule
+Parts in the design & \statVoiceParts & \statBpParts \\
+Assembled (JLCPCB) & \statVoiceAsm & \statBpAsm \\
+BOM lines: Basic / Promotional & \statVoiceBasic\ / \statVoicePromo & \statBpBasic\ / \statBpPromo \\
+Hand-soldered & \statVoiceHand & \statBpHand \\
+Not fitted (DNP) & \statVoiceDnp & \statBpDnp \\
+Test points & \statVoiceTp & \statBpTp \\
+Assembled parts cost (USD) & \statVoiceCost & \statBpCost \\
+\bottomrule
+\end{tabular}
+\end{table}
+The assembled parts of 8 cards and one backplane cost about USD \statSystemCost\ at list prices. To this come the
+hand-soldered parts (on the backplane about USD 3--6 without the MCU and the flash: sockets, USB connectors, jack,
+headers, polyfuse; on each card the 2$\times$8 right-angle header and two 1$\times$3 headers), the MCUs from own stock,
+the PCBs (both boards are in JLCPCB's smallest price class) and the order-level assembly fees, which dominate at small
+quantities. The full BOMs are in Appendix~\ref{app:bom}.
+
+\subsection{Fabrication data}
+\file{hw/fab.py} (with \texttt{BOARD=backplane} for the backplane) writes the Gerber files of all copper layers plus
+mask, paste, silkscreen and outline, the Excellon drill file, the BOM and the placement file with rotation offsets for
+the SOT, SOIC and TSSOP packages, into \file{hw/<board>/production/}. Parts marked DNP or hand-soldered are excluded
+from assembly. The placement preview on the JLCPCB order page must be checked for the SOT-23 / SOT-363 transistors,
+the diodes and the LEDs.
+
+% =====================================================================================================================
+\section{Open points and risks}\label{sec:open}
+\begin{itemize}
+  \item \textbf{Nothing new is built yet.} The voice card and the backplane are simulated, drawn and routed (DRC clean);
+    review and order are pending. The first step is one card at \SI{5}{V} on the bench, powered by the programmer (V2),
+    before the backplane.
+  \item \textbf{\SI{5}{V} core against the simulation.} Microchip's MCP6002 model lacks the input-stage transition and
+    distortion detail. The INA inputs stay above the transition and the difference amplifiers below it by design;
+    resonance, THD and offsets need the bench check on the first card.
+  \item \textbf{Card CPU.} Three-oscillator patches leave only 4--11 carrier periods of slack without traffic and miss
+    DAC buffer halves under bus load, even with early discard and the in-place parser (Section~\ref{sec:load}). Two
+    oscillators and the modal patch are inside the budget. Candidates: a cheaper render, the CV DMA burst (about
+    9\,\%), parsing in the main loop below the render (needs $L = 3$), or at most two oscillators per voice.
+    \SI{2}{Mbaud} and per-voice records for controllers on several parts cost card CPU.
+  \item \textbf{Bus lead $L = 2$ has no slack.} A frame carries 88 bytes of events; a legato chord change or
+    controllers on 8 parts arrive late by whole frames, and a sustained load of about 86 bytes per frame saturates the
+    bus. Recommended for the controller: notes ahead of controllers (two queues), coalescing of queued controller
+    values, per-voice records for chords and the VOICE\_STATE refresh, and $L = 3$ where those are not used. To be
+    confirmed with 8 real cards.
+  \item \textbf{RAM and stack.} \SI{8}{KB} is tight: the card build uses about \SI{7.3}{KB} of static RAM and keeps
+    only 150--200 bytes of stack free under bus load (smallest seen 156).
+  \item \textbf{Firmware not yet written:} the controller firmware (USB host, allocation, patch storage, SWIO
+    programmer; USB-MIDI + CDC device runs on the bench, on USBFS, the backplane's USBD port untested); on the card PATCH\_DATA, CALIBRATE, the \SI{5}{V} calibration tables (the firmware and the model
+    still use rev 0.1's data) and the dual-PWM ratio measurement.
+  \item \textbf{HSI wander} between voices (0.35\,cent rms) may be audible on unison patches. The crystal-locked
+    \SI{24}{MHz} CLK\_IN option removes it; its signal over about \SI{100}{mm} and 8 stubs, the V006's input level for an
+    external clock and EMI near the ADC are unverified.
+  \item \textbf{Carrier residue} from 8 unsynchronised cards could beat in the mixer; each card is at
+    \statSelevenCarrier\,dB at its line out. To check in V4.
+  \item \textbf{Steering-pair mismatch} clicks at the centre pan position (about \statSthirteenClick\,mV per mV). The
+    BC847BS pairs are matched on one die; to be measured on the first card.
+  \item \textbf{Backplane, unverified items:} the 74HC595 speed at \SI{3.3}{V} (written at \SI{9}{MHz}); whether PD7 is
+    configured as NRST by the V006's default option bytes (NRST is driven push-pull with no series resistor, so a card that drives its own
+    NRST low would be seen as missing); the internal USB pull-ups; the BY25D16 command set; the
+    LTV-817S at \SI{31.25}{kbaud} and \SI{3.3}{V}; the card-plane offset and the socket rotation with the chosen
+    headers.
+  \item \textbf{Inrush and USB limits:} about \SI{1.8}{A} for a few milliseconds at plug-in, and about \SI{115}{mA}
+    before configuration. Accepted; the soft start is a footprint (to simulate first, S14).
+  \item \textbf{Summing band:} the one long break in the bottom ground pour; the alternative is a top-layer band with
+    bridging resistors.
+  \item \textbf{Mechanics:} card guides or an enclosure; the bulk capacitor height on the card (\SI{6}{mm} limit).
+  \item \textbf{Assembly:} hand-soldered TSSOP-20 and LQFP-48; check for bridges (board~1 had one on PD4/PD5).
+\end{itemize}
+
+% =====================================================================================================================
+\appendix
+\section{Schematics}\label{app:sch}
+The following pages reproduce the KiCad schematics (\file{docs/schematics/voice.pdf}, \statVoiceSheets\ sheets and
+the root sheet, and \file{docs/schematics/backplane.pdf}, \statBpSheets\ sheets and the root sheet), scaled to A4. The
+PDFs are vector graphics and can be zoomed.
+
+\includepdf[pages=-,landscape,fitpaper=false,scale=0.95,pagecommand={\thispagestyle{fancy}},
+  addtotoc={1,subsection,2,{Voice card},app:schvoice}]{../schematics/voice.pdf}
+\includepdf[pages=-,landscape,fitpaper=false,scale=0.95,pagecommand={\thispagestyle{fancy}},
+  addtotoc={1,subsection,2,{Backplane},app:schbp}]{../schematics/backplane.pdf}
+
+\section{Bills of materials}\label{app:bom}
+{\small\input{generated/bom_voice.tex}}
+{\small\input{generated/notasm_voice.tex}}
+{\small\input{generated/bom_bp.tex}}
+{\small\input{generated/notasm_bp.tex}}
+
+\section{Reproducing the design}
+\begin{footnotesize}
+\begin{verbatim}
+# simulations (each writes docs/results/*.csv and docs/figures/*)
+cd sim/s10_5v && python s10_5v.py    # likewise s11_recon, s12_mixer --bus2, s13_pan
+# schematics and checks (BOARD=voice is the default)
+cd hw && python gen_sch2.py && python check_netlist.py && python check_sim.py
+cd hw && BOARD=backplane python gen_sch2.py && BOARD=backplane python check_sim.py
+# PCB (KiCad Python), fabrication data, figures
+cd hw && <KiCad python> gen_pcb.py ...   # backplane: gen_pcb_bp.py
+cd hw && python fab.py && BOARD=backplane python fab.py
+cd hw && python pcb_figures.py && BOARD=backplane python pcb_figures.py
+# firmware (WSL)
+cd firmware/voice && make BOARD=card TARGET_MCU=CH32V006   # bench: BUS_TX_PP=1
+cd firmware/bench_ctrl && make
+# bench tests
+cd tools && python3 bustest.py all && python3 bustest.py latency
+# this report (WSL)
+cd docs/report && python3 gen_tables.py
+latexmk -pdf touchsynth_poly_report.tex
+\end{verbatim}
+\end{footnotesize}
+
+\end{document}

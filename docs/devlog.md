@@ -190,3 +190,30 @@ The rev 0.1 tree (report, S1–S7, KiCad project, tools for the report) is kept 
   unpopulated. An inductor would not help (it slows the edge, not the charge, and rings with the capacitors).
 - **Backplane decisions:** 100 × 100 mm; an SPI flash footprint (W25Q128 / BY25D16ASTIG, unpopulated) on SPI1, the
   8 NRST lines through a 74HC595 on the same bus to free the pins.
+- **Voice bus on the bench (bus.md 9):** the card build receives the bus at 1 Mbaud (COBS, CRC-8, timed events,
+  patch slots, VOICE_STATE repair), takes its control tick from SYNC and answers HELLO / STATUS / COUNTERS; the V203
+  bench controller sends FRAME, enumerates the card by chip ID and turns MIDI-like commands into timed packets.
+  Measured from the SYNC edge of the execution frame to the note on the DAC pin: D frames + 8–9 µs (4.008 ms, spread
+  8 µs over 10 notes), L − 1 + D from the transmitting frame. The modal strike went to fixed point (soft float took
+  longer than a DAC buffer half in the tick); three-oscillator patches with vibrato leave too little CPU for dense
+  traffic (about 40 missed buffer halves per 20 s at 16 notes per second; two oscillators and the modal patch none).
+  The bench return line needs a push-pull bench build (no pull-up).
+- **Voice bus with 8 voices, one card (bus.md 9.5):** the bench controller treats voices 1–7 as populated, allocates
+  notes over all 8 and drives the bus from a load generator; the card discards the others' traffic. The bus sizes
+  match the calculation; with `L` = 2 anything beyond 88 bytes of events per frame is late by whole frames (a legato
+  chord change, controllers on 8 parts), saturation at about 86 bytes per frame. The card's CPU broke first: parsing
+  cost 128 cycles per byte, foreign or not, and a two-oscillator patch missed 1300 DAC halves in 10 s under foreign
+  traffic; dropping foreign packets at their address byte and an in-place decoder brought that to none (three
+  oscillators still miss). Notes ahead of controllers in the controller kept the card's notes on time (4.010 ms,
+  spread 5 µs) under a 72 B/frame controller flood that made them 1–2 frames late before; per-voice records halve
+  chords. 2 Mbaud works on the bench but puts a burst into one tick of every card.
+- **USB on the bench controller (controller.md 5) [2026-10-19]:** the V203 enumerates as a composite USB-MIDI + CDC
+  device; USB-MIDI packets enter the MIDI → bus path where `e` does, the CDC port carries every bench command (the
+  bus tests pass 17/17 over it, the Ardulink bridge too). The development board's USB-C turned out to be wired to
+  USBFS (PB6 / PB7), so it runs on ch32fun's fsusb.c; an own USBD driver for the backplane's PA11 / PA12 builds but
+  is untested. USB packet → note 5.0–6.0 ms (`D` = 4, `L` = 2), SYNC unchanged under USB traffic (< 1 ns), soft
+  re-plug and V203 reset re-enumerate in under 0.7 s. The bench build's 10 KB memory map let the stack run into
+  `.bss` (resets under load): now the C8T6's 20 KB. The USBD pull-up is switchable, its strength unproven (keep the
+  1.5 kΩ footprint). With the lab user in the audio group the USB-MIDI endpoints pass through ALSA too: all bus
+  checks as USB-MIDI, USB → note 5.0–6.0 ms, floods without loss (beyond the bus capacity the events arrive late,
+  as expected), SYNC unchanged under a MIDI flood.

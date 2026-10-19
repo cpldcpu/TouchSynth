@@ -1,4 +1,5 @@
-"""Compare the design (schematic source) with its simulated netlist (voice card: S10 variant v5c).
+"""Compare the design (schematic source) with its simulated netlist (voice card: S13 A on S10 v5c; backplane: S12
+--bus2, the mixer).
 
 Every part with a 'sim' name is looked up in the ngspice netlist; its nodes are mapped to schematic net names
 (D.SIM_NODES) and its value compared. Reports parts that differ, simulated elements without a design part, and
@@ -13,7 +14,7 @@ MULT = {"f": 1e-15, "p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "m": 1e-3, "k"
 
 
 def num(v):
-    m = re.match(r"^([\d.]+)(meg|Meg|[fpnuµmkMg])?", str(v))
+    m = re.match(r"^([\d.]+(?:[eE][-+]?\d+)?)(meg|Meg|[fpnuµmkMg])?", str(v))
     if not m:
         return None
     x = float(m.group(1))

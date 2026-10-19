@@ -17,6 +17,7 @@
  *  adc <ch>                 mean / min / max of 64 conversions of ADC channel ch (diagnostics)
  *  latch <0|1>              hold the 595 latch line PD4 low / high (diagnostics; board 1)
  *  sync [ms]                card: SYNC edges on PD4, mean period over ms (default 1000) against the 48 MHz HSI
+ *  bus                      card: voice bus state, address, frame, D, patch slots, HSI, CPU load, counters
  *  hsi [0...31]             HSITRIM: show, or set
  *  peek <hex address>       read a 32-bit register or memory word, live (diagnostics)
  *  wait <ms>                pause up to 5 s (settling between test steps)
@@ -28,6 +29,7 @@
 #include "hw.h"
 #include "synth.h"
 #include "dsp.h"
+#include "bus.h"
 
 #define FW_VERSION "0.2"
 
@@ -169,6 +171,7 @@ static void run(const char *s)
 			printf("busy: DAC mode on\n");
 		} else {
 			dsp_pitch(48 << 8, parse_int(&r));
+			dsp_commit(0);
 			uint16_t arr, half;
 			dsp_carrier(&arr, &half);
 			if (*r) {
@@ -177,7 +180,7 @@ static void run(const char *s)
 			}
 			__disable_irq();
 			uint32_t t0 = SysTick->CNT;
-			dsp_fill((uint8_t *)hw_scratch, half);
+			dsp_fill((uint8_t *)hw_scratch, half, t0);
 			uint32_t c = SysTick->CNT - t0;
 			__enable_irq();
 			printf("bench %u periods %lu cycles, %lu per period\n", half, c, c / half);
@@ -222,6 +225,16 @@ static void run(const char *s)
 		int32_t ppm = (int32_t)(((int64_t)(l1 - l0) * 1000000) / ((int64_t)(n1 - n0) * (F_CPU / 1000)) - 1000000);
 		printf("sync: %lu edges, %lu cycles per period, HSI %c%ld ppm against SYNC\n", n1 - n0, per,
 		       ppm < 0 ? '-' : '+', ppm < 0 ? -ppm : ppm);   /* the small printf has no '+' flag */
+	} else if (starts(s, "bus", &r)) {                /* bus: voice bus state and counters (bus.h) */
+		bus_t b = bus;                              /* snapshot (the tick updates it) */
+		int32_t ppm = bus_ppm();
+		printf("bus state %d addr %d frame %u D %d L %d slot %d (%d %d %d %d) trims %d ppm %c%ld load %d%%\n",
+		       b.state, b.addr == 0xFF ? -1 : b.addr, b.frame, b.delay, b.lead, b.slot, b.slots[0], b.slots[1],
+		       b.slots[2], b.slots[3], b.trims, ppm < 0 ? '-' : '+', ppm < 0 ? -ppm : ppm, b.load);
+		printf("packets %u crc %u framing %u uart %u late %u far %u qfull %u slips %u\n", b.st.packets, b.st.crc,
+		       b.st.framing, b.st.uart, b.st.late, b.st.far, b.st.qfull, b.st.slips);
+		printf("late_ticks %u underruns %u sync_gaps %u repairs %u replies %u other %u\n", b.st.late_ticks,
+		       b.st.underruns, b.st.sync_gaps, b.st.repairs, b.st.replies, b.st.other);
 #endif
 	} else if (starts(s, "drive", &r)) {              /* drive <a|b|c|d><0-7> <0|1|z>: a pin as output / input */
 		while (*r == ' ') r++;                      /* (diagnostics: find where a bench wire lands) */
@@ -230,9 +243,14 @@ static void run(const char *s)
 		while (*r == ' ') r++;
 		int z = (*r == 'z');
 		if (!z) v = parse_int(&r);
+#if defined(CH32V006)                               /* port B: only on the larger V006 packages */
 		GPIO_TypeDef *g = port == 'a' ? GPIOA : port == 'b' ? GPIOB : port == 'c' ? GPIOC : port == 'd' ? GPIOD : 0;
+		RCC->APB2PCENR |= RCC_APB2Periph_GPIOB;
+#else
+		GPIO_TypeDef *g = port == 'a' ? GPIOA : port == 'c' ? GPIOC : port == 'd' ? GPIOD : 0;
+#endif
 		if (!g || pin < 0 || pin > 7) { printf("?pin\n"); return; }
-		RCC->APB2PCENR |= RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD;
+		RCC->APB2PCENR |= RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD;
 		g->BSHR = v ? (1u << pin) : (1u << (pin + 16));
 		g->CFGLR = (g->CFGLR & ~(0xfu << (4 * pin))) | ((z ? 0x4u : 0x1u) << (4 * pin));
 		printf("drive %c%d %c\n", port, pin, z ? 'z' : '0' + v);

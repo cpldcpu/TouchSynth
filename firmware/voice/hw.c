@@ -6,6 +6,8 @@
 #include "ch32v00x_touch.h"                         /* InitTouchADC: ADC clock, calibration (loopback capture) */
 #pragma GCC diagnostic pop
 
+volatile uint32_t hw_busy_cycles;
+
 /* ------------------------------------------------------------------ CV PWM (TIM1) + noise */
 static volatile uint16_t cv_code[4];
 static volatile uint8_t noise_on;
@@ -32,18 +34,51 @@ void TIM1_UP_IRQHandler(void)
 	}
 }
 
+/* presentation delay (hw.h): the staged codes of the last CV_DELAY_MAX + 1 ticks */
+#define CV_D0 (BOARD_CARD ? 1 : 0)                  /* first delayed channel (card: CV channel 0 is the trim) */
+static uint16_t cv_next[4];
+static uint16_t cv_line[CV_DELAY_MAX + 1][4 - CV_D0];
+static uint8_t cv_w, cv_d;
+
 void hw_cv_set(int ch, uint16_t code)
 {
 #if BOARD_CARD
 	if (ch == CV_AMP)                               /* card: channel 0 is the VCA trim (hw_leds_dac) */
 		return;
 #endif
-	cv_code[ch] = code > 4095 ? 4095 : code;
+	code = code > 4095 ? 4095 : code;
+	cv_next[ch] = code;
+	if (!cv_d)
+		cv_code[ch] = code;
 }
 
 uint16_t hw_cv_get(int ch)
 {
 	return cv_code[ch];
+}
+
+void hw_cv_commit(void)                             /* control tick */
+{
+	if (!cv_d)
+		return;
+	uint8_t w = cv_w, r = w >= cv_d ? w - cv_d : w + CV_DELAY_MAX + 1 - cv_d;
+	for (int ch = CV_D0; ch < 4; ch++) {
+		cv_line[w][ch - CV_D0] = cv_next[ch];
+		cv_code[ch] = cv_line[r][ch - CV_D0];
+	}
+	cv_w = w < CV_DELAY_MAX ? w + 1 : 0;
+}
+
+void hw_cv_delay(int d)                             /* control tick: a new delay starts from the staged codes */
+{
+	if (d < 0) d = 0;
+	if (d > CV_DELAY_MAX) d = CV_DELAY_MAX;
+	if (d == cv_d)
+		return;
+	for (int i = 0; i <= CV_DELAY_MAX; i++)
+		for (int ch = CV_D0; ch < 4; ch++)
+			cv_line[i][ch - CV_D0] = cv_next[ch];
+	cv_d = d;
 }
 
 static void cv_init(void)
@@ -131,7 +166,8 @@ static uint16_t dac_half;                           /* carrier periods per buffe
 static uint16_t dac_len;                            /* ring length, bytes */
 static uint32_t dac_period;                         /* CPU cycles per buffer half (TIM2 at HCLK: half x 2 arr) */
 static uint32_t dac_last;                           /* SysTick at the last render */
-static void (*dac_fill)(uint8_t *dst, int n);
+static uint32_t dac_t0;                             /* SysTick time of ring entry 0 of the current DMA pass */
+static void (*dac_fill)(uint8_t *dst, int n, uint32_t t);
 static volatile uint8_t dac_busy;                   /* a render is running */
 static volatile dac_stats_t dac_st;
 
@@ -166,8 +202,15 @@ void DMA1_Channel1_IRQHandler(void)
 	if (dt > dac_period + dac_period / 2)
 		dac_st.overruns += (dt + dac_period / 2) / dac_period - 1;
 	dac_last = t0;
-	dac_fill(dac_buf + h * lh, dac_half);
+	uint32_t cyc = 2u * dac_on, ring = 2u * dac_half;  /* cycles per carrier period, periods per ring pass */
+	uint32_t a = (t0 - dac_t0) / cyc, pass = a / ring;  /* periods since the pass began (ring entries loaded) */
+	dac_t0 += pass * ring * cyc;                    /* ring entry j of this pass loads at dac_t0 + j cyc */
+	uint32_t j = h * dac_half;                      /* the half to render: entry j, next pass if passed */
+	if (j <= a - pass * ring)
+		j += ring;
+	dac_fill(dac_buf + h * lh, dac_half, dac_t0 + j * cyc);
 	uint32_t c = SysTick->CNT - t0;
+	hw_busy_cycles += c;
 	uint16_t pos = dac_len - DMA1_Channel1->CNTR;
 	dac_busy = 0;
 	if ((pos >= lh) == h) {
@@ -185,7 +228,7 @@ void DMA1_Channel1_IRQHandler(void)
 /* Start sequence: TIM2 from reset, configured while stopped; the DMA channel armed and the CC3 request enabled
    while the counter stands at 0, so the first request is the first compare match after CEN (no stale request can
    be served); the first code is written on that up-count and loaded at the top. */
-void hw_dac_start(uint16_t arr, uint16_t half, void (*fill)(uint8_t *dst, int n))
+void hw_dac_start(uint16_t arr, uint16_t half, void (*fill)(uint8_t *dst, int n, uint32_t t))
 {
 	if (half > DAC_HALF)
 		half = DAC_HALF;
@@ -239,6 +282,7 @@ void hw_dac_start(uint16_t arr, uint16_t half, void (*fill)(uint8_t *dst, int n)
 	NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 	dac_on = arr;
 	dac_last = SysTick->CNT;                         /* the first half has played one dac_period from now */
+	dac_t0 = SysTick->CNT;                           /* entry j loads at about dac_t0 + j x 2 arr (+ arr / 2) */
 	TIM2->CTLR1 = T_ARPE | T_CMS2 | T_CEN;
 }
 
@@ -262,9 +306,9 @@ int hw_dac_active(void) { return dac_on; }
 int hw_dac_rendering(void) { return dac_busy; }
 uint16_t hw_dac_count(void) { return dac_on ? DMA1_Channel1->CNTR : 0; }
 
-void hw_dac_stats(dac_stats_t *s, int clear)        /* main loop only (blocks the interrupts) */
+void hw_dac_stats(dac_stats_t *s, int clear)        /* main loop or control tick */
 {
-	__disable_irq();
+	uint32_t is = irq_save();
 	if (s) {
 		s->renders = dac_st.renders;
 		s->fill_max = dac_st.fill_max;
@@ -274,10 +318,11 @@ void hw_dac_stats(dac_stats_t *s, int clear)        /* main loop only (blocks th
 	}
 	if (clear)
 		dac_stats_clear();
-	__enable_irq();
+	irq_restore(is);
 }
 #else
-void hw_dac_start(uint16_t arr, uint16_t half, void (*fill)(uint8_t *dst, int n)) { (void)arr; (void)half; (void)fill; }
+void hw_dac_start(uint16_t arr, uint16_t half, void (*fill)(uint8_t *dst, int n, uint32_t t))
+{ (void)arr; (void)half; (void)fill; }
 void hw_dac_stop(void) {}
 int hw_dac_active(void) { return 0; }
 int hw_dac_rendering(void) { return 0; }
@@ -308,13 +353,14 @@ void EXTI7_0_IRQHandler(void)
 		sync_first = t;
 	sync_last = t;
 	sync_n++;
+	sync_tick(t);                                   /* the control tick (touchsynth.c) */
 }
 
 void hw_sync_get(uint32_t *n, uint32_t *first, uint32_t *last)
 {
-	__disable_irq();
+	uint32_t s = irq_save();
 	*n = sync_n; *first = sync_first; *last = sync_last;
-	__enable_irq();
+	irq_restore(s);
 }
 
 static void sync_init(void)
@@ -385,6 +431,95 @@ uint32_t hw_capture_ch(int ch, uint16_t *buf, int n, int period_us)
 	return (SysTick->CNT - t0) / (F_CPU / 1000000);       /* > n * period_us if the loop could not keep up */
 }
 
+#if BOARD_CARD
+/* ------------------------------------------------------------------ card: voice bus UART (USART1, BUS_BAUD) */
+#define BUS_RING 256
+static uint8_t bus_ring[BUS_RING];                  /* DMA1 ch5, circular */
+static uint16_t bus_rd;
+static volatile uint16_t rx_bytes, rx_errors;
+
+void hw_rx_stats(uint16_t *bytes, uint16_t *errors) { *bytes = rx_bytes; *errors = rx_errors; }
+
+uint16_t hw_bus_mark(void) { return (BUS_RING - DMA1_Channel5->CNTR) & (BUS_RING - 1); }
+
+int hw_bus_span(uint16_t mark, const uint8_t **p)   /* [2026-10-19] the received bytes before mark that are contiguous
+                                                       in the ring (up to its end); read in place, then hw_bus_done */
+{
+	*p = bus_ring + bus_rd;
+	return mark >= bus_rd ? mark - bus_rd : BUS_RING - bus_rd;
+}
+
+void hw_bus_done(int n)
+{
+	bus_rd = (bus_rd + n) & (BUS_RING - 1);
+	rx_bytes += n;
+}
+
+/* FE / NE / ORE stay set until a status read followed by a data read; the DMA's next data read completes that */
+int hw_bus_rx_error(void)
+{
+	if (!(USART1->STATR & (USART_STATR_FE | USART_STATR_NE | USART_STATR_ORE)))
+		return 0;
+	rx_errors++;
+	return 1;
+}
+
+void hw_bus_enable(int on)
+{
+	DMA1_Channel5->CFGR = 0;
+	USART1->CTLR1 &= ~USART_CTLR1_RE;
+	if (!on)
+		return;
+	DMA1_Channel5->PADDR = (uint32_t)&USART1->DATAR;
+	DMA1_Channel5->MADDR = (uint32_t)bus_ring;
+	DMA1_Channel5->CNTR = BUS_RING;
+	bus_rd = 0;
+	DMA1_Channel5->CFGR = DMA_CFGR1_CIRC | DMA_CFGR1_MINC | DMA_CFGR1_PL_0 | DMA_CFGR1_EN;
+	USART1->CTLR1 |= USART_CTLR1_RE;
+}
+
+int hw_bus_tx_busy(void)
+{
+	if ((DMA1_Channel4->CFGR & DMA_CFGR1_EN) && DMA1_Channel4->CNTR)
+		return 1;
+#if BUS_TX_PP
+	if (USART1->STATR & USART_STATR_TC)             /* the last bit is out: release the line */
+		funPinMode(PIN_TX, GPIO_Speed_10MHz | GPIO_CNF_OUT_OD_AF);
+#endif
+	return 0;
+}
+
+int hw_bus_send(const uint8_t *p, int n)
+{
+	if (hw_bus_tx_busy())
+		return 0;
+#if BUS_TX_PP
+	funPinMode(PIN_TX, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP_AF);   /* bench: drive the line during the reply */
+#endif
+	DMA1_Channel4->CFGR = 0;
+	DMA1_Channel4->MADDR = (uint32_t)p;
+	DMA1_Channel4->CNTR = n;
+	DMA1_Channel4->CFGR = DMA_CFGR1_DIR | DMA_CFGR1_MINC | DMA_CFGR1_EN;
+	return 1;
+}
+
+uint32_t hw_uid(int i) { return i ? ESIG->UNIID2 : ESIG->UNIID1; }
+
+/* TX on PD5 as open drain (bus.md 2: the backplane pulls the return line up), always on: an idle USART TX is high,
+   i.e. released. RX waits for hw_bus_enable (after the HSI trim, bus.md 6). BUS_TX_PP (bench, make BUS_TX_PP=1):
+   push-pull while a reply goes out, open drain again once it is sent (hw_bus_tx_busy), for a return line without
+   the backplane's 1 kOhm pull-up (an MCU's internal 40 kOhm is far too slow for 1 Mbaud). */
+static void bus_init(void)
+{
+	RCC->APB2PCENR |= RCC_APB2Periph_USART1;
+	RCC->AHBPCENR |= RCC_AHBPeriph_DMA1;
+	USART1->BRR = F_CPU / BUS_BAUD;
+	USART1->CTLR3 = USART_CTLR3_DMAR | USART_CTLR3_DMAT;
+	DMA1_Channel4->PADDR = (uint32_t)&USART1->DATAR;
+	USART1->CTLR1 = USART_CTLR1_UE | USART_CTLR1_TE;
+	funPinMode(PIN_TX, GPIO_Speed_10MHz | GPIO_CNF_OUT_OD_AF);
+}
+#else
 /* ------------------------------------------------------------------ MIDI (USART1 RX on PD6, 31250 Bd) */
 static volatile uint8_t midi_buf[32];
 static volatile uint8_t midi_w, midi_r;
@@ -426,6 +561,7 @@ static void midi_init(void)
 	USART1->CTLR1 = USART_CTLR1_UE | USART_CTLR1_RE | USART_CTLR1_RXNEIE;   /* receive only: PD5 is the ADC */
 	NVIC_EnableIRQ(USART1_IRQn);
 }
+#endif
 
 /* ------------------------------------------------------------------ init */
 #if BOARD_CARD
@@ -446,13 +582,11 @@ void hw_init(void)
 	funPinMode(PIN_AUDIO, GPIO_CNF_IN_ANALOG);
 	funPinMode(PIN_MIDI_RX, GPIO_CNF_IN_PUPD);       /* bus RX, idle high */
 	funDigitalWrite(PIN_MIDI_RX, 1);
-	funPinMode(PIN_TX, GPIO_CNF_IN_PUPD);            /* bus return: released until the bus receiver exists */
-	funDigitalWrite(PIN_TX, 1);
 	hw_leds_dac(0, 128);                            /* LED off, trim mid-scale */
 	InitTouchADC();                                 /* ADC for the loopback capture */
 	cv_init();
+	bus_init();                                     /* before SYNC: the first edge may start the bus */
 	sync_init();
-	midi_init();
 }
 #else
 void hw_init(void)

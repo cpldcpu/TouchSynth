@@ -61,10 +61,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "cca13f97-6f19-4b44-84e1-274562fd6279")
+		(uuid "434e6002-7419-4d9e-94a4-f94ac6a9c7b4")
 	)
 	(sheet
-		(at 115 40)
+		(at 110 40)
 		(size 80 45)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -80,7 +80,7 @@
 		)
 		(uuid "459cd1ac-5cc8-57d9-a087-d7ee7e1fbcf4")
 		(property "Sheetname" "mcu"
-			(at 115 39.3 0)
+			(at 110 39.3 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -89,7 +89,7 @@
 			)
 		)
 		(property "Sheetfile" "mcu.kicad_sch"
-			(at 115 85.6 0)
+			(at 110 85.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -107,17 +107,17 @@
 	)
 	(text "MCU, backplane, programming, LEDs"
 		(exclude_from_sim no)
-		(at 118 62 0)
+		(at 113 62 0)
 		(effects
 			(font
 				(size 1.8 1.8)
 			)
 			(justify left bottom)
 		)
-		(uuid "40416d9a-e2a3-4d52-a0b9-fc61123b0fb1")
+		(uuid "3d9df5af-34f9-41db-8aa0-7cda4e8797e3")
 	)
 	(sheet
-		(at 210 40)
+		(at 200 40)
 		(size 80 45)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -133,7 +133,7 @@
 		)
 		(uuid "a49d18ae-2334-5fb8-96fb-167a36665e17")
 		(property "Sheetname" "dac"
-			(at 210 39.3 0)
+			(at 200 39.3 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -142,7 +142,7 @@
 			)
 		)
 		(property "Sheetfile" "dac.kicad_sch"
-			(at 210 85.6 0)
+			(at 200 85.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -160,17 +160,17 @@
 	)
 	(text "PWM DAC reconstruction filter and mixer"
 		(exclude_from_sim no)
-		(at 213 62 0)
+		(at 203 62 0)
 		(effects
 			(font
 				(size 1.8 1.8)
 			)
 			(justify left bottom)
 		)
-		(uuid "64ab37aa-30b1-4a09-a022-f2424f33a98b")
+		(uuid "bb7eeb0c-ab56-4de1-ad50-be5a2cb9302a")
 	)
 	(sheet
-		(at 305 40)
+		(at 20 110)
 		(size 80 45)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -186,7 +186,7 @@
 		)
 		(uuid "52d1c793-861a-5f85-89b7-e3423668fc78")
 		(property "Sheetname" "vcf"
-			(at 305 39.3 0)
+			(at 20 109.3 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -195,7 +195,7 @@
 			)
 		)
 		(property "Sheetfile" "vcf.kicad_sch"
-			(at 305 85.6 0)
+			(at 20 155.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -213,17 +213,17 @@
 	)
 	(text "CV_CUT, expo converter, ladder filter"
 		(exclude_from_sim no)
-		(at 308 62 0)
+		(at 23 132 0)
 		(effects
 			(font
 				(size 1.8 1.8)
 			)
 			(justify left bottom)
 		)
-		(uuid "300b3ff8-ccd3-4d13-8f7c-227a932f2cc6")
+		(uuid "176984ae-1a99-48f5-aa4b-e5df073b4500")
 	)
 	(sheet
-		(at 20 110)
+		(at 110 110)
 		(size 80 45)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -239,7 +239,7 @@
 		)
 		(uuid "c508aaa6-80f8-5132-b5bc-e1743a61f494")
 		(property "Sheetname" "resonance"
-			(at 20 109.3 0)
+			(at 110 109.3 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -248,7 +248,7 @@
 			)
 		)
 		(property "Sheetfile" "resonance.kicad_sch"
-			(at 20 155.6 0)
+			(at 110 155.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -266,17 +266,17 @@
 	)
 	(text "CV_RES and resonance VCA"
 		(exclude_from_sim no)
-		(at 23 132 0)
+		(at 113 132 0)
 		(effects
 			(font
 				(size 1.8 1.8)
 			)
 			(justify left bottom)
 		)
-		(uuid "c77a7fb3-4f76-4e9c-a235-fa9213add0b7")
+		(uuid "15c9aff7-ce33-4b79-9058-ac237afa119a")
 	)
 	(sheet
-		(at 115 110)
+		(at 200 110)
 		(size 80 45)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -292,7 +292,7 @@
 		)
 		(uuid "dd8b73cc-ac1d-5e58-853a-b645944ed5f9")
 		(property "Sheetname" "vca"
-			(at 115 109.3 0)
+			(at 200 109.3 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -301,7 +301,7 @@
 			)
 		)
 		(property "Sheetfile" "vca.kicad_sch"
-			(at 115 155.6 0)
+			(at 200 155.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -319,14 +319,14 @@
 	)
 	(text "VCA, stereo pan, outputs and loopback"
 		(exclude_from_sim no)
-		(at 118 132 0)
+		(at 203 132 0)
 		(effects
 			(font
 				(size 1.8 1.8)
 			)
 			(justify left bottom)
 		)
-		(uuid "0e02c82f-add2-4bf0-a7ac-0e9f4cc36383")
+		(uuid "03da5c50-cff7-4161-91db-49c3cde1dc69")
 	)
 	(text "TouchSynth Poly voice card"
 		(exclude_from_sim no)
@@ -339,7 +339,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "63678008-88ba-4a4d-a8f2-adab6f6ef5c2")
+		(uuid "c91d7c7d-b426-4a61-9120-7abbddbc9096")
 	)
 	(sheet_instances
 		(path "/"

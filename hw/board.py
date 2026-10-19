@@ -1,5 +1,5 @@
-"""Board selection for the generator and check scripts: BOARD=voice (default) or BOARD=touchsynth (rev 0.1,
-design.py, kept for reference; its KiCad project is on master).
+"""Board selection for the generator and check scripts: BOARD=voice (default), BOARD=backplane or BOARD=touchsynth
+(rev 0.1, design.py, kept for reference; its KiCad project is on master).
 
 Each design module provides PARTS, SHEETS, nets() and optionally PROJECT, TITLE, REV, POWER (net -> power
 symbol), RAIL (a net always drawn as a global label), LAYOUTS (module with hand-drawn sheet layouts).
@@ -7,7 +7,7 @@ symbol), RAIL (a net always drawn as a global label), LAYOUTS (module with hand-
 import importlib, os
 
 NAME = os.environ.get("BOARD", "voice")
-D = importlib.import_module({"voice": "voice", "touchsynth": "design"}[NAME])
+D = importlib.import_module({"voice": "voice", "backplane": "backplane", "touchsynth": "design"}[NAME])
 PROJECT = getattr(D, "PROJECT", "touchsynth")
 TITLE = getattr(D, "TITLE", "TouchSynth")
 REV = getattr(D, "REV", "0.1")

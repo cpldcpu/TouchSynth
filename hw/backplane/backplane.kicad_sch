@@ -1,0 +1,276 @@
+(kicad_sch
+	(version 20250114)
+	(generator "touchsynth_gen")
+	(generator_version "10.0")
+	(uuid "c42cd0d4-93b1-5178-97ee-fdd3025be2c6")
+	(paper "A4")
+	(title_block
+		(title "TouchSynth Poly backplane")
+		(date "2026-10-19")
+		(rev "0.1")
+	)
+	(lib_symbols)
+	(sheet
+		(at 20 40)
+		(size 115 50)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "76816264-039e-56e3-93df-cb80e947fd10")
+		(property "Sheetname" "power"
+			(at 20 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "power.kicad_sch"
+			(at 20 90.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "backplane"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "2")
+				)
+			)
+		)
+	)
+	(text "Power entry, 3.3 V, soft start (option),"
+		(exclude_from_sim no)
+		(at 23 65 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "6cb09bfc-416e-49fa-882a-5b3b08e7b807")
+	)
+	(text "USB-C device port, USB-A host port"
+		(exclude_from_sim no)
+		(at 23 68.2 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "19740762-c756-40c0-99d2-dbaf14634f39")
+	)
+	(sheet
+		(at 150 40)
+		(size 115 50)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "459cd1ac-5cc8-57d9-a087-d7ee7e1fbcf4")
+		(property "Sheetname" "mcu"
+			(at 150 39.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "mcu.kicad_sch"
+			(at 150 90.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "backplane"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "3")
+				)
+			)
+		)
+	)
+	(text "Controller CH32V203, clock, programming, UART,"
+		(exclude_from_sim no)
+		(at 153 65 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "169c7f70-f22a-48d4-b453-8260221694cd")
+	)
+	(text "MIDI in (option), SPI flash (option), LEDs"
+		(exclude_from_sim no)
+		(at 153 68.2 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "703cebc6-24d7-4740-8f1c-bd05d337f7d3")
+	)
+	(sheet
+		(at 20 105)
+		(size 115 50)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "862062d0-97c1-5663-b2c8-a4280c09a2db")
+		(property "Sheetname" "bus"
+			(at 20 104.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "bus.kicad_sch"
+			(at 20 155.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "backplane"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "4")
+				)
+			)
+		)
+	)
+	(text "Voice bus, NRST shift register, SWIO pull-ups,"
+		(exclude_from_sim no)
+		(at 23 130 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "42dc7e33-93d5-4145-be2f-b4770baf1251")
+	)
+	(text "slot sockets"
+		(exclude_from_sim no)
+		(at 23 133.2 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "ee9bac1a-4c8d-4357-8ca5-63a043f93a24")
+	)
+	(sheet
+		(at 150 105)
+		(size 115 50)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "9a13dcaa-bfca-54e1-8d2e-4d166f9499a4")
+		(property "Sheetname" "mixer"
+			(at 150 104.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "mixer.kicad_sch"
+			(at 150 155.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "backplane"
+				(path "/c42cd0d4-93b1-5178-97ee-fdd3025be2c6"
+					(page "5")
+				)
+			)
+		)
+	)
+	(text "Two-bus stereo mixer (S12), line out, ADC taps"
+		(exclude_from_sim no)
+		(at 153 127 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left bottom)
+		)
+		(uuid "24851e1c-a805-4fe4-811e-2267626cf1f7")
+	)
+	(text "TouchSynth Poly backplane"
+		(exclude_from_sim no)
+		(at 20 25 0)
+		(effects
+			(font
+				(size 4 4)
+				(thickness 0.8)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "cc488cef-c05f-46ad-a226-8661f743c7d9")
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+)

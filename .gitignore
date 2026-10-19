@@ -52,6 +52,15 @@ tools/logs/
 tools/lab.conf
 hw/touchsynth/*.log
 hw/voice/*.log
+hw/backplane/*.net
+hw/backplane/*.pdf
+hw/backplane/*.rpt
+hw/backplane/*.dsn
+hw/backplane/*.ses
+hw/backplane/*.log
+hw/backplane/*-backups/
+hw/backplane/*.kicad_prl
+hw/backplane/production/
 
 # LaTeX build files
 docs/report/*.aux
@@ -68,3 +77,5 @@ private/
 
 # Archived TouchSynth rev 0.1 tree (local reference; the history is in git: master, commit 17536f3)
 archive/
+hw/backplane/*_route.log
+hw/backplane/backplane_2l.*
