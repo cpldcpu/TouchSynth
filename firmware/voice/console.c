@@ -15,7 +15,10 @@
  *                           buffer half), interrupts off (DAC mode off)
  *  cap <n> [us]             capture n loopback samples (PD5) every us microseconds, hex dump
  *  adc <ch>                 mean / min / max of 64 conversions of ADC channel ch (diagnostics)
- *  latch <0|1>              hold the 595 latch line PD4 low / high (diagnostics)
+ *  latch <0|1>              hold the 595 latch line PD4 low / high (diagnostics; board 1)
+ *  sync [ms]                card: SYNC edges on PD4, mean period over ms (default 1000) against the 48 MHz HSI
+ *  hsi [0...31]             HSITRIM: show, or set
+ *  peek <hex address>       read a 32-bit register or memory word, live (diagnostics)
  *  wait <ms>                pause up to 5 s (settling between test steps)
  *  capcv <ch> <code> <n> [us]   set CV ch (0 amp, 1 cut, 2 res, 3 vca) and capture at once (step response)
  */
@@ -96,6 +99,9 @@ static void run(const char *s)
 		printf("preset %d %s tune %d manual %d\n", synth_preset_index(), synth_preset_name(synth_preset_index()),
 		       synth_tune_playing(), synth_manual);
 		printf("ticks %lu stack_free %lu\n", tick_count, stack_free());
+		uint16_t rxb, rxe;
+		hw_rx_stats(&rxb, &rxe);
+		printf("rx %u bytes, %u errors\n", rxb, rxe);
 		printf("cv amp %d cut %d res %d vca %d trim %d\n", hw_cv_get(CV_AMP), hw_cv_get(CV_CUT),
 		       hw_cv_get(CV_RES), hw_cv_get(CV_VCA), trim_dac);
 	} else if (starts(s, "note", &r)) {
@@ -196,10 +202,58 @@ static void run(const char *s)
 		uint32_t t0 = SysTick->CNT;
 		while ((SysTick->CNT - t0) / (F_CPU / 1000) < (uint32_t)ms)
 			;
+#if !BOARD_CARD
 	} else if (starts(s, "latch", &r)) {              /* latch <0|1>: hold PD4 (595 RCLK, edge-triggered) - diagnostics */
 		funDigitalWrite(PIN_LATCH, parse_int(&r) ? 1 : 0);
 		Delay_Us(10);
 		printf("PD in %02lx" "%c", GPIOD->INDR & 0xff, 10);
+#else
+	} else if (starts(s, "sync", &r)) {               /* sync [ms]: SYNC period against the HSI (1 ms nominal) */
+		int ms = *r ? parse_int(&r) : 1000;
+		if (ms < 10 || ms > 10000) ms = 1000;
+		uint32_t n0, f0, l0, n1, f1, l1;
+		hw_sync_get(&n0, &f0, &l0);
+		uint32_t t0 = SysTick->CNT;
+		while ((SysTick->CNT - t0) / (F_CPU / 1000) < (uint32_t)ms)
+			;
+		hw_sync_get(&n1, &f1, &l1);
+		if (n1 - n0 < 2) { printf("sync: %lu edges in %d ms\n", n1 - n0, ms); return; }
+		uint32_t per = (l1 - l0) / (n1 - n0);       /* HSI cycles per SYNC period (48000 = exact) */
+		int32_t ppm = (int32_t)(((int64_t)(l1 - l0) * 1000000) / ((int64_t)(n1 - n0) * (F_CPU / 1000)) - 1000000);
+		printf("sync: %lu edges, %lu cycles per period, HSI %c%ld ppm against SYNC\n", n1 - n0, per,
+		       ppm < 0 ? '-' : '+', ppm < 0 ? -ppm : ppm);   /* the small printf has no '+' flag */
+#endif
+	} else if (starts(s, "drive", &r)) {              /* drive <a|b|c|d><0-7> <0|1|z>: a pin as output / input */
+		while (*r == ' ') r++;                      /* (diagnostics: find where a bench wire lands) */
+		char port = *r++;
+		int pin = *r++ - '0', v = 0;
+		while (*r == ' ') r++;
+		int z = (*r == 'z');
+		if (!z) v = parse_int(&r);
+		GPIO_TypeDef *g = port == 'a' ? GPIOA : port == 'b' ? GPIOB : port == 'c' ? GPIOC : port == 'd' ? GPIOD : 0;
+		if (!g || pin < 0 || pin > 7) { printf("?pin\n"); return; }
+		RCC->APB2PCENR |= RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD;
+		g->BSHR = v ? (1u << pin) : (1u << (pin + 16));
+		g->CFGLR = (g->CFGLR & ~(0xfu << (4 * pin))) | ((z ? 0x4u : 0x1u) << (4 * pin));
+		printf("drive %c%d %c\n", port, pin, z ? 'z' : '0' + v);
+	} else if (starts(s, "peek", &r)) {               /* peek <hex address>: one 32-bit word, live (diagnostics) */
+		uint32_t a = 0;
+		while (*r == ' ') r++;
+		for (; *r; r++) {
+			char c = *r;
+			int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 :
+			        c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+			if (d < 0) break;
+			a = (a << 4) | d;
+		}
+		a &= ~3u;
+		printf("%08lx: %08lx\n", a, *(volatile uint32_t *)a);
+	} else if (starts(s, "hsi", &r)) {                /* hsi [0...31]: HSITRIM */
+		if (*r) {
+			int v = parse_int(&r) & 31;
+			RCC->CTLR = (RCC->CTLR & ~RCC_HSITRIM) | ((uint32_t)v << 3);
+		}
+		printf("hsitrim %lu\n", (RCC->CTLR & RCC_HSITRIM) >> 3);
 	} else if (starts(s, "adc", &r)) {                /* adc <ch>: mean and min/max of 64 conversions */
 		int ch = parse_int(&r);
 		if (ch < 0 || ch > 9) { printf("?ch\n"); return; }

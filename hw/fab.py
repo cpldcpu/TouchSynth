@@ -1,18 +1,17 @@
 """JLCPCB fabrication outputs: gerbers + drill (zip), BOM and CPL in JLCPCB format.
 
-  python fab.py        (uses kicad-cli; writes hw/touchsynth/production/)
+  python fab.py        (uses kicad-cli; writes hw/<board>/production/, e.g. hw/voice/production/)
 
 Rotation corrections follow the common KiCad -> JLCPCB conventions; always check the placement preview on
 the JLCPCB order page (especially SOT-23 / SOT-363 / SOT-89 / diodes / LEDs).
 """
 import os, re, csv, subprocess, zipfile, shutil
-import design as D
+import board as B
 import sexp as S
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PRJ = os.path.join(HERE, "touchsynth")
-PCB = os.path.join(PRJ, "touchsynth.kicad_pcb")
-OUT = os.path.join(PRJ, "production")
+D = B.D
+PCB = os.path.join(B.OUT, f"{B.PROJECT}.kicad_pcb")
+OUT = os.path.join(B.OUT, "production")
 CLI = S.KICAD_CLI
 
 ROT = [(r"^SOT-23", 180), (r"^SOT-363", 180), (r"^SOT-89", 180), (r"^SOIC-", 270), (r"^TSSOP-", 270),
@@ -34,7 +33,7 @@ def main():
     run("pcb", "export", "gerbers", "--layers", LAYERS, "--no-protel-ext", "-o", gdir + os.sep, PCB)
     run("pcb", "export", "drill", "--format", "excellon", "--excellon-units", "mm", "--generate-map",
         "--map-format", "gerberx2", "-o", gdir + os.sep, PCB)
-    zpath = os.path.join(OUT, "touchsynth_gerbers.zip")
+    zpath = os.path.join(OUT, f"{B.PROJECT}_gerbers.zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(os.listdir(gdir)):
             z.write(os.path.join(gdir, f), f)
@@ -57,7 +56,7 @@ def main():
                     rot = (rot + add) % 360
                     break
             placed.append((ref, float(r["PosX"]), float(r["PosY"]), rot))
-    with open(os.path.join(OUT, "touchsynth_cpl.csv"), "w", newline="", encoding="utf-8") as fh:
+    with open(os.path.join(OUT, f"{B.PROJECT}_cpl.csv"), "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["Designator", "Mid X", "Mid Y", "Layer", "Rotation"])
         for ref, x, y, rot in placed:
@@ -67,7 +66,7 @@ def main():
     for p in D.PARTS:
         if p.ref in refs:
             groups.setdefault((p.value, p.fp.split(":")[1], p.lcsc), []).append(p.ref)
-    with open(os.path.join(OUT, "touchsynth_bom.csv"), "w", newline="", encoding="utf-8") as fh:
+    with open(os.path.join(OUT, f"{B.PROJECT}_bom.csv"), "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["Comment", "Designator", "Footprint", "LCSC"])
         for (val, fp, lcsc), rs in sorted(groups.items(), key=lambda kv: kv[1][0]):

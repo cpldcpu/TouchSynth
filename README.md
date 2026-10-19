@@ -19,6 +19,8 @@ Design: cpldcpu & Claude Opus 5.5.
 | Document | Content |
 |---|---|
 | [docs/design.md](docs/design.md) | requirements, architecture, budgets, verification plan, open points |
+| [docs/backplane.md](docs/backplane.md) | backplane / controller PCB proposal |
+| [docs/controller.md](docs/controller.md) | controller plan (hardware, firmware, development path) |
 | [docs/midi.md](docs/midi.md) | MIDI implementation, parts and patches (proposal) |
 | [docs/bus.md](docs/bus.md) | voice bus protocol (proposal) |
 | [docs/spec.md](docs/spec.md) | architecture: voice card, backplane, voice bus, clock synchronisation, decisions, open points |

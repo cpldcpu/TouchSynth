@@ -10,7 +10,7 @@ from draw import U
 PAPER = {}
 # MCU sheet: the MCU pins, the backplane connector and the bus resistors are joined by labels; drawn as global
 # labels like the cross-sheet nets around them, so the label stacks at the MCU pins stay uniform
-GLOBAL = {"LED_PLAY", "LED_STAT", "SYNC_IN", "RX_IN", "TX_OUT", "NRST", "SWIO", "CLK_SEL", "ST_VB0", "ST_RAIL", "PC5",
+GLOBAL = {"LED_PLAY", "LED_STAT", "SYNC_IN", "RX_IN", "TX_OUT", "NRST", "SWIO", "CLK_SEL", "ST_VB0", "ST_RAIL",
           "SYNC", "RX", "TX", "CLK_IN"}
 PWM = {"R": "PWM_RES", "V": "PWM_VCA"}
 
@@ -77,7 +77,9 @@ def v33(sh, p, stub=0.0):
 
 
 def tpx(sh, net, p, k=0, up=2 * U, fields="right"):
-    """test point above the wire point p (wired down to it)"""
+    """test point above the wire point p (wired down to it); nothing if voice.py has no such test point"""
+    if len([q for q in D.PARTS if q.lib_id == "Connector:TestPoint" and q.pins["1"] == net]) <= k:
+        return
     t = tp(net, k)
     sh.place(t, p[0], p[1] - up, fields=fields)
     sh.w((t, 1), p)
@@ -286,10 +288,9 @@ def sheet_mcu(sh):
     sh.w((vdd[0], yv), (vdd[0] + 20.32, yv))
     vcap(sh, note("MCU decoupling"), vdd[0] + 10.16, yv)
     vcap(sh, note("MCU bulk"), vdd[0] + 20.32, yv)
-    tp_lbl(sh, "PC5", 35.56, 127.0)
-    sh.text("PC5: spare", 50.8, 127.6, 1.27, False)
-    sh.text("TIM1_RM 0010 (CH1...CH4 = PC6, PC7, PC0, PD3), TIM2_RM 010 (CH2 = PC2, CH4 = PC1)", 20.32, 135.89,
-            1.27, False)
+    sh.text("PWM_PAN (PC5, TIM2 CH1): pan bias, vca sheet", 20.32, 132.08, 1.27, False)
+    sh.text("TIM1_RM 0010 (CH1...CH4 = PC6, PC7, PC0, PD3), TIM2_RM 010 (CH1 = PC5, CH2 = PC2, CH4 = PC1)", 20.32,
+            135.89, 1.27, False)
     sh.text("USART1 default (TX PD5 open drain, RX PD6); PA4 is bonded to PD7 (NRST): never an output", 20.32,
             139.7, 1.27, False)
 
@@ -309,7 +310,7 @@ def sheet_mcu(sh):
             q = (x + d[0] * 5.08, y)
             sh.w((x, y), q)
             sh.v5(q)
-        elif net == "GND" and num in (4, 6, 8):                  # adjacent ground pins: joined
+        elif net == "GND" and num in (4, 6, 8):                  # adjacent ground pins: joined (6 = AUDIO_GND)
             sh.w((x, y), (x + U, y))
         elif net == "GND":
             sh.w((x, y), (x + d[0] * U, y))
@@ -320,7 +321,6 @@ def sheet_mcu(sh):
     sh.w((g4[0] + U, g4[1]), (g8[0] + U, g8[1]))
     sh.pwr((g4[0] + U, sh.P(j1, 6)[1]), "GND", (1, 0))
     sh.text("pin 6 = AUDIO_GND (from the line-out ground)", xj - 12.7, yj + 17.78, 1.27, False)
-    sh.text("16: spare", xj + 12.7, yj + 10.76, 1.27, False)
     # bus series resistors, pull-ups / pull-downs
     xb = 254.0
     bus_row(sh, nets(_1="RX", _2="RX_IN"), xb, 55.88, "RX", "RX_IN",
@@ -351,10 +351,11 @@ def sheet_mcu(sh):
     sh.w((t, 1), (p2[0] + 12.7, p2[1]))
     j3 = by(lambda p: p.value == "LINE OUT")
     sh.place(j3, 99.06, y, mirror="y", fields="left")
-    q1, q2 = sh.P(j3, 1), sh.P(j3, 2)
-    sh.w(q1, (q1[0] + 15.24, q1[1])); sh.lbl((q1[0] + 15.24, q1[1]), "AUDIO_OUT", (1, 0))
-    sh.w(q2, (q2[0] + 5.08, q2[1])); sh.gnd((q2[0] + 5.08, q2[1]))
-    sh.text("1x3 and 1x2 right-angle headers on the debug edge", 20.32, 200.66, 1.27, False)
+    q1, q2, q3 = sh.P(j3, 1), sh.P(j3, 2), sh.P(j3, 3)
+    sh.w(q1, (q1[0] + 15.24, q1[1])); sh.lbl((q1[0] + 15.24, q1[1]), "AUDIO_L", (1, 0))
+    sh.w(q2, (q2[0] + 15.24, q2[1])); sh.lbl((q2[0] + 15.24, q2[1]), "AUDIO_R", (1, 0))
+    sh.w(q3, (q3[0] + 5.08, q3[1])); sh.gnd((q3[0] + 5.08, q3[1]))
+    sh.text("two 1x3 right-angle headers on the debug edge (line out: L, R, GND)", 20.32, 200.66, 1.27, False)
 
     # ---- LEDs
     sh.heading("LEDs (debug edge)", 160, 150, 270)
@@ -636,28 +637,35 @@ def cv_vi(sh, n, x0, y, opamp, unit, pins, extra_emitter=None):
     return sh.P(q, 3)
 
 
-def pair(sh, sim, x, y, gap=25.4):
-    """BC847BS as a differential pair: unit 1 at x, unit 2 mirrored at x + gap (fields between the two);
-    returns the part and its pins"""
+def pair(sh, sim, x, y, gap=25.4, f2=None):
+    """BC847BS as a differential pair: unit 1 at x, unit 2 mirrored at x + gap (fields between the two, or at
+    the offset f2 from unit 2); returns the part and its pins"""
     q = ref(sim)
     sh.place(q, x, y, unit=1, fields=(3.81, -3.81))
-    sh.place(q, x + gap, y, unit=2, mirror="y", fields=(10.16 - gap, 3.81))
+    sh.place(q, x + gap, y, unit=2, mirror="y", fields=f2 or (10.16 - gap, 3.81))
     return q, {k: sh.P(q, k) for k in (1, 2, 3, 4, 5, 6)}
 
 
-def pair_core(sh, sim, x, y, rc1, rc2, c_net, tail, cin, rin, rb1, rb2, bias, in_net, ri_net):
-    """differential pair with collector resistors to VA, emitters to the tail label, collector labels c_net % 1|2;
-    base 1: LPF -> cin -> rin -> base, both bases biased through rb1 / rb2. Returns (pins, base-1 drop x)."""
-    q, P = pair(sh, sim, x, y)
+def loads(sh, P, rc1, rc2, c_net, stub=10.16):
+    """collector resistors to VA above both collectors of a pair (pins P), collector labels c_net % 1|2 outwards"""
+    for k, rr, c, fl, d in ((1, rc1, P[6], "left", (-1, 0)), (2, rc2, P[3], "right", (1, 0))):
+        sh.place(rr, c[0], c[1] - 5.08 - 3.81, 0, fields=fl); sh.w(c, (rr, 2))
+        va(sh, (rr, 1))
+        e = (c[0] + d[0] * stub, c[1] - U)
+        sh.w((c[0], c[1] - U), e); sh.lbl(e, c_net % k, d)
+
+
+def pair_core(sh, sim, x, y, rc1, rc2, c_net, tail, cin, rin, rb1, rb2, bias, in_net, ri_net, gap=25.4, f2=None):
+    """differential pair with emitters to the tail label; collector resistors to VA and collector labels
+    c_net % 1|2 (rc1 = None: collectors left open, for a stacked stage); base 1: LPF -> cin -> rin -> base, both
+    bases biased through rb1 / rb2. Returns (pins, base-1 drop x)."""
+    q, P = pair(sh, sim, x, y, gap, f2)
     yt = P[1][1] + 5.08
     sh.w(P[1], (P[1][0], yt), (P[4][0], yt), P[4])
     xm = (P[1][0] + P[4][0]) / 2
     sh.w((xm, yt), (xm, yt + 5.08)); sh.lbl((xm, yt + 5.08), tail, (0, 1))
-    for k, rr, c, fl, d in ((1, rc1, P[6], "left", (-1, 0)), (2, rc2, P[3], "right", (1, 0))):
-        sh.place(rr, c[0], c[1] - 5.08 - 3.81, 0, fields=fl); sh.w(c, (rr, 2))
-        va(sh, (rr, 1))
-        e = (c[0] + d[0] * 10.16, c[1] - U)
-        sh.w((c[0], c[1] - U), e); sh.lbl(e, c_net % k, d)
+    if rc1:
+        loads(sh, P, rc1, rc2, c_net)
     b1, b2 = P[2], P[5]
     x1 = b1[0] - 12.7
     sh.w(b1, (x1, b1[1]))
@@ -732,7 +740,7 @@ def sheet_resonance(sh):
     sh.lbl((p[0] + 1.27, p[1]), "RES_FB", (1, 0))
     p = hpart(sh, ref("RRF"), p[0] + 10.16, p[1])
     sh.lbl(p, "BIN2", (1, 0), stub=7.62)
-    sh.text("U7 unit B (VCA difference amplifier) and the supply unit: vca sheet", 203.2, 190.5, 1.27, False)
+    sh.text(f"{u} unit B (VCA difference amplifier L) and the supply unit: vca sheet", 203.2, 190.5, 1.27, False)
 
 
 # ============================================================================ VCA
@@ -755,11 +763,28 @@ def sheet_vca(sh):
     tpx(sh, "VTRIM", (p[0] + 12.7, y))
     sh.lbl((p[0] + 22.86, y), "VTRIM", (1, 0))
 
-    # ---- VCA core
-    sh.heading("VCA core: differential pair, input from the filter (LPF), offset trim into vin2", 15, 105, 165)
-    y = 157.48
-    P, xd = pair_core(sh, "QA1", 96.52, y, ref("RVC1"), ref("RVC2"), "VCA_C%d", "VCA_TAIL", ref("CVI"), ref("RVA"),
-                      ref("RVB1"), ref("RVB2"), "VREF", "VCA_IN%d", "VCA_VI")
+    # ---- pan bias: PAN_B = VREF + p, p from the PC5 PWM through a passive network (S13 variant A)
+    sh.heading("Pan bias (PC5, TIM2 CH1): PAN_B = VREF -143...+149 mV, 66 Hz", 270, 76.2, W)
+    yn = 96.52
+    sh.lbl((x0, yn), "PWM_PAN", (-1, 0))
+    p = hpart(sh, ref("RPB"), x0, yn)
+    sh.w(p, (p[0] + 43.18, yn))
+    rpa, rpc = ref("RPA"), ref("RPC")
+    sh.place(rpa, p[0] + 7.62, yn - 3.81, fields="left")         # pin 1 (VREF) up, pin 2 on the PAN_B line
+    sh.lbl((rpa, 1), "VREF", (0, -1), stub=U)
+    sh.place(rpc, p[0] + 17.78, yn - 3.81, fields="right")
+    v33(sh, (rpc, 1), stub=U)
+    vcap(sh, ref("CPN"), p[0] + 27.94, yn)
+    sh.lbl((p[0] + 43.18, yn), "PAN_B", (1, 0))
+    sh.text("to the R bases of the steering pairs", p[0] + 35.56, yn + 5.08, 1.27, False)
+
+    # ---- VCA core with the steering pairs stacked on its collectors
+    sh.heading("VCA core (base bias VCA_BIAS 1.89 V) and steering pairs: L bases on VREF, R bases on PAN_B", 15, 111.76,
+               195)
+    y = 167.64
+    P, xd = pair_core(sh, "QA1", 96.52, y, None, None, None, "VCA_TAIL", ref("CVI"), ref("RVA"),
+                      ref("RVB1"), ref("RVB2"), "VCA_BIAS", "VCA_IN%d", "VCA_VI", gap=60.96,
+                      f2=(-13.97, -3.81))
     rtrf, rtrm = ref("RTRF"), ref("RTRM")
     b1, b2 = P[2], P[5]
     sh.w((xd, b1[1] + U), (xd - 10.16, b1[1] + U))
@@ -768,11 +793,38 @@ def sheet_vca(sh):
     sh.w((xt, b2[1]), (xt + 5.08, b2[1]))
     hpart(sh, rtrm, xt + 5.08, b2[1], flip=True)                    # pin 2 (base side) left, pin 1 (VTRIM) right
     sh.lbl(sh.P(rtrm, 1), "VTRIM", (1, 0), stub=U)
+    # steering pairs, emitters on the VCA collectors; loads 4.7k to VA, collector labels to the difference amps
+    for k, sim, c in ((1, "QSL1", P[6]), (2, "QSL2", P[3])):
+        q, S = pair(sh, sim, c[0] - 10.16, y - 20.32, gap=20.32, f2=(3.81, -5.08))
+        ye = S[1][1] + U
+        sh.w(S[1], (S[1][0], ye), (S[4][0], ye), S[4])
+        sh.w((c[0], ye), c)
+        sh.lbl((c[0], c[1] - U), f"VCA_C{k}", (1, 0))
+        sh.lbl(S[2], "VREF", (-1, 0), stub=U)
+        sh.lbl(S[5], "PAN_B", (1, 0), stub=U)
+        rl, rr = (ref(f"RVC{k}"), ref(f"RVR{k}"))
+        for kk, r_, cc, fl, d, net in ((1, rl, S[6], "left", (-1, 0), f"VCA_L{k}"),
+                                       (2, rr, S[3], "right", (1, 0), f"VCA_R{k}")):
+            sh.place(r_, cc[0], cc[1] - 5.08 - 3.81, 0, fields=fl); sh.w(cc, (r_, 2))
+            va(sh, (r_, 1))
+            e = (cc[0] + d[0] * 7.62, cc[1] - U)
+            sh.w((cc[0], cc[1] - U), e); sh.lbl(e, net, d)
+    # VCA base bias: VREF -> 2.4k / 7.5k || 1 uF
+    xb, yb = 25.4, 139.7
+    rbv1, rbv2 = ref("RBV1"), ref("RBV2")
+    sh.place(rbv1, xb, yb - 3.81, fields="right")
+    sh.lbl((rbv1, 1), "VREF", (0, -1), stub=U)
+    sh.w((rbv1, 2), (xb + 25.4, yb))
+    vcap(sh, rbv2, xb, yb + U, fields="right"); sh.w((xb, yb), (xb, yb + U))
+    vcap(sh, ref("CBV"), xb + 10.16, yb)
+    sh.lbl((xb + 25.4, yb), "VCA_BIAS", (1, 0))
+    sh.text("L = a (I1 - I2), R = (1 - a) (I1 - I2), a = 1 / (1 + exp(-p / VT))", 20.32, 198.12, 1.27, False)
+    sh.text("the firmware raises CV_VCA towards the centre for constant power", 20.32, 201.93, 1.27, False)
 
-    # ---- difference amplifier, line out
-    sh.heading("Difference amplifier (G = 2.2) and line out", 185, 105, W)
+    # ---- difference amplifier L, line out L
+    sh.heading("Difference amplifier L (G = 3.0) and line out L", 205, 111.76, W)
     u = ref("XDIF")
-    out = diff_amp(sh, u, 2, (5, 6, 7), "RD1", "RD2", "RD3", "RD4", 246.38, 152.4, "VCA_C1", "VCA_C2",
+    out = diff_amp(sh, u, 2, (5, 6, 7), "RD1", "RD2", "RD3", "RD4", 261.62, 142.24, "VCA_L1", "VCA_L2",
                    "VCA_DM", "VCA_DP", rgm="RD6", rgp="RD5")
     xo = out[0] + 20.32
     sh.w(out, (xo, out[1]))
@@ -782,22 +834,52 @@ def sheet_vca(sh):
     sh.w(p, (p[0] + 12.7, p[1]))
     sh.lbl((p[0] + 1.27, p[1]), "VCAOUT_R", (1, 0))
     p = hpart(sh, ref("COUT"), p[0] + 12.7, out[1])
-    sh.w(p, (p[0] + 20.32, out[1]))
+    sh.w(p, (p[0] + 17.78, out[1]))
     vcap(sh, ref("RBL"), p[0] + 7.62, out[1])
-    sh.lbl((p[0] + 20.32, out[1]), "AUDIO_OUT", (1, 0))
-    sh.text("to the line-out header and the backplane (mcu)", p[0] - 10.16, out[1] - 12.7, 1.27, False)
-    supply(sh, u, 3, 386.08, 180.34, dec(u))
+    sh.lbl((p[0] + 17.78, out[1]), "AUDIO_L", (1, 0))
+    sh.text("to the line-out header and J1 pin 5 (mcu)", p[0] - 10.16, out[1] - 12.7, 1.27, False)
+    supply(sh, u, 3, 386.08, 172.72, dec(u))
     # loopback divider to PC4
     xl = out[0] + 12.7
-    sh.heading("Audio loopback to PC4 (ADC A2)", xl + 5.08, 182.88, 365)
+    sh.heading("Audio loopback to PC4 (ADC A2)", xl + 5.08, 172.72, 360)
     rlb1, rlb2, clb = ref("RLB1"), ref("RLB2"), ref("CLB")
-    sh.w((xl, out[1]), (xl, 190.5))
-    sh.place(rlb1, xl, 190.5 + 3.81, fields="left")
+    sh.w((xl, out[1]), (xl, 180.34))
+    sh.place(rlb1, xl, 180.34 + 3.81, fields="left")
     yl = sh.P(rlb1, 2)[1]
     sh.w((xl, yl), (xl + 33.02, yl))
     vcap(sh, rlb2, xl + 10.16, yl); vcap(sh, clb, xl + 20.32, yl)
     sh.lbl((xl + 33.02, yl), "ADC_AUDIO", (1, 0))
-    sh.text("VCAOUT x 0.6 (0...3 V) for the 3.3 V ADC", xl + 2.54, yl + 17.78, 1.27, False)
+    sh.text("VCAOUT x 0.6 (0...3 V) for the 3.3 V ADC", xl + 2.54, yl + 15.24, 1.27, False)
+
+    # ---- difference amplifier R, line out R
+    sh.heading("Difference amplifier R (G = 3.0) and line out R", 15, 213.36, 290)
+    u = ref("XDIFR")
+    out = diff_amp(sh, u, 1, (3, 2, 1), "RD1R", "RD2R", "RD3R", "RD4R", 101.6, 243.84, "VCA_R1", "VCA_R2",
+                   "VCAR_DM", "VCAR_DP", rgm="RD6R", rgp="RD5R")
+    xo = out[0] + 20.32
+    sh.w(out, (xo, out[1]))
+    tpx(sh, "VCAR_OUT", (out[0] + 5.08, out[1]))
+    sh.lbl((out[0] + 7.62, out[1]), "VCAR_OUT", (1, 0))
+    p = hpart(sh, ref("RISOR"), xo, out[1])
+    sh.w(p, (p[0] + 12.7, p[1]))
+    sh.lbl((p[0] + 1.27, p[1]), "VCAR_OUT_R", (1, 0))
+    p = hpart(sh, ref("COUTR"), p[0] + 12.7, out[1])
+    sh.w(p, (p[0] + 17.78, out[1]))
+    vcap(sh, ref("RBLR"), p[0] + 7.62, out[1])
+    sh.lbl((p[0] + 17.78, out[1]), "AUDIO_R", (1, 0))
+    sh.text("to the line-out header and J1 pin 7 (mcu)", p[0] - 10.16, out[1] - 12.7, 1.27, False)
+    # option: R into the loopback as well
+    xl = out[0] + 12.7
+    rlb3 = by(lambda q: q.note and q.note.startswith("option: R into the loopback"))
+    sh.w((xl, out[1]), (xl, out[1] + 7.62))
+    sh.place(rlb3, xl, out[1] + 7.62 + 3.81, fields="right")
+    sh.lbl((rlb3, 2), "ADC_AUDIO", (0, 1), stub=U)
+    sh.text("DNP option: L + R summed at PC4", xl + 5.08, out[1] + 20.32, 1.27, False)
+    # spare unit B: follower on VREF (defined state), supply
+    ip, o = follower(sh, u, 2, 241.3, 233.68 + U, (5, 6, 7))
+    sh.lbl(ip, "VREF", (-1, 0), stub=5.08)
+    sh.text("unit B spare: follower on VREF", 223.52, 252.73, 1.27, False)
+    supply(sh, u, 3, 271.78, 238.76, dec(u))
 
 
 EXTRA = {}

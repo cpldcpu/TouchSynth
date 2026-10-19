@@ -6,7 +6,7 @@
 	(paper "A4")
 	(title_block
 		(title "TouchSynth Poly voice card")
-		(date "2026-10-18")
+		(date "2026-10-19")
 		(rev "0.1")
 	)
 	(lib_symbols)
@@ -61,7 +61,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "aa8af97b-f7e8-4c8c-9d08-bb7b1b90fa20")
+		(uuid "cca13f97-6f19-4b44-84e1-274562fd6279")
 	)
 	(sheet
 		(at 115 40)
@@ -114,7 +114,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "9909462e-8580-482a-afec-cb9597549d7e")
+		(uuid "40416d9a-e2a3-4d52-a0b9-fc61123b0fb1")
 	)
 	(sheet
 		(at 210 40)
@@ -167,7 +167,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "8c3ff40d-ff9d-48e1-b4cb-0a05babc82f8")
+		(uuid "64ab37aa-30b1-4a09-a022-f2424f33a98b")
 	)
 	(sheet
 		(at 305 40)
@@ -220,7 +220,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "ccec5b2e-adb6-4b6e-8c0b-583c25b9f21d")
+		(uuid "300b3ff8-ccd3-4d13-8f7c-227a932f2cc6")
 	)
 	(sheet
 		(at 20 110)
@@ -273,7 +273,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "b45f2482-86a4-4c64-be85-b8eaa318d33d")
+		(uuid "c77a7fb3-4f76-4e9c-a235-fa9213add0b7")
 	)
 	(sheet
 		(at 115 110)
@@ -317,7 +317,7 @@
 			)
 		)
 	)
-	(text "CV_VCA, VCA trim, VCA, output and loopback"
+	(text "VCA, stereo pan, outputs and loopback"
 		(exclude_from_sim no)
 		(at 118 132 0)
 		(effects
@@ -326,7 +326,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "7f62bc58-8429-480e-9f20-c7fa11d6f5ea")
+		(uuid "0e02c82f-add2-4bf0-a7ac-0e9f4cc36383")
 	)
 	(text "TouchSynth Poly voice card"
 		(exclude_from_sim no)
@@ -339,7 +339,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "1c8b62c0-cb25-45cb-9484-8ef02d4f63f0")
+		(uuid "63678008-88ba-4a4d-a8f2-adab6f6ef5c2")
 	)
 	(sheet_instances
 		(path "/"

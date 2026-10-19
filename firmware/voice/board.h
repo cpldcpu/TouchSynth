@@ -25,6 +25,30 @@
 
 #include "ch32fun.h"
 
+#ifndef BOARD_CARD
+#define BOARD_CARD 0                                   /* 1: the voice card (make BOARD=card), else board 1 */
+#endif
+
+#if BOARD_CARD
+/* Voice card (hw/voice.py, docs/spec.md 3.2; TSSOP-20 pin numbers, the same port pins on any V006 package):
+ *   PD4 SYNC_IN (EXTI)   PD5 TX_OUT (bus return)   PD6 RX_IN (bus)   PD0 LED_PLAY   PC3 LED_STAT
+ *   PC6 TIM1 CH1 VCA trim   PC7 CH2 CV_CUT   PC0 CH3 CV_RES   PD3 CH4 CV_VCA   PC2 TIM2 CH2 DAC   PC1 TIM2 CH4 DAC low
+ *   PC4 ADC A2 loopback   PA2 A0 / PD2 A3 self-test (option)   PA1 clock in (option)   PC5 spare
+ * No DCO, no 74HC595: CV channel 0 is the VCA trim, hw_leds_dac() drives the two LEDs and the trim. */
+#define PIN_SYNC     PD4
+#define PIN_TX       PD5
+#define PIN_MIDI_RX  PD6                               /* bus RX */
+#define PIN_LED_PLAY PD0
+#define PIN_LED_STAT PC3
+#define PIN_CV_AMP   PC6                               /* CV channel 0: VCA trim on the card */
+#define PIN_CV_CUT   PC7
+#define PIN_CV_RES   PC0
+#define PIN_CV_VCA   PD3
+#define PIN_PULSE    PC2                               /* DAC */
+#define PIN_SUB      PC1                               /* DAC low byte (dual PWM) */
+#define PIN_AUDIO    PC4
+#define ADC_CH_AUDIO 2
+#else
 #define PIN_LATCH    PD4
 #define PIN_AUDIO    PD5
 #define PIN_MIDI_RX  PD6
@@ -45,6 +69,7 @@
 #define ADC_CH_TOUCH_A 0
 #define ADC_CH_TOUCH_B 1
 #define ADC_CH_AUDIO   5
+#endif
 
 #if defined(CH32V003)
 #define CHIP_NAME "CH32V003"

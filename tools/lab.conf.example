@@ -11,3 +11,8 @@ MINICHLINK=ch32fun/minichlink/minichlink
 
 # oscilloscope (Rigol MSO5000, SCPI over LAN, port 5555) as reached from the lab PC; CH1 on the line out
 SCOPE_HOST=192.168.0.10
+
+# WCH-LinkE USB serial numbers, when several programmers are attached (ls /dev/serial/by-id/ on the lab PC);
+# the tools pass them to minichlink as MINICHLINK_LINKE_SERIAL
+LINKE_BOARD1=
+LINKE_V203=

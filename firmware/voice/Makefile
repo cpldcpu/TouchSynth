@@ -1,4 +1,5 @@
-# Voice firmware:  make [TARGET_MCU=CH32V006|CH32V003|CH32V002] [DAC_DUAL=1]   (WSL, riscv64-unknown-elf-gcc)
+# Voice firmware:  make [TARGET_MCU=CH32V006|CH32V003|CH32V002] [DAC_DUAL=1] [BOARD=card]   (WSL, riscv64-unknown-elf-gcc)
+#   BOARD=card: the voice card's pin map (board.h), else board 1
 #                  make flash     (WCH-LinkE via minichlink)
 #   DAC_DUAL=1: dual-PWM DAC (TIM2 CH2 high byte, CH4 low byte on PC1; hw.h)
 all : build
@@ -8,7 +9,11 @@ TARGET_MCU?=CH32V006
 PREFIX:=riscv64-unknown-elf
 ADDITIONAL_C_FILES:=hw.c synth.c console.c dsp.c
 DAC_DUAL?=0
+BOARD?=board1
 EXTRA_CFLAGS+=-DDAC_DUAL=$(DAC_DUAL)
+ifeq ($(BOARD),card)
+EXTRA_CFLAGS+=-DBOARD_CARD=1
+endif
 include ../ch32fun/ch32fun/ch32fun.mk
 
 tables.h : gen_tables.py ../../docs/results/s1_cal.csv ../../docs/results/s3_cutoff.csv ../../sim/behav/tunes.py

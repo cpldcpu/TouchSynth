@@ -1,8 +1,10 @@
 """TouchSynth Poly voice card: complete design description (single source of truth for schematic and PCB).
 
 Circuit: docs/spec.md section 3 (signal path, pin map, connectors). Every analog part carries its ngspice name
-('sim' field) from the S10 variant v5c netlist (sim/s10_5v/s10_5v.py, core()), which includes the S11
-reconstruction filter; check_sim.py compares the two. Nets used on more than one sheet become global labels.
+('sim' field) from the S13 variant A netlist (sim/s13_pan/s13_pan.py, card("A", ...)): the S10 variant v5c card
+(sim/s10_5v/s10_5v.py, core(), with the S11 reconstruction filter) plus the stereo pan stage (current steering on
+the VCA collectors, PC5 PWM, second difference amp); check_sim.py compares the two. Nets used on more than one sheet
+become global labels.
 
 Supplies: +5V from the backplane (or the programmer, through a Schottky diode), VA = the analog rail behind
 22 R + 3 x 100 uF, +3V3 from an XC6206 for the MCU (its PWM outputs are the CVs and the DAC: duty x 3.3 V).
@@ -24,10 +26,11 @@ SHEETS = OrderedDict([
     ("dac", "PWM DAC reconstruction filter and mixer"),
     ("vcf", "CV_CUT, expo converter, ladder filter"),
     ("resonance", "CV_RES and resonance VCA"),
-    ("vca", "CV_VCA, VCA trim, VCA, output and loopback"),
+    ("vca", "VCA, stereo pan, outputs and loopback"),
 ])
 
 FP = dict(
+    R0402="Resistor_SMD:R_0402_1005Metric", C0402="Capacitor_SMD:C_0402_1005Metric",
     R0603="Resistor_SMD:R_0603_1608Metric", C0603="Capacitor_SMD:C_0603_1608Metric",
     C0805="Capacitor_SMD:C_0805_2012Metric", C1206="Capacitor_SMD:C_1206_3216Metric",
     SOT23="Package_TO_SOT_SMD:SOT-23", SOT363="Package_TO_SOT_SMD:SOT-363_SC-70-6",
@@ -77,13 +80,23 @@ def add(prefix, lib_id, value, fp, pins, **kw):
     return p
 
 
+PKG = ("0402", "0603")      # passives: 0402 where the JLCPCB lists have the part (50 x 50 mm card), else 0603
+
+
 def R(sim, value, a, b, **kw):
-    code, pkg = L.pick_r(value)
+    for pkg in PKG:
+        try:
+            code, pkg = L.pick_r(value, pkg)
+            break
+        except KeyError:
+            continue
+    else:
+        raise KeyError(f"no resistor {value}")
     return add("R", "Device:R", value, FP["R" + pkg], {1: a, 2: b}, lcsc=code, sim=sim, **kw)
 
 
 def C(sim, value, a, b, vwork, tc=None, **kw):
-    code, pkg = L.pick_c(value, 2 * vwork, tc=tc)
+    code, pkg = L.pick_c(value, 2 * vwork, pkgs=PKG + ("0805", "1206"), tc=tc)
     return add("C", "Device:C", value.replace("u", "µ"), FP["C" + pkg], {1: a, 2: b}, lcsc=code, sim=sim, **kw)
 
 
@@ -155,8 +168,8 @@ for sim, v, a, b in [("RB5", "620", "VA", "VB4"), ("RB4", "1.5k", "VB4", "VB3"),
     R(sim, v, a, b)
 for i, v in [(4, 4.4), (3, 3.7), (2, 3.0), (1, 2.4), (0, 1.7)]:
     C(f"CB{i}", "10u", f"VB{i}", "GND", v)
-group("Test points")
-for n in ("VA", "+3V3", "VREF", "VBIAS", "VEXP_REF", "VB0", "VB2", "VB4", "GND"):
+group("Test points")                          # 13 on the 50 x 50 mm card (12 essential + VCAR_OUT), was 22
+for n in ("VA", "+3V3", "VREF", "VBIAS", "VB0", "GND"):
     TP(n)
 
 # =========================================================================== MCU, connectors, LEDs
@@ -164,15 +177,16 @@ sheet("mcu")
 group("MCU (CH32V006F8P7, hand-soldered)")
 add("U", "MCU_WCH_RiscV:CH32V003FxPx", "CH32V006F8P7", FP["TSSOP20"],
     {1: "SYNC_IN", 2: "TX_OUT", 3: "RX_IN", 4: "NRST", 5: "CLK_SEL", 6: "ST_VB0", 7: "GND", 8: "LED_PLAY",
-     9: "+3V3", 10: "PWM_RES", 11: "PWM_LO", 12: "PWM_DAC", 13: "LED_STAT", 14: "ADC_AUDIO", 15: "PC5",
+     9: "+3V3", 10: "PWM_RES", 11: "PWM_LO", 12: "PWM_DAC", 13: "LED_STAT", 14: "ADC_AUDIO", 15: "PWM_PAN",
      16: "PWM_TRIM", 17: "PWM_CUT", 18: "SWIO", 19: "ST_RAIL", 20: "PWM_VCA"},
-    bom=False, note="own stock, hand-soldered; TIM1_RM 0010, TIM2_RM 010; PA4 bonded to PD7: never an output")
+    bom=False, note="own stock, hand-soldered; TIM1_RM 0010, TIM2_RM 010 (PC5 = TIM2 CH1: pan); PA4 bonded to PD7: "
+                    "never an output")
 C(None, "100n", "+3V3", "GND", 3.3, note="MCU decoupling")
 C(None, "1u", "+3V3", "GND", 3.3, note="MCU bulk")
 group("Backplane connector and voice bus")
 add("J", "Connector_Generic:Conn_02x08_Odd_Even", "BACKPLANE", FP["BP"],
-    {1: "+5V", 2: "+5V", 3: "GND", 4: "GND", 5: "AUDIO_OUT", 6: "GND", 7: "GND", 8: "GND", 9: "SYNC",
-     10: "RX", 11: "TX", 12: "NRST", 13: "GND", 14: "SWIO", 15: "CLK_IN", 16: "NC_BP16"},
+    {1: "+5V", 2: "+5V", 3: "GND", 4: "GND", 5: "AUDIO_L", 6: "GND", 7: "AUDIO_R", 8: "GND", 9: "SYNC",
+     10: "RX", 11: "TX", 12: "NRST", 13: "GND", 14: "SWIO", 15: "CLK_IN", 16: "GND"},
     bom=False, note="2x8 right-angle header, card underside edge; pin 6 = AUDIO_GND: route from the line-out ground")
 R(None, "100", "SYNC", "SYNC_IN", note="bus series")
 R(None, "100k", "SYNC_IN", "GND", note="no SYNC edges when unplugged (standalone detection)")
@@ -183,8 +197,8 @@ C(None, "100n", "NRST", "GND", 3.3, dnp=True, note="NRST filter (option)")
 group("Programming (WCH-LinkE) and line out")
 add("J", "Connector_Generic:Conn_01x03", "SWIO", FP["HDR3"], {1: "+5V_PRG", 2: "SWIO", 3: "GND"}, bom=False,
     note="WCH-LinkE: 5V, SWIO, GND (right-angle, debug edge)")
-add("J", "Connector_Generic:Conn_01x02", "LINE OUT", FP["HDR2"], {1: "AUDIO_OUT", 2: "GND"}, bom=False,
-    note="right-angle, debug edge")
+add("J", "Connector_Generic:Conn_01x03", "LINE OUT", FP["HDR3"], {1: "AUDIO_L", 2: "AUDIO_R", 3: "GND"}, bom=False,
+    note="right-angle, debug edge: L, R, GND")
 group("LEDs (debug edge)")
 R(None, "2.2k", "+3V3", "LED_PWR_A", note="power LED series")
 add("D", "Device:LED", "red", FP["LED"], {2: "LED_PWR_A", 1: "GND"}, lcsc="C2286", note="power")
@@ -198,7 +212,7 @@ R(None, "10k", "VB0", "ST_VB0", dnp=True, note="self-test: ladder bias VB0 to AD
 R(None, "10k", "VA", "ST_RAIL", dnp=True, note="self-test: analog rail / 2 to ADC A3")
 R(None, "10k", "ST_RAIL", "GND", dnp=True, note="self-test divider")
 group("Test points")
-for n in ("NRST", "SWIO", "PC5", "SYNC_IN"):
+for n in ("NRST", "SWIO"):
     TP(n)
 
 # =========================================================================== DAC
@@ -239,7 +253,7 @@ MCP6002("XINA1/XINA2", ("N4A", "INA_A", "INA_OA"), ("N4B", "INA_B", "LPF"))
 R("RI1", "100k", "INA_A", "VREF"); R("RI2", "10k", "INA_OA", "INA_A")
 R("RI3", "10k", "INA_OA", "INA_B"); R("RI4", "100k", "LPF", "INA_B")
 group("Test points")
-for n in ("TAIL", "LPF", "XCUT_IN"):
+for n in ("TAIL", "LPF"):
     TP(n)
 
 # =========================================================================== resonance
@@ -255,41 +269,54 @@ R("RRC1", "4.7k", "VA", "RES_C1"); R("RRC2", "4.7k", "VA", "RES_C2")
 R("RRD1", "10k", "RES_C1", "RES_DM"); R("RRD2", "10k", "RES_DM", "RESOUT")
 R("RRD3", "10k", "RES_C2", "RES_DP"); R("RRD4", "10k", "RES_DP", "VREF")
 C("CRF", "4.7u", "RESOUT", "RES_FB", 3); R("RRF", "22k", "RES_FB", "BIN2")
-group("Test points")
-for n in ("XRES", "RESOUT"):
-    TP(n)
 
 # =========================================================================== VCA, output, loopback
 sheet("vca")
 group("CV_VCA filter and V-to-I converter")
-CVNET_LIN("V", "PWM_VCA", "XVCA", "7.5k")
-LM.update(VI("V", "XVCA", "VCA_TAIL", "2.2k", (5, 6, 7)))
+CVNET_LIN("V", "PWM_VCA", "XVCA", "3k")                   # S13 A: CV 0...0.74 V for the lower VCA base bias
+LM.update(VI("V", "XVCA", "VCA_TAIL", "1.2k", (5, 6, 7)))  # the same 0.6 mA tail
 R("ROFFV", "240k", "VREF", "VIV_E")
 group("VCA trim (TIM1 CH1 PWM, 2-pole RC, 680k into vin2)")
 R("RTR1", "10k", "PWM_TRIM", "TRIM_A"); C("CTR1", "1u", "TRIM_A", "GND", 3.3)
 R("RTR2", "10k", "TRIM_A", "VTRIM"); C("CTR2", "1u", "VTRIM", "GND", 3.3)
 group("VCA core")
 C("CVI", "1u", "LPF", "VCA_VI", 3); R("RVA", "33k", "VCA_VI", "VCA_IN1")
-R("RVB1", "1k", "VCA_IN1", "VREF"); R("RVB2", "1k", "VCA_IN2", "VREF")
-R("RTRM", "680k", "VTRIM", "VCA_IN2"); R("RTRF", "2M", "VCA_IN1", "GND")
+R("RVB1", "1k", "VCA_IN1", "VCA_BIAS"); R("RVB2", "1k", "VCA_IN2", "VCA_BIAS")
+R("RTRM", "680k", "VTRIM", "VCA_IN2"); R("RTRF", "5.1M", "VCA_IN1", "GND")
+R("RBV1", "2.4k", "VREF", "VCA_BIAS"); R("RBV2", "7.5k", "VCA_BIAS", "GND")     # 1.89 V: room for the stack
+C("CBV", "1u", "VCA_BIAS", "GND", 2.5)
 PAIR("QA1/QA2", "VCA_C1", "VCA_IN1", "VCA_TAIL", "VCA_C2", "VCA_IN2", "VCA_TAIL")
-R("RVC1", "4.7k", "VA", "VCA_C1"); R("RVC2", "4.7k", "VA", "VCA_C2")
-group("Difference amplifiers (resonance, VCA), line out")
-R("RD1", "10k", "VCA_C1", "VCA_DM"); R("RD2", "22k", "VCA_DM", "VCAOUT")
-R("RD3", "10k", "VCA_C2", "VCA_DP"); R("RD4", "22k", "VCA_DP", "VREF")
+group("Pan: steering pairs on the VCA collectors, pan bias from PC5 (TIM2 CH1)")
+PAIR("QSL1/QSR1", "VCA_L1", "VREF", "VCA_C1", "VCA_R1", "PAN_B", "VCA_C1")
+PAIR("QSL2/QSR2", "VCA_L2", "VREF", "VCA_C2", "VCA_R2", "PAN_B", "VCA_C2")
+R("RVC1", "4.7k", "VA", "VCA_L1"); R("RVC2", "4.7k", "VA", "VCA_L2")
+R("RVR1", "4.7k", "VA", "VCA_R1"); R("RVR2", "4.7k", "VA", "VCA_R2")
+R("RPA", "3k", "VREF", "PAN_B"); R("RPB", "27k", "PWM_PAN", "PAN_B")    # PAN_B = VREF - 143 ... + 149 mV, 66 Hz
+R("RPC", "24k", "+3V3", "PAN_B"); C("CPN", "1u", "PAN_B", "GND", 2.5)
+group("Difference amplifiers (resonance, VCA L), line out L")
+R("RD1", "10k", "VCA_L1", "VCA_DM"); R("RD2", "30k", "VCA_DM", "VCAOUT")
+R("RD3", "10k", "VCA_L2", "VCA_DP"); R("RD4", "30k", "VCA_DP", "VREF")
 R("RD5", "33k", "VCA_DP", "GND", note="matched with RD6: inputs below the MCP6002 input transition")
 R("RD6", "33k", "VCA_DM", "GND", note="matched with RD5")
 MCP6002("XRDIF/XDIF", ("RES_DP", "RES_DM", "RESOUT"), ("VCA_DP", "VCA_DM", "VCAOUT"))
 PARTS[-2].unit_sheets = {1: "resonance"}
 PARTS[-2].unit_groups = {1: "Resonance VCA and difference amplifier"}
 R("RISO", "100", "VCAOUT", "VCAOUT_R", note="isolates the op-amp from cable / backplane capacitance")
-C("COUT", "10u", "VCAOUT_R", "AUDIO_OUT", 2.5); R("RBL", "100k", "AUDIO_OUT", "GND", note="output bleeder")
+C("COUT", "10u", "VCAOUT_R", "AUDIO_L", 2.5); R("RBL", "100k", "AUDIO_L", "GND", note="output bleeder")
+group("R difference amplifier (G = 3.0), line out R")
+R("RD1R", "10k", "VCA_R1", "VCAR_DM"); R("RD2R", "30k", "VCAR_DM", "VCAR_OUT")
+R("RD3R", "10k", "VCA_R2", "VCAR_DP"); R("RD4R", "30k", "VCAR_DP", "VREF")
+R("RD5R", "33k", "VCAR_DP", "GND", note="matched with RD6R: inputs below the MCP6002 input transition")
+R("RD6R", "33k", "VCAR_DM", "GND", note="matched with RD5R")
+MCP6002("XDIFR/XSPR", ("VCAR_DP", "VCAR_DM", "VCAR_OUT"), ("VREF", "SPR_OUT", "SPR_OUT"))   # unit B spare
+R("RISOR", "100", "VCAR_OUT", "VCAR_OUT_R", note="isolates the op-amp from cable / backplane capacitance (R)")
+C("COUTR", "10u", "VCAR_OUT_R", "AUDIO_R", 2.5); R("RBLR", "100k", "AUDIO_R", "GND", note="output bleeder R")
+R(None, "10k", "VCAR_OUT", "ADC_AUDIO", dnp=True, note="option: R into the loopback (L + R summed at PC4)")
 group("Audio loopback to PC4 (ADC A2)")
 R("RLB1", "10k", "VCAOUT", "ADC_AUDIO"); R("RLB2", "15k", "ADC_AUDIO", "GND")
 C("CLB", "1n", "ADC_AUDIO", "GND", 3.3)
 group("Test points")
-for n in ("VCAOUT", "XVCA", "VTRIM"):
-    TP(n)
+TP("VCAOUT"); TP("VCAR_OUT")
 
 # LM324 (all four units + supply), placed on the vcf sheet; unit A: the VBIAS buffer (power sheet)
 sheet("vcf")
@@ -303,7 +330,7 @@ C(None, "100n", "VA", "GND", 5, note="LM324 decoupling")
 
 # --------------------------------------------------------------------------- simulation cross-reference
 SIM_UNITS = {"XVB": 1, "XUV": 2, "XUEXP": 3, "XUR": 4}                 # LM324 unit of each simulated op-amp
-SIM_ONLY = {"RLOAD"}                                         # the line-out load in S10 (the mixer)
+SIM_ONLY = {"RLOAD", "RLOADR"}                    # the line-out loads in S10 / S13 (10k: the backplane mixer)
 SIM_DERATED = {f"CFILT{k}": 35e-6 for k in (1, 2, 3)}         # value simulated at its 5 V bias capacitance
 SIM_NODES = {
     "0": "GND", "vin": "+5V", "vp": "VA", "v5": "VA", "vr431": "VREF431", "vrf": "VREF_F", "vrdn": "VREF_F",
@@ -318,22 +345,26 @@ SIM_NODES = {
     "cvv": "PWM_VCA", "av": "CVV_A", "bv": "CVV_B", "xv": "XVCA", "vev": "VIV_E", "uov": "VIV_OUT",
     "bqv": "VIV_B", "vtail": "VCA_TAIL", "vi": "VCA_VI", "vin1": "VCA_IN1", "vin2": "VCA_IN2", "vin2m": "VCA_IN2",
     "vc1": "VCA_C1", "vc2": "VCA_C2", "dm": "VCA_DM", "dp": "VCA_DP", "dpz": "VCA_DP", "vcaout": "VCAOUT",
-    "vco": "VCAOUT_R", "lineout": "AUDIO_OUT", "vtrim": "VTRIM", "trp": "PWM_TRIM", "tra": "TRIM_A",
-    "adca": "ADC_AUDIO"}
+    "vco": "VCAOUT_R", "lineout": "AUDIO_L", "vtrim": "VTRIM", "trp": "PWM_TRIM", "tra": "TRIM_A",
+    "adca": "ADC_AUDIO",
+    # S13 variant A: VCA base bias, steering pairs, pan network, R difference amp (vbrs: behind S13's mismatch source)
+    "vbv": "VCA_BIAS", "vl1": "VCA_L1", "vl2": "VCA_L2", "vr1": "VCA_R1", "vr2": "VCA_R2", "vbr": "PAN_B",
+    "vbrs": "PAN_B", "pan": "PWM_PAN", "v33": "+3V3", "dmr": "VCAR_DM", "dpr": "VCAR_DP", "dpzr": "VCAR_DP",
+    "vcaoutr": "VCAR_OUT", "vcor": "VCAR_OUT_R", "lineoutr": "AUDIO_R", "spo": "SPR_OUT"}
 
 
 def sim_netlist():
-    """The S10 v5c netlist this design is checked against."""
+    """The S13 variant A netlist (S10 v5c with the pan stage) this design is checked against."""
     import os, sys
     here = os.path.dirname(os.path.abspath(__file__))
-    sys.path[:0] = [os.path.join(here, "..", "sim", "s10_5v"), os.path.join(here, "..", "sim", "lib")]
+    sys.path[:0] = [os.path.join(here, "..", "sim", d) for d in ("s13_pan", "s10_5v", "lib")]
     me = sys.modules.pop("voice", None)            # sim/lib/voice.py (netlist blocks) shares this module's name
     try:
-        import s10_5v as T
+        import s13_pan as P
     finally:
         if me is not None:
             sys.modules["voice"] = me
-    return T.core(T.VARIANTS["v5c"])
+    return P.card("A", P.T.VARIANTS["v5c"])
 
 
 def nets():

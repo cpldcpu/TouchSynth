@@ -35,8 +35,7 @@ class Grid:
             b = _bb(it)
             if b[2] < win[0] - 2 or b[0] > win[2] + 2 or b[3] < win[1] - 2 or b[1] > win[3] + 2:
                 continue
-            extra = 0.8 if it.GetClass() == "PAD" and it.GetParentFootprint().GetReference().startswith("KEY")                 else 0.0                                   # touch pads carry a 1 mm local clearance
-            others.append((b, it, extra))
+            others.append((b, it, 0.0))
         self.buckets = {}
         for b, it, extra in others:
             for bx in range(int(b[0]) - 2, int(b[2]) + 3):
@@ -47,6 +46,7 @@ class Grid:
         self.via_ban = [z for z in rules if z.GetDoNotAllowVias()]
         self.holes = [(pcbnew.ToMM(f.GetPosition().x), pcbnew.ToMM(f.GetPosition().y))
                       for f in board.GetFootprints() if f.GetReference().startswith("H")]
+        self.edge = pcb_gnd.extent(board)
         self._free = {}
         self._via = {}
 
@@ -70,7 +70,8 @@ class Grid:
         if k not in self._free:
             x, y = self.xy(i, j)
             L = LAYERS[l]
-            ok = 1.2 < x < 98.8 and 1.2 < y < 98.8 and not self._hit(L, x, y, self.r_trk)
+            e = self.edge
+            ok = e[0] + 0.6 < x < e[2] - 0.6 and e[1] + 0.6 < y < e[3] - 0.6 and not self._hit(L, x, y, self.r_trk)
             ok = ok and not self._in(self.track_ban[L], x, y, self.r_trk - 0.2)
             self._free[k] = ok
         return self._free[k]
@@ -240,7 +241,9 @@ def route_leftovers(board, g=0.15, tw=0.25, clr=0.2, via_d=0.6, drill=0.3, skip=
                 bbs = [_bb(it) for it in src_c["items"]] + [_bb(near)]
                 win = (min(b[0] for b in bbs) - margin, min(b[1] for b in bbs) - margin,
                        max(b[2] for b in bbs) + margin, max(b[3] for b in bbs) + margin)
-                win = (max(win[0], 0.5), max(win[1], 0.5), min(win[2], 99.5), min(win[3], 99.5))
+                e = pcb_gnd.extent(board)
+                win = (max(win[0], e[0] + 0.5), max(win[1], e[1] + 0.5),
+                       min(win[2], e[2] - 0.5), min(win[3], e[3] - 0.5))
                 grid = Grid(board, net, win, g, tw, clr, via_d)
                 src, _ = _cells_in(grid, src_c["items"], [])
                 dst, vgoal = _cells_in(grid, rest_items, rest_polys)

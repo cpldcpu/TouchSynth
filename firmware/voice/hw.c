@@ -34,6 +34,10 @@ void TIM1_UP_IRQHandler(void)
 
 void hw_cv_set(int ch, uint16_t code)
 {
+#if BOARD_CARD
+	if (ch == CV_AMP)                               /* card: channel 0 is the VCA trim (hw_leds_dac) */
+		return;
+#endif
 	cv_code[ch] = code > 4095 ? 4095 : code;
 }
 
@@ -60,6 +64,11 @@ static void cv_init(void)
 }
 
 /* ------------------------------------------------------------------ DCO (TIM2) */
+#if BOARD_CARD                                      /* no DCO on the card: TIM2 only runs the DAC */
+void hw_dco_set(uint16_t psc, uint16_t arr, uint8_t pw) { (void)psc; (void)arr; (void)pw; }
+void hw_dco_waves(int sub, int noise) { (void)sub; (void)noise; }
+static void dco_init(void) {}
+#else
 static volatile uint8_t sub_on;
 static uint8_t sub_state;
 
@@ -110,6 +119,7 @@ static void dco_init(void)
 	TIM2->DMAINTENR = T_UIE;
 	NVIC_EnableIRQ(TIM2_IRQn);
 }
+#endif
 
 /* ------------------------------------------------------------------ PWM DAC on the pulse pin (DAC mode) */
 #if defined(CH32V006)
@@ -194,7 +204,9 @@ void hw_dac_start(uint16_t arr, uint16_t half, void (*fill)(uint8_t *dst, int n)
 #endif
 	}
 	NVIC_DisableIRQ(TIM2_IRQn);                      /* no sub-oscillator */
+#if !BOARD_CARD
 	sub_on = 0;
+#endif
 	funDigitalWrite(PIN_SUB, 0);
 	TIM2->DMAINTENR = 0;
 	tim2_reset();
@@ -205,7 +217,8 @@ void hw_dac_start(uint16_t arr, uint16_t half, void (*fill)(uint8_t *dst, int n)
 	TIM2->CH2CVR = arr / 2;
 	TIM2->CH3CVR = arr / 2;                          /* the DMA request, on the up-count (CMS = 10) */
 	TIM2->CH4CVR = 0;
-	TIM2->CCER = T_CC1E | T_CC1P | T_CC2E | (DAC_DUAL ? T_CC4E : 0);   /* never CC3E: its pin is PD2 (mux S2) */
+	TIM2->CCER = (BOARD_CARD ? 0 : T_CC1E | T_CC1P) | T_CC2E |       /* CH1 on PC5: board 1's DCO reset only; */
+	             (DAC_DUAL ? T_CC4E : 0);            /* never CC3E: its pin is PD2 (mux S2 / self-test) */
 #if DAC_DUAL
 	TIM2->DMACFGR = (2 << 8) | 14;                   /* burst: DBL = 2 (3 transfers) from DBA = 14 (CH2CVR) */
 	funPinMode(PIN_SUB, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP_AF);   /* PC1 = TIM2 CH4 */
@@ -272,6 +285,52 @@ uint16_t hw_dac_count(void) { return 0; }
 void hw_dac_stats(dac_stats_t *s, int clear) { (void)clear; if (s) *s = (dac_stats_t){ 0 }; }
 #endif
 
+#if BOARD_CARD
+/* ------------------------------------------------------------------ card: LEDs, VCA trim, SYNC */
+void hw_leds_dac(uint16_t leds, uint8_t dac)        /* PLAY LED when any key LED is on; trim on CV channel 0 */
+{
+	funDigitalWrite(PIN_LED_PLAY, leds ? 1 : 0);
+	cv_code[CV_AMP] = (uint16_t)dac << 4;           /* 8-bit trim code on the 12-bit CV (128 = 1.65 V, mid-range) */
+}
+
+void hw_led_stat(int on) { funDigitalWrite(PIN_LED_STAT, on ? 1 : 0); }
+
+/* SYNC (PD4, EXTI4, rising edge): SysTick timestamp of every frame start; the HSI-against-crystal ratio comes from
+   the count and timestamps (console: sync) */
+static volatile uint32_t sync_n, sync_first, sync_last;
+
+void EXTI7_0_IRQHandler(void) __attribute__((interrupt));
+void EXTI7_0_IRQHandler(void)
+{
+	uint32_t t = SysTick->CNT;
+	EXTI->INTFR = EXTI_INTF_INTF4;
+	if (!sync_n)
+		sync_first = t;
+	sync_last = t;
+	sync_n++;
+}
+
+void hw_sync_get(uint32_t *n, uint32_t *first, uint32_t *last)
+{
+	__disable_irq();
+	*n = sync_n; *first = sync_first; *last = sync_last;
+	__enable_irq();
+}
+
+static void sync_init(void)
+{
+	funDigitalWrite(PIN_SYNC, 0);                   /* pull-down (the card has 100k): no edges when unplugged */
+	funPinMode(PIN_SYNC, GPIO_CNF_IN_PUPD);
+	AFIO->EXTICR = (AFIO->EXTICR & ~(3u << 8)) | AFIO_EXTICR_EXTI4_PD;
+	EXTI->RTENR |= EXTI_RTENR_TR4;
+	EXTI->INTFR = EXTI_INTF_INTF4;
+	EXTI->INTENR |= EXTI_INTENR_MR4;
+	NVIC_EnableIRQ(EXTI7_0_IRQn);
+}
+#else
+void hw_led_stat(int on) { (void)on; }
+void hw_sync_get(uint32_t *n, uint32_t *first, uint32_t *last) { *n = *first = *last = 0; }
+
 /* ------------------------------------------------------------------ 595 chain */
 static void sr_byte(uint8_t b)
 {
@@ -294,6 +353,7 @@ void hw_leds_dac(uint16_t leds, uint8_t dac)
 	GPIOD->BSHR = 1 << 4;                           /* RCLK: latch */
 	GPIOD->BSHR = 1 << (4 + 16);
 }
+#endif
 
 /* ------------------------------------------------------------------ audio loopback capture */
 uint32_t hw_capture(uint16_t *buf, int n, int period_us)
@@ -329,11 +389,19 @@ uint32_t hw_capture_ch(int ch, uint16_t *buf, int n, int period_us)
 static volatile uint8_t midi_buf[32];
 static volatile uint8_t midi_w, midi_r;
 
+static volatile uint16_t rx_bytes, rx_errors;         /* received bytes, framing / noise / overrun errors */
+
+void hw_rx_stats(uint16_t *bytes, uint16_t *errors) { *bytes = rx_bytes; *errors = rx_errors; }
+
 void USART1_IRQHandler(void) __attribute__((interrupt));
 void USART1_IRQHandler(void)
 {
-	if (USART1->STATR & USART_STATR_RXNE) {
+	uint16_t st = USART1->STATR;
+	if (st & (USART_STATR_FE | USART_STATR_NE | USART_STATR_ORE))
+		rx_errors++;
+	if (st & USART_STATR_RXNE) {
 		uint8_t b = USART1->DATAR;
+		rx_bytes++;
 		uint8_t w = (midi_w + 1) & 31;
 		if (w != midi_r) {
 			midi_buf[midi_w] = b;
@@ -360,6 +428,33 @@ static void midi_init(void)
 }
 
 /* ------------------------------------------------------------------ init */
+#if BOARD_CARD
+void hw_init(void)
+{
+	RCC->APB2PCENR |= RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD |
+	                  RCC_APB2Periph_AFIO | RCC_APB2Periph_ADC1;
+	RCC->APB1PCENR |= RCC_APB1Periph_TIM2;          /* the DAC timer (board 1: enabled by dco_init) */
+	AFIO->PCFR1 = (AFIO->PCFR1 & ~REMAP_MASK) | REMAP_BITS;
+	funPinMode(PIN_CV_AMP, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP_AF);   /* VCA trim */
+	funPinMode(PIN_CV_CUT, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP_AF);
+	funPinMode(PIN_CV_RES, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP_AF);
+	funPinMode(PIN_CV_VCA, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP_AF);
+	funPinMode(PIN_PULSE, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP_AF);    /* DAC */
+	funDigitalWrite(PIN_SUB, 0);      funPinMode(PIN_SUB, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP);
+	funDigitalWrite(PIN_LED_PLAY, 0); funPinMode(PIN_LED_PLAY, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP);
+	funDigitalWrite(PIN_LED_STAT, 0); funPinMode(PIN_LED_STAT, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP);
+	funPinMode(PIN_AUDIO, GPIO_CNF_IN_ANALOG);
+	funPinMode(PIN_MIDI_RX, GPIO_CNF_IN_PUPD);       /* bus RX, idle high */
+	funDigitalWrite(PIN_MIDI_RX, 1);
+	funPinMode(PIN_TX, GPIO_CNF_IN_PUPD);            /* bus return: released until the bus receiver exists */
+	funDigitalWrite(PIN_TX, 1);
+	hw_leds_dac(0, 128);                            /* LED off, trim mid-scale */
+	InitTouchADC();                                 /* ADC for the loopback capture */
+	cv_init();
+	sync_init();
+	midi_init();
+}
+#else
 void hw_init(void)
 {
 	RCC->APB2PCENR |= RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD |
@@ -393,3 +488,4 @@ void hw_init(void)
 	dco_init();
 	midi_init();
 }
+#endif

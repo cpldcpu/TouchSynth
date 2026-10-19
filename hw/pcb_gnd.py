@@ -1,4 +1,4 @@
-"""GND connectivity helpers for the routed TouchSynth board (used by gen_pcb.py after routing).
+"""GND connectivity helpers for a routed board (used by gen_pcb.py after routing).
 
 gnd_components(): connected clusters of the GND net (fills of both layers, pads, tracks, vias).
 bridge_islands(): joins every GND island to the main cluster with one straight track (optionally ending in a
@@ -9,7 +9,12 @@ import pcbnew
 
 MM = pcbnew.FromMM
 V = pcbnew.VECTOR2I_MM
-W = H = 100.0
+
+
+def extent(board):
+    """board outline (x0, y0, x1, y1) in mm"""
+    b = board.GetBoardEdgesBoundingBox()
+    return pcbnew.ToMM(b.GetLeft()), pcbnew.ToMM(b.GetTop()), pcbnew.ToMM(b.GetRight()), pcbnew.ToMM(b.GetBottom())
 
 
 def gnd_components(board):
@@ -77,6 +82,7 @@ def refill(board):
 def bridge_islands(board, clr=0.22, tw=0.3, via_d=0.6, drill=0.3, rounds=3):
     gnd = board.FindNet("GND")
     SC, SS = pcbnew.SHAPE_CIRCLE, pcbnew.SHAPE_SEGMENT
+    bx0, by0, bx1, by1 = extent(board)
     left = 0
     for rnd in range(rounds):
         comps = gnd_components(board)
@@ -128,7 +134,7 @@ def bridge_islands(board, clr=0.22, tw=0.3, via_d=0.6, drill=0.3, rounds=3):
                             if best and d >= best[0]:
                                 break
                             ex, ey = sx + d * math.cos(a), sy + d * math.sin(a)
-                            if not (1.5 < ex < W - 1.5 and 1.5 < ey < H - 1.5):
+                            if not (bx0 + 1.0 < ex < bx1 - 1.0 and by0 + 1.0 < ey < by1 - 1.0):
                                 break
                             if any(z.Outline().Contains(V(ex, ey)) for z in track_ban[L]):
                                 break

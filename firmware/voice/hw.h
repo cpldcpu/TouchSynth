@@ -50,14 +50,20 @@ extern uint16_t hw_scratch[HW_SCRATCH / 2];            /* shared RAM: console ca
                                                           DAC mode (captures are refused while DAC mode is on) */
 #endif
 
-/* 74HC595 chain: 16 LEDs (bit i = LED above key i) and the VCA trim DAC */
+/* board 1: 74HC595 chain, 16 LEDs (bit i = LED above key i) and the VCA trim DAC;
+   card: the PLAY LED (any bit set) and the VCA trim PWM (CV channel 0) */
 void hw_leds_dac(uint16_t leds, uint8_t dac);
+void hw_led_stat(int on);                              /* card: STAT LED (board 1: nothing) */
 
-/* audio loopback: n ADC samples of PD5, one every period_us microseconds */
+/* card: SYNC edges (PD4) since reset, SysTick time of the first and the last (board 1: zeros) */
+void hw_sync_get(uint32_t *n, uint32_t *first, uint32_t *last);
+
+/* audio loopback: n ADC samples (board 1: PD5, card: PC4), one every period_us microseconds */
 uint32_t hw_capture(uint16_t *buf, int n, int period_us);       /* returns the elapsed time of n periods in us */
 uint32_t hw_capture_ch(int ch, uint16_t *buf, int n, int period_us);   /* any ADC channel (diagnostics) */
 
-/* MIDI input: returns a received byte or -1 */
+/* MIDI input (board 1) / bus RX (card): returns a received byte or -1; byte and error counts since reset */
 int hw_midi_read(void);
+void hw_rx_stats(uint16_t *bytes, uint16_t *errors);
 
 #endif

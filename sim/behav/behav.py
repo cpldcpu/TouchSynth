@@ -323,7 +323,7 @@ def firmware(notes, patch, t_end, automation=None):
         else:
             pitch = target
         lfo = 2 * abs(2 * ((t * q["lfo_rate"]) % 1) - 1) - 1          # triangle -1..1
-        pm = pitch + q["lfo_pitch"] / 100 * lfo
+        pm = pitch + q["lfo_pitch"] / 100 * lfo + q.get("pitch_off", 0.0)   # pitch_off: semitones, from the automation (bend)
         if q.get("penv"):                                            # percussion: pitch envelope from the attack
             pm += q["penv"] * np.exp(-(t - t_on) / q.get("penv_t", 0.02))
         if q.get("wave2") and t - t_on >= q.get("wave_t", 0.0):     # wave switch after the attack

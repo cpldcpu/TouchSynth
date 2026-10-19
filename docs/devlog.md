@@ -133,3 +133,60 @@ The rev 0.1 tree (report, S1–S7, KiCad project, tools for the report) is kept 
   so the filter op-amp shares the VREF buffer's MCP6002: three MCP6002 instead of four. VREF keeps its buffer
   (behind the CJ431's noise filter; the difference amps need a low-impedance reference). The net V25 (VREF / 2,
   the expo reference transistor's collector voltage, named after rev 0.1's 2.5 V) is now VEXP_REF.
+- **Card orientation:** the backplane connector moves to a short (45 mm) edge: the cards stand 60 mm tall and cover
+  45 mm of backplane depth instead of 60 (backplane about 95 × 85 mm). The taller card wants card guides at the top.
+- **Card size target:** at most 50 × 50 mm on 4 layers (fallback: 2 layers, about 50 × 60 mm). Courtyard estimate
+  from the footprints: about 1320 mm² with 0603 passives (53 % of 50 × 50), about 1000 mm² with 0402 (40 %).
+- **Controller plan (controller.md):** the computer plays the synth over USB-MIDI, so a MIDI DIN input is only a
+  footprint for hardware without USB. Power from USB-C or an external 5 V header (jumper-selected, no diode drop).
+  The V203 is programmed over SWD with the WCH-LinkE during development; its factory bootloader (BOOT0, over USB or
+  USART1) allows updates without a programmer. First bench setup: a V203 development board as controller with
+  board 1 as one voice.
+- **Voice card PCB:** 50 × 50 mm, 4 layers (signals and parts on top, solid GND, split supply planes VA / +3V3 /
+  +5V, signals on the bottom), routed by Freerouting with repair passes, DRC clean. 0603 passives did not fit at
+  this size (ten parts found no place before routing), so the passives went to 0402 where the lists have them;
+  test points 22 → 13. With the connector at the bottom and the parts facing you, pin 1 of J1 lands on the right,
+  which put the analog core on the right and the MCU on the left. Space for the stereo pan stage is reserved
+  beside J1. Silkscreen with labels on top, artwork and the J1 pinout on the bottom.
+- **S13, stereo pan on the card:** current steering (two more BC847BS on the VCA collectors, pan voltage from PC5
+  through an RC network) against a second complete VCA. Steering chosen: one envelope CV (the fine 10 + 2-bit one),
+  calibration from the existing loopback, fewer parts. Its cost: the VCA re-biased (bases at 1.89 V), a fourth
+  MCP6002, a linear pan law corrected in firmware (constant power, the level capped at 70.6 % at hard pan), and a
+  click of about 27 mV per mV of steering-pair mismatch at the centre (none at hard pan). Connector: AUDIO_L on pin
+  5, AUDIO_R on pin 7 (GND moved to pin 16), line out 1×3. The vendor op-amp model needed bounded solver attempts
+  and sanity checks on every operating point (once it converged to a wrong one).
+- **S12 again, two buses:** no fixed pan resistors; 56k per slot and channel, one shared 10 µF mirror capacitor
+  per slot on AUDIO_GND (4.7 µF would halve the low-frequency ground rejection). 8 hard-panned cards stay 1.9 dB
+  below clipping; L/R crosstalk drops below −105 dB, since separate L/R pins remove the path through empty slots.
+- **Bench: V203 development board as controller, WCH CH32V006 evaluation board (QFN-32) as one voice.**
+  The V203 runs `firmware/bench_ctrl` from its 8 MHz crystal: SYNC (1 kHz, PA8), the voice bus on USART3
+  (PB10 / PB11), NRST, and an Ardulink-compatible SWIO bridge on USART1 for minichlink (`-C ardulink`); the
+  voice firmware has a card build (`make BOARD=card`: the card's pin map, SYNC timestamps on PD4). Results: the
+  V006 counts the SYNC edges exactly and its HSI sits within ±0.03 % of the crystal at factory trim, wandering by
+  ±200–250 ppm; the DAC runs on the card build. Still open: the bus wire landed on PA2 instead of PD6 (found by
+  holding the line low and reading all V006 ports), and the SWIO bridge needs a pull-up (none on the line: every
+  read was 0), which the backplane gets for every slot.
+- **Backplane proposal (backplane.md):** 95 × 85 mm, 2 layers. The CH32V203's 37 GPIO are all assigned (bench
+  pins kept: USART3 for the bus, SYNC on PA8, USART1 free for the bootloader). MCO cannot feed CLK_IN: the V006's
+  PLL is a fixed ×2 and needs 24 MHz, which TIM3 CH4 gives (144 / 6) locked to the crystal. A soft start in front of
+  the slot rail (8 cards would draw about 1.8 A at plug-in), SWIO pull-ups per slot, no backplane SWIO header.
+  About 150 assembled parts, 4–5 USD per board in JLCPCB parts; the host-port current switch is not on the lists.
+- **Voice card with the stereo pan stage:** schematic (190 parts, ERC clean, all 158 simulated elements match
+  S13's netlist) and a new 50 × 50 mm layout: corners and the left edge in use, the R difference amp and both output
+  stages beside J1, SWIO pre-routed along the edges, the VCA collectors pre-routed into the steering pairs. Six full
+  Freerouting passes with repair rounds; the best is DRC clean. Several analog tracks got much shorter (the expo
+  reference 41 → 14 mm, the VCA collectors 36 → 5 mm); VREF grew to 128 mm, now reaching the R amp, which a VREF
+  region on In2 would fix. J1: AUDIO_L 5, AUDIO_GND 6, AUDIO_R 7, GND 16; line out 1×3.
+- **Paraphonic cards (DOPE.MOD in the emulator):** the one-note-per-card cover kept 48 % of the notes and sounded
+  thin. With each card's three oscillators as three notes (own pitch, waveform and digital level each, through the
+  shared ladder) 8 cards play 24 notes: 91 % of the notes and 99.5 % of the synthesisable energy of a 28-channel
+  module, instruments grouped by card. A sample engine on the same paraphonic allocation would come close to the
+  original (loudness correlation 0.98 against 0.84 for the synth), but needs more flash than a card has. Generic
+  code: `sim/behav/para.py`, `tools/mod2events.py --per-card 3 --group`; the song renders stay private.
+- **Supply margin and inrush:** the card works fully down to about 4.3 V on its analog rail (below, full cutoff
+  with full resonance saturates the expo and resonance V→I transistors; the audio path itself holds to 4.0 V), so
+  RFILT stays 22 Ω (0.1 V drop): the drop is permanent (the analog current), not only during inrush. Inrush: each
+  card's 22 Ω limits it to about 230 mA (1.8 A for 8 cards, a few ms); the backplane keeps a soft-start footprint,
+  unpopulated. An inductor would not help (it slows the edge, not the charge, and rings with the capacitors).
+- **Backplane decisions:** 100 × 100 mm; an SPI flash footprint (W25Q128 / BY25D16ASTIG, unpopulated) on SPI1, the
+  8 NRST lines through a 74HC595 on the same bus to free the pins.

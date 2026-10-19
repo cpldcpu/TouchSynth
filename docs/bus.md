@@ -20,7 +20,7 @@ clock trimming: spec section 6; requirements: [design.md](design.md).
 | BCAST (card RX) | controller USART TX, push-pull | 1 Mbaud 8N1, 33 Ω series resistor at the controller |
 | RETURN (card TX) | the addressed card only, open drain | 1 kΩ pull-up to 3.3 V on the backplane (about 150 pF on the bus: 0.3 µs rise time against a 1 µs bit) |
 | SYNC | controller timer output, push-pull | 1 kHz square; the rising edge starts a frame |
-| NRST, SWIO | per slot, controller GPIOs | reset / enumeration, programming (spec 4) |
+| NRST, SWIO | per slot: NRST from a 74HC595 on the controller's SPI (pull-downs hold the cards in reset until the controller enables it), SWIO from controller GPIOs | reset / enumeration, programming (spec 4, backplane.md) |
 
 At 1 Mbaud a card's USART divider is 3.0 (48 MHz / 16), and the V006's divider resolution (1/16) cannot correct the
 clock by itself. The baud accuracy therefore comes from the HSITRIM coarse trim: within ±0.1 % of the crystal,

@@ -32,9 +32,12 @@ def pick_r(value, pkg="0603"):
 
 def pick_c(value, vmin, pkgs=("0603", "0805", "1206"), tc=None):
     """value like '100n', '4.7u'; vmin = minimum voltage rating (use >= 2x working voltage);
-    tc = required temperature coefficient (e.g. 'C0G' for capacitors in the audio path)."""
+    tc = required temperature coefficient (e.g. 'C0G' for capacitors in the audio path); Y5V / Z5U never."""
     want = value.replace("u", "uF").replace("n", "nF").replace("p", "pF")
-    ok_tc = (lambda a: a.get("Temperature Coefficient") in ("C0G", "NP0")) if tc == "C0G" else (lambda a: True)
+    if tc == "C0G":
+        ok_tc = lambda a: a.get("Temperature Coefficient") in ("C0G", "NP0")
+    else:
+        ok_tc = lambda a: a.get("Temperature Coefficient") not in ("Y5V", "Z5U")
     for pkg in pkgs:
         c = [r for r in _rows if r["subcategory"].startswith("Multilayer") and r["package"] == pkg
              and _attrs(r).get("Capacitance") == want and _volts(_attrs(r).get("Voltage Rating")) >= vmin

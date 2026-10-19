@@ -3,6 +3,8 @@
 | Document | Content |
 |---|---|
 | [design.md](design.md) | Requirements, partitioning, budgets, interfaces, verification plan, status and open points. |
+| [backplane.md](backplane.md) | Backplane / controller PCB proposal: CH32V203 pin map, power, USB, mixer, sockets and outline, layout rules, BOM. |
+| [controller.md](controller.md) | Controller plan: backplane hardware around the CH32V203, firmware modules, development path. |
 | [midi.md](midi.md) | MIDI implementation, multitimbral parts, patch parameters, first program set. |
 | [bus.md](bus.md) | Voice bus protocol: frame clock, timed events, presentation delay, packets, messages, enumeration. |
 | [spec.md](spec.md) | Architecture: voice cards (CH32V006, digital oscillators, 5 V analog core) on a USB backplane (CH32V203), pin maps, connectors, mixer, voice bus, clock synchronisation, decisions and open points. |
@@ -17,6 +19,8 @@
 | `s9_moog.csv` | S9b: three-oscillator voice, residual against an ideal DAC (model) |
 | `s10_5v.csv` | S10: the analog voice core at 5 V against rev 0.1 (headroom, cutoff, resonance, THD, noise, supply rejection) |
 | `s11_recon.csv` | S11: the DAC's reconstruction filter and mixer resistor on the 5 V core (carrier at the line out, droop) |
+| `s12_mixer_2bus.csv` | S12, two buses (stereo cards, S13): gains, headroom (8 cards hard left / centre), frequency response, noise, ground rejection of the shared per-slot mirror network with 1 % / ±20 % tolerances, crosstalk with empty slots, ADC path, supply rejection, parts and area |
+| `s13_pan.csv` | S13: stereo pan stage on the card, current steering (A) against a second VCA (B), at 5.0 and 4.6 V: headroom, pan law, THD, noise, clicks from transistor mismatch, supply rejection, parts |
 | `s12_mixer.csv` | S12: the backplane's stereo mixer (pan law and resistor values, headroom, frequency response, noise, ground rejection of the pseudo-differential input with 1 % tolerances, crosstalk, ADC path and carrier aliases, supply rejection) |
 | `hw_board1_dco_vs_dac.csv` | board 1: saw C2–C7 from the DCO and from the DAC, level and inharmonic content |
 | `hw_board1_hsitrim.csv` | board 1: CH32V006 HSITRIM step and range |
@@ -28,7 +32,9 @@
 ## Figures (`figures/`)
 
 `s9_osc` (DCO vs DAC spectrograms, model), `s9_hw` (board 1 three-oscillator takes vs model), `s9_hwcmp`
-(DCO vs DAC on board 1), `s10_5v` (5 V core: cutoff and THD), `s12_mixer` (mixer: response to the line out and the ADC, ground rejection).
+(DCO vs DAC on board 1), `s10_5v` (5 V core: cutoff and THD), `s12_mixer` (mixer: response to the line out and the ADC, ground rejection), `s12_mixer_2bus` (two-bus mixer:
+response, ground rejection of the mirror variants, clipping with 8 hard-panned cards), `s13_pan` (pan stage).
+`voice_pcb/`: the voice card PCB (layers, silkscreen, placement, 3D renders `render_*.png`).
 
 ## Audio (`audio/`)
 
