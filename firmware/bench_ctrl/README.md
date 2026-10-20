@@ -10,6 +10,7 @@ path the backplane will use to update its cards. The full pin and command refere
 |---|---|---|
 | SYNC, frame clock | PA8 (TIM1 CH1) | 1 kHz from the 8 MHz crystal (PLL x 18 = 144 MHz); FRAME packet per rising edge |
 | Voice bus | PB10 TX, PB11 RX (USART3) | 1 Mbaud, DMA both ways; timed events, enumeration, refreshes |
+| NRST (bench check) | PB12 | *[2026-10-20]* command `N n`: push-pull low for n ms, then high, as the backplane's 74HC595; `N 0` releases it. Wired to the EVT V006's reset pin, PA7 on its QFN-32 (`bustest.py nrst`) |
 | SWIO bridge | PB13 | WCH one-wire debug protocol, bit-banged; needs a 1–2.2 kΩ pull-up on the bench |
 | PC port | PA9 / PA10 (USART1, 115200) | Ardulink protocol and the bench commands (`e` MIDI, `b` packets, `S` status, `V` voices, `G` load generator, `L` bus load, `U` USB status, ...) |
 | USB | PB6 / PB7 (USBFS) | composite USB-MIDI + CDC (the CDC port carries the same commands as USART1); the development board wires its USB-C to USBFS |

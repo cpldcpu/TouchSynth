@@ -265,4 +265,11 @@ The rev 0.1 tree (report, S1–S7, KiCad project, tools for the report) is kept 
   other slots; user proposal: a voice card grounds them harmlessly) into the line-out stage instead of the mix
   (R83 / R84 not fitted; R71 / R75 removed then). Backplane re-routed for the four 0603 positions. The silkscreen of both boards names the new
   repository github.com/cpldcpu/TouchSynthPoly (the project becomes its own repository, a fork of TouchSynth;
-  the move itself is still open). The backplane's flash footprint is labelled SPI FLASH.
+  the move itself is still open). The backplane's flash footprint is labelled SPI FLASH. The eight conversion parts sit
+  in two labelled blocks of pairs on the silkscreen (V | FX for the sends P15 / P14, V | LOOP for the line-out
+  feed L / R) with the rule "FX CARD: V OUT, FX/LOOP IN"; re-routed, DRC clean.
+- **Pre-order bench checks done [2026-10-20]:** the card's production build (open-drain return line, no
+  `BUS_TX_PP`) with a 1 kΩ pull-up on the return line: all bus checks that need no SWIO and the stress test pass, 61
+  replies with 0 CRC errors. A reset through NRST driven push-pull, as the 74HC595 does (new bench command `N` on
+  PB12, `bustest.py nrst`): 3 of 3 resets re-enumerated in 0.5–0.7 s. The first try did nothing: on the bench EVT's
+  QFN-32 V006 the reset pin is PA7, not PD7 (only the TSSOP-20 card has it on PD7).

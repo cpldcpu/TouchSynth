@@ -76,7 +76,17 @@ def front(board, F, pad_xy):
         poly(board, S, wave_pts(SLOT_WAVES[k - 1], x - 3.4, x + 1.2, 56.6, 1.1, 90))
     text(board, S, "card part side faces west (toward slot 1); pin 1 = south-west", 56.0, 96.0, TEXT)
     pos = F["J3"].GetPosition()
-    text(board, S, "LINE OUT", pcbnew.ToMM(pos.x) + 3.5, pcbnew.ToMM(pos.y) - 7.6, 1.0, 0.15)
+    text(board, S, "LINE OUT", pcbnew.ToMM(pos.x) + 3.5, pcbnew.ToMM(pos.y) - 7.3, 1.0, 0.15)
+    # effects slot (backplane.md 5.1): column heads, row names and the rule beside the two blocks of pairs
+    y0, y1 = PB.FX_ROWS
+    for blk, head, rows, xr in (("send", "FX", ("P15", "P14"), PB.FX_COLS["send"][0] - 2.8),
+                                ("out", "LOOP", ("L", "R"), PB.FX_COLS["out"][0] - 2.3)):
+        xv, xf = PB.FX_COLS[blk]
+        text(board, S, "V", xv, y0 - 1.6, 0.8, 0.15)
+        text(board, S, head, xf, y0 - 1.6, 0.8, 0.15)
+        for y, name in zip((y0, y1), rows):
+            text(board, S, name, xr, y, 0.8, 0.15)
+    text(board, S, "FX CARD: V OUT, FX/LOOP IN", 23.6, y1 + 2.3, 0.8, 0.15)
     for ref, names, dx, dy in (("J5", ("3V3", "DIO", "CLK", "GND"), -2.6, 0.0), ("J6", ("GND", "TX", "RX"), -2.4, 0.0),
                                ("J7", ("4", "5", "SH"), 0.0, 1.9)):
         for i, nm in enumerate(names, 1):

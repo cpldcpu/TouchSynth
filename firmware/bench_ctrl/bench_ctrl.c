@@ -11,7 +11,8 @@
  *                             Bus commands (below) share the port; the V203 never sends unasked. RX by DMA (ch5)
  *                             into a ring: the load generator runs while the main loop waits for bytes.
  *   SWIO    PB13              open drain, external pull-up: WCH one-wire debug protocol, bit-banged
- *   NRST    PB12              open drain, released (the V006 runs; not wired on the bench)
+ *   NRST    PB12              open drain, released (the V006 runs); [2026-10-20] 'N' drives it push-pull like the
+ *                             backplane's 74HC595 (bench check, wired to the V006's NRST)
  *   SYNC    PA8               TIM1 CH1, 1 kHz square: the frame clock of the voice bus, from the 8 MHz crystal
  *                             (HSE, PLL x18: 144 MHz); the rising edge starts a frame
  *   BUS     PB10 TX, PB11 RX  USART3 at 1 Mbaud 8N1 (make BUS_BAUD=2000000: 2 Mbaud): broadcast to the cards (TX
@@ -1509,6 +1510,20 @@ static __attribute__((noinline)) void bus_command(int c)
 		uart_putc('+');
 	} else if (c == 'g') {
 		gap_req = get16();
+		uart_putc('+');
+	} else if (c == 'N') {                                /* [2026-10-20] NRST on PB12 as the backplane's 74HC595
+		                                                     drives it: n > 0: push-pull low for n ms, then push-pull
+		                                                     high; 0: released (open drain) -> '+' */
+		int n = uart_getc();
+		if (n) {
+			GPIOB->BSHR = NRST << 16;
+			GPIOB->CFGHR = (GPIOB->CFGHR & ~(0xfu << 16)) | (0x3 << 16);   /* push-pull 50 MHz, low */
+			Delay_Ms(n);
+			GPIOB->BSHR = NRST;
+		} else {
+			GPIOB->BSHR = NRST;
+			GPIOB->CFGHR = (GPIOB->CFGHR & ~(0xfu << 16)) | (0x7 << 16);   /* open drain, released */
+		}
 		uart_putc('+');
 	} else if (c == 'n') {
 		card = 0;

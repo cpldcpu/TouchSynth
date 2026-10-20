@@ -314,7 +314,9 @@ flash up to 36 MHz. Faster flash traffic only scrambles the 595's shift register
 pull-up, so that is fine as long as the card's PD7 is configured as NRST (option bytes; **unverified** for the V006
 default, set it when the card is programmed). *[2026-10-20]* Verified: the reference manual (V1.4, 18.5) gives
 RST_MODE = 10b as the V006's reset value (PD7 is NRST, pin input ignored for 12 ms after enabling; 11b would make it
-a GPIO), and the bench V006 reads USER = 0xF7 (RST_MODE = 10b). A push-pull reset into a card is still to be shown. Without the series resistor nothing limits the current if a card
+a GPIO), and the bench V006 reads USER = 0xF7 (RST_MODE = 10b). A push-pull reset works: a V203 GPIO driving the bench V006's reset pin push-pull (10 ms low, then high, as the
+595 does) restarted the card, which was enumerated again within 0.5–0.7 s (3 of 3, `bustest.py nrst`). On the
+bench EVT's QFN-32 V006 (K8U7) the reset pin is PA7; on the card's TSSOP-20 it is PD7 (datasheet note 5). Without the series resistor nothing limits the current if a card
 drives its own NRST low (an internal reset on parts that do that, or PD7 left as a GPIO output): the 74HC595's
 output (about 25 mA short-circuit at 3.3 V) and the card pin survive it, and the firmware sees the card as missing.
 
@@ -487,10 +489,12 @@ Two ways to use it, chosen by the effects card's firmware:
 
 In either case slot 1 then holds no voice (7 voices at most), loses CLK (an option, off by default) and SWIO (the
 effects card, e.g. a CH32V307 with an ES8388 codec, is programmed over its own interface); the controller finds it
-by enumeration like a card (a capability bit in HELLO) and maps MIDI CC 91 (reverb level) to it. Layout: the four
-send positions sit west of socket 1 above the line-out stage, a few millimetres from MIX_L / MIX_R and from the
-socket's pins 14 and 15, the two return positions north of the jack beside them; slot 1's CLK branch in the socket
-field is left out (the CLK reaches pin 15 through R79).
+by enumeration like a card (a capability bit in HELLO) and maps MIDI CC 91 (reverb level) to it. Layout and
+silkscreen: two labelled blocks of pairs north of the line out, each pair sharing its common pad. Under slot 1 the
+sends, rows P15 (R79 | R80) and P14 (R81 | R82); north of the jack the line-out feed, rows L (R71 | R83) and R
+(R75 | R84). The left column is headed V (the voice parts, fitted), the right one FX or LOOP, and one line states the
+rule: "FX CARD: V OUT, FX/LOOP IN". Slot 1's CLK branch in the socket field is left out (the CLK reaches pin 15
+through R79).
 
 ## 6. Connectors and mechanics
 

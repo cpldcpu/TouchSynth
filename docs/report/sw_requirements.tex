@@ -95,11 +95,11 @@ CF7 & Whatever a tick computes reaches the outputs $D$ frames later: the CVs thr
   \SI{8}{\micro s}) & \stmet \\
 CF8 & An unaddressed card answers ASSIGN to dst 0x00 with HELLO: its 64-bit chip ID, firmware version and
   capabilities. After a reset over NRST the card is found again within \SI{0.4}{s}. & F1, bus.md 6 & T
-  \texttt{reset}; H (V3: NRST from the 74HC595) & \stpart{} (shown with an SWIO reset; the NRST path needs the
-  backplane) \\
+  \texttt{reset}, \texttt{nrst}; H (V3: NRST from the 74HC595) & \stmet{} (bench: SWIO reset, and NRST driven
+  push-pull from a V203 GPIO, 0.5--0.7\,s) \\
 CF9 & The card answers REQUEST (STATUS, COUNTERS, HELLO) within 2 frames, on an open-drain return line that it
-  releases when idle. & bus.md 2, 5.2 & T \texttt{enum}, \texttt{counters}; B (open drain with \SI{1}{k\ohm}) & \stpart{} (the bench
-  ran the push-pull variant, \texttt{BUS\_TX\_PP}; the open-drain build is untested) \\
+  releases when idle. & bus.md 2, 5.2 & T \texttt{enum}, \texttt{counters}; B (open drain with \SI{1}{k\ohm}) & \stmet{} (open-drain
+  build with \SI{1}{k\ohm}: 16 bus checks and the stress test, 0 CRC errors on the return line) \\
 \multicolumn{5}{@{}l}{\textit{Voice engine and sound}} \\
 CF10 & One voice per card at a \SI{1}{kHz} control rate: amplitude and filter envelopes, LFO, glide, pitch envelope,
   and the cutoff, resonance and VCA laws onto the CVs. & F5 & B (board~1, bench) & \stmet \\
@@ -302,8 +302,8 @@ NF4 & Forward compatibility: HELLO carries the firmware version and capabilities
 
 What has to hold before the PCBs are ordered is not the software's completeness. It is whether the boards fix
 anything the software cannot change later: which pin drives what, which timer and DMA channel serve it, and what the
-driver circuits need. Table~\ref{tab:srsorder} lists these checks; the four marked \emph{new} were done on
-20 October 2026, three of them on the bench V006.
+driver circuits need. Table~\ref{tab:srsorder} lists these checks; those marked \emph{new} were done on
+20 October 2026.
 
 \begingroup\small\setlength{\tabcolsep}{4pt}
 \begin{longtable}{@{}>{\raggedright}p{5.4cm} >{\raggedright}p{4.6cm} >{\raggedright\arraybackslash}p{5.6cm}@{}}
@@ -331,12 +331,13 @@ Bus pins of both MCUs & SYNC PA8 / PD4, BCAST PB10 / PD6, RETURN PB11 / PD5, SWI
   2026-10-19 (the backplane uses the same V203 pins; PB13 is SWIO\_8) \\
 DAC on TIM2 CH2 (PC2), DMA ch1 & PWM\_DAC & bench (carrier on PC2) \\
 USB device without an external pull-up (USBFS) & -- (the host port) & enumerates on the development board \\
-\multicolumn{3}{@{}l}{\textit{Recommended before ordering (a resistor and a wire on the bench)}} \\
+\multicolumn{3}{@{}l}{\textit{Done on the bench before ordering (a resistor and a wire)}} \\
 Return line open drain with the backplane's \SI{1}{k\ohm} pull-up: the default card build (no \texttt{BUS\_TX\_PP})
-  & R on RETURN (\SI{1}{k\ohm}), card TX open drain & \stopen: fit \SI{1}{k\ohm} from PB11 to 3.3\,V, build without
-  \texttt{BUS\_TX\_PP}, run \texttt{bustest.py all} \\
-NRST driven push-pull, as by the 74HC595 & U6 drives each slot's NRST directly & \stopen: wire a V203 GPIO to the
-  V006's NRST, reset and re-enumerate (\texttt{bustest.py reset} with NRST) \\
+  & R on RETURN (\SI{1}{k\ohm}), card TX open drain & \stmet: 1\,k$\Omega$ from PB11 to 3.3\,V; all 16 bus checks
+  that need no SWIO and the 20\,s stress test pass, 61 replies with 0 CRC errors (\emph{new}) \\
+NRST driven push-pull, as by the 74HC595 & U6 drives each slot's NRST directly & \stmet: PB12 push-pull to the
+  V006's reset pin, \texttt{bustest.py nrst}: 3 of 3 resets re-enumerated in 0.5--0.7\,s (\emph{new}); on the EVT's
+  QFN-32 V006 the reset pin is PA7, on the card's TSSOP-20 PD7 \\
 \multicolumn{3}{@{}l}{\textit{Can follow the order (footprints or jumpers cover them)}} \\
 USBD (PA11 / PA12) enumeration and the internal D+ pull-up & the \SI{1.5}{k\ohm} footprint (not fitted) &
   enumerated on the internal pull-up against the V203's own host (\emph{new}); a computer as the host still to try \\
@@ -348,9 +349,8 @@ CLK\_IN \SI{24}{MHz}, SPI flash, MIDI DIN & not fitted & options \\
 \end{longtable}
 \endgroup
 
-\paragraph{Assessment.} Nothing found so far blocks the order. The two recommended checks take one resistor and one
-wire on the bench and exercise the production configuration of the return line and the reset path. Both have so
-far only run in bench variants. The firmware still to write (pan, PATCH\_DATA and the full parameter set, the
+\paragraph{Assessment.} Nothing found blocks the order. The return line and the reset path have also run in their
+production configuration on the bench (open drain with \SI{1}{k\ohm}; NRST driven push-pull). The firmware still to write (pan, PATCH\_DATA and the full parameter set, the
 \SI{5}{V} calibration, the backplane controller) depends on these pins and circuits, but none of it changes them.
 
 % ---------------------------------------------------------------------------------------------------------------------

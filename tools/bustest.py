@@ -6,6 +6,7 @@ LINKE_V203, MINICHLINK, SCOPE_HOST); copy buslib.py, labconf.py, scope.py and la
   python3 bustest.py all                 # enum notes patch ctrl crc repair late config sync reset (no scope)
   python3 bustest.py notes crc           # single tests
   python3 bustest.py counters            # the card's counters, STATUS and the controller's status line
+  python3 bustest.py nrst                # [2026-10-20] reset through NRST, push-pull (bench: wire PB12 -> V006 NRST)
   python3 bustest.py carrier             # scope: the DAC carrier on PC2 with a DAC patch, none without
   python3 bustest.py latency [--n 10] [--delay 4] [--lead 2] [--mark 1]
         scope (CH1 = SYNC, CH2 = PC2, the DAC PWM): the controller shortens the SYNC pulse of the execution frame
@@ -319,6 +320,27 @@ def t_reset(b, port):
           c["src"] == 0 and c["delay"] == 4, f"HELLO {s1['hellos'] - s0['hellos']} within {dt:.1f} s, card frame "
           f"{c and c['frame']}, D {c and c['delay']}, uid {s1['uid']}")
     return b2
+
+
+def t_nrst(b):
+    """[2026-10-20] a reset through NRST, driven push-pull as by the backplane's 74HC595 (bench: a wire from PB12 to
+    the V006's NRST; not in 'all'): the card restarts (its counters start again) and is enumerated again"""
+    s0, c0 = b.status(), b.counters()
+    b.s.write(b"N" + bytes([10]))                        # 10 ms low, then driven high
+    b._plus()
+    t0 = time.time()
+    while time.time() - t0 < 3:
+        s1 = b.status()
+        if s1["hellos"] != s0["hellos"] and s1["enum"] == 3:
+            break
+        time.sleep(0.1)
+    dt = time.time() - t0
+    time.sleep(0.05)
+    c1 = b.counters()
+    check("re-enumeration after an NRST pulse (push-pull)", s1["hellos"] - s0["hellos"] == 1 and c1 is not None and
+          c1["rx_bytes"] < c0["rx_bytes"] and c1["delay"] == 4,
+          f"HELLO {s1['hellos'] - s0['hellos']} within {dt:.1f} s, card rx_bytes {c0['rx_bytes']} -> "
+          f"{c1 and c1['rx_bytes']} (restarted), D {c1 and c1['delay']}")
 
 
 def t_counters(b):
