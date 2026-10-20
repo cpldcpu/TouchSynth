@@ -28,12 +28,13 @@ the design, to be confirmed on hardware).
 | F2 | Played from a computer over USB-MIDI, class compliant (no driver) | open |
 | F3 | Played from a class-compliant USB-MIDI keyboard on a USB host port, without a computer | open |
 | F4 | Configuration, presets and firmware updates over USB (CDC), voice cards included (SWIO from the controller) | open |
-| F5 | Per voice: 3 oscillators (saw, pulse with width, detune, octave), noise, modal drums; 4-pole ladder filter with resonance up to self-oscillation; VCA; envelopes and modulation in firmware | met: oscillators, drums and filter on board 1 |
+| F5 | Per voice: 3 oscillators (saw, pulse with width, detune, octave), noise, modal drums; 4-pole ladder filter with resonance up to self-oscillation; VCA; envelopes and modulation in firmware | met: oscillators, drums and filter on board 1; *[2026-10-20]* on the bench card with the bus running, three oscillators use 23 % CPU (bus.md 9.5) |
 | F6 | Multitimbral: up to 8 parts on MIDI channels, each with key range, voices, mode (poly, mono, legato, unison, drum kit) and patch; patches stored on the controller ([midi.md](midi.md)) | open |
 | F7 | Stereo line out; each voice panned on its card (S13), set per part or voice by the controller | design |
 | F8 | Each card runs on its own: powered and programmed by a WCH-LinkE, played from the SWIO console, with its own line out | design (as board 1) |
 | F9 | Each card calibrates itself through its audio loopback (cutoff, resonance, VCA trim; the dual-PWM weight if fitted) | met on board 1 (rev 0.1 calibration), to redo for 5 V |
 | F10 | Option: the mix as a USB audio input (recording without an oscilloscope) | open |
+| F11 | *[2026-10-20]* Option: an effects card (reverb) in slot 1 instead of a voice, mixing its effect in or looping the whole mix through it (return on slot 1 pins 3 / 4 to the line out) | design: backplane prepared (backplane.md 5.1); the card is a future board |
 
 ### 2.2 Performance
 
@@ -80,7 +81,7 @@ the design, to be confirmed on hardware).
 | Block | Responsibility | Why here |
 |---|---|---|
 | Controller (backplane) | USB device and host, MIDI parsing, voice allocation, patch storage, bus master, clock reference, programming the cards | the only crystal; USB needs one; one place for the whole instrument's state |
-| Voice card MCU | oscillators, envelopes, modulation, CV generation, self-calibration | one MCU per voice: 48 MHz is enough for one 3-oscillator voice, not for two (budget 4.1) |
+| Voice card MCU | oscillators, envelopes, modulation, CV generation, self-calibration | one MCU per voice: 48 MHz is enough for one 3-oscillator voice, not for two (budget 4.1); *[2026-10-20]* after the render rewrite a 3-oscillator half takes 8–12 k of 65.5 k cycles |
 | Voice card analog | reconstruction filter, expo converter, ladder, VCA, loopback | the analog sound of rev 0.1; local references make the card independent of backplane ground |
 | Mixer (backplane) | sum, pan, line out, ADC feed | one stage for all cards, at the quiet end of the backplane |
 
@@ -123,7 +124,7 @@ matter if carrier residue from several cards meets a nonlinearity, which the fil
 
 | Resource | Available | Used | Basis |
 |---|---|---|---|
-| CPU | 48 MHz | 3 oscillators: 175 cycles per sample (format 4) = 68 %; a 1.37 ms half including the CV interrupt and the control tick took up to 87 %, so about 13 % remains for the bus and sync; the CV DMA burst (not yet in the voice firmware) wins back about 9 %; dual PWM 141 cycles | board 1 (fw phase 1) |
+| CPU | 48 MHz | 3 oscillators: 175 cycles per sample (format 4) = 68 %; a 1.37 ms half including the CV interrupt and the control tick took up to 87 %, so about 13 % remains for the bus and sync; the CV DMA burst (not yet in the voice firmware) wins back about 9 %; dual PWM 141 cycles. *[2026-10-20]* Render rewrite: 3 oscillators 8–12 k cycles per half (31–47 per period, was 44 k), the CV dithering by DMA on the card; CPU load with the bus 23 % | board 1 (fw phase 1); bench card (bus.md 9.5) |
 | CPU, half-rate mode | | 136 instead of 189 cycles per sample (−28 %, experiment build); cost: saw aliasing −51 dB at C5 | board 1 |
 | RAM | 8 KB | 6.94 KB static (.data 1.46 KB, of it 1.37 KB code in RAM; .bss 5.48 KB including the 4 KB console capture buffer that also holds the 0.5 KB / 1.5 KB DAC ring); 1.25 KB stack region, at least 540 B never used; shrinking the capture buffer to 1 KB frees 3 KB for the bus (about 0.6 KB) | board 1 (fw phase 1) |
 | Flash | 62 KB | 50.1 KB with all tunes; touch UI removed | board 1 (fw phase 1) |
@@ -220,8 +221,9 @@ first program set, extended later; patches as parameter sets stored on the contr
 - Voice card and backplane: review, order, then one card and one backplane built.
 - Voice firmware: the card build (`make BOARD=card`) has the card's pin map, the bus receiver, SYNC measurement and
   HSITRIM, the standalone fallback and the fixed-point kettle (bus.md 9). Still to do: calibration for the 5 V core,
-  the patch parameters of midi.md and PATCH_DATA, a cheaper oscillator render (three oscillators do not fit with
-  the bus running, bus.md 9.5), more stack headroom, tunes as a build option.
+  the patch parameters of midi.md and PATCH_DATA, tunes as a build option. *[2026-10-20]* Done: the cheaper
+  oscillator render (three oscillators keep at least 154 carrier periods of slack under 8-voice bus load) and the stack
+  headroom (650–680 bytes free), bus.md 9.5; board 1 is not yet retested with the new build.
 - Bus protocol: implemented and tested on the bench (V203 development board as controller, one card, 7 virtual
   voices; bus.md 9); alignment between real cards still to measure.
 - DAC loading once per period (format 4, dual: format 3; spec 3.2) in the voice firmware, with a safe start
@@ -233,7 +235,7 @@ first program set, extended later; patches as parameter sets stored on the contr
 
 | Risk | Effect | Mitigation |
 |---|---|---|
-| CPU left after the oscillators is not enough for envelopes, modulation and the bus | fewer oscillators or lower control rate | measured with the bus (bus.md 9.5): two oscillators and the modal patch fit, three oscillators miss DAC halves; a cheaper render or two oscillators per voice; half-rate mode (−28 %, measured) |
+| CPU left after the oscillators is not enough for envelopes, modulation and the bus | fewer oscillators or lower control rate | measured with the bus (bus.md 9.5): two oscillators and the modal patch fit, three oscillators miss DAC halves; a cheaper render or two oscillators per voice; half-rate mode (−28 %, measured). *[2026-10-20]* Closed: the render rewrite (bit-exact) leaves every patch 0 missed halves under load, three oscillators at 23 % CPU |
 | Short buffer halves underrun when the main loop stalls (board 1: gaps of 4–10 ms, from the console and UI) | clicks | done: rendering in the DMA interrupt, 0 overruns (bus.md 3.1) |
 | A modal (kettle) strike computes its coefficients in soft float in the tick (8.5 ms) | DAC dropouts at each strike | fixed-point coefficients, or computed outside the tick |
 | RAM (8 KB) with a 4 KB DAC ring | no room for the bus buffers or the dual-PWM format | 256-period buffer halves (1 KB, also sets the latency); remove the rev 0.1 UI |

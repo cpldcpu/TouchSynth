@@ -80,6 +80,19 @@
  *              port is abandoned; output to a closed port is dropped.
  * The USB interrupt has a lower priority than the frame interrupt; flow control by NAK (usb_common.h).
  *
+ * [2026-10-20] USB host (make USBH=1, usbhost.h): a USB-MIDI host on USBFS (PB6 / PB7, the backplane's host port;
+ * HOST_EN PB8, HOST_FLT_N PB9), the USB device then on USBD (PA11 / PA12). Root port only, full / low speed; the
+ * received USB-MIDI packets enter the same MIDI -> bus path as the device's (one packet = one command, frame of the
+ * publish + L, a running status of their own; SysEx only counted). All host work runs in the main loop (idle()).
+ *   'H' clear          host status and counters as one text line (usbhost.h; hlat_*: host packet arrival ->
+ *                      execution frame edge and -> publish, us; dlat_*: 'I' -> its arrival at the host, us)
+ *   'h' op             0 port power off, 1 on, 2 re-enumerate -> '+'; 3 the D+ / D- pull-down probe (usbhost.c
+ *                      usbh_pd_probe) -> one text line; 4 the device's descriptors as hex -> one text line;
+ *                      5 n bytes: a USB-MIDI packet to the device's MIDI OUT endpoint -> '+' or '-'
+ *   'I' n bytes        USB-MIDI event packets sent on this controller's own USB-MIDI IN endpoint (the device on
+ *                      USBD; bench: PA11 / PA12 wired to PB6 / PB7, the host receives them) -> '+' or '-' (not
+ *                      taken within 100 ms)
+ *
  * One-wire protocol (as PicoRVD's singlewire.pio), T = 125 ns = the target's 8 MHz debug clock: every bit is a low
  * pulse of 2 T (raw 0) or 8 T (raw 1), then 3 T released. A frame is a start pulse (2 T low, 3 T released), the
  * header ((~reg) << 1 | read) as 8 bits MSB first, then 32 data bits: a write sends ~value; a read pulls the line
@@ -90,6 +103,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "usbdev.h"
+#ifdef USBH
+#include "usbhost.h"
+#endif
 
 #if FUNCONF_SYSTEM_CORE_CLOCK != 144000000
 #error "the SWIO timing assumes HCLK = 144 MHz"
@@ -1099,10 +1115,18 @@ typedef struct {
 	uint32_t n, lat_sum, proc_sum;
 	uint16_t lat_min, lat_max, proc_max;                  /* us */
 } lat_t;
-static struct {
+typedef struct {
 	uint32_t pkts, events, sysex, ident, ident_lost;
-} um;
+} um_t;
+static um_t um;
 static lat_t lm = { .lat_min = 0xFFFF }, le = { .lat_min = 0xFFFF };   /* USB-MIDI packets; 'e' commands over CDC */
+#ifdef USBH
+static um_t hm;                                           /* [2026-10-20] packets from the USB host port */
+static midi_in_t uh_in;
+static lat_t lh = { .lat_min = 0xFFFF }, ldh = { .lat_min = 0xFFFF };   /* host packets; 'I' -> host arrival */
+static uint32_t i_stamp;                                  /* usb_stamp() of the last 'I' not yet seen at the host */
+static uint8_t i_pending;
+#endif
 static uint8_t sx[8];
 static uint16_t sx_n;
 
@@ -1155,36 +1179,68 @@ static void usb_sysex(const uint8_t *b, int n)            /* the universal ident
 	}
 }
 
-static void usb_midi_poll(void)
+/* [2026-10-20] one USB-MIDI packet (n bytes of 4-byte events) -> midi_events, all for the frame of the publish + L;
+   sysex: SysEx goes to usb_sysex (the device's packets: identity requests are answered), else it is only counted
+   (the host port's packets) */
+static void midi_packet(um_t *u, midi_in_t *in, lat_t *l, const uint8_t *p, int n, uint32_t stamp, int sysex)
 {
-	uint8_t p[64], m[48];
-	uint32_t stamp;
-	int n = usb_midi_get(p, &stamp), k = 0;
-	if (!n)
-		return;
-	um.pkts++;
+	uint8_t m[48];
+	int k = 0;
+	u->pkts++;
 	for (int i = 0; i + 4 <= n; i += 4) {
-		uint8_t cin = p[i] & 0x0F, l = cin_len[cin];
-		if (!l)
+		uint8_t cin = p[i] & 0x0F, len = cin_len[cin];
+		if (!len)
 			continue;
-		um.events++;
-		if ((cin >= 0x4 && cin <= 0x7) && (cin != 0x5 || p[i + 1] == 0xF7 || sx_n)) {
-			usb_sysex(p + i + 1, l);
+		u->events++;
+		if (cin >= 0x4 && cin <= 0x7 && (cin != 0x5 || p[i + 1] == 0xF7 || (sysex && sx_n))) {
+			if (sysex)
+				usb_sysex(p + i + 1, len);
+			else if (cin != 0x4)
+				u->sysex++;
 			continue;
 		}
-		memcpy(m + k, p + i + 1, l);
-		k += l;
+		memcpy(m + k, p + i + 1, len);
+		k += len;
 	}
 	if (!k)
 		return;
 	events_begin();
-	midi_events(&usb_in, m, k, cfg_l);
-	lat_add(&lm, stamp, events_end(cfg_l));
+	midi_events(in, m, k, cfg_l);
+	lat_add(l, stamp, events_end(cfg_l));
+}
+
+static void usb_midi_poll(void)
+{
+	uint8_t p[64];
+	uint32_t stamp;
+	int n = usb_midi_get(p, &stamp);
+	if (n)
+		midi_packet(&um, &usb_in, &lm, p, n, stamp, 1);
+#ifdef USBH
+	n = usbh_midi_get(p, &stamp);
+	if (!n)
+		return;
+	if (i_pending) {                                      /* 'I' (the device on USBD) -> arrival at the host */
+		int32_t d = (int32_t)(uint16_t)((stamp >> 16) - (i_stamp >> 16)) * 1000 + (int32_t)(stamp & 0xFFFF) -
+		            (int32_t)(i_stamp & 0xFFFF);
+		i_pending = 0;
+		if (d >= 0 && d < 60000) {
+			ldh.n++;
+			ldh.lat_sum += d;
+			if (d < ldh.lat_min) ldh.lat_min = d;
+			if (d > ldh.lat_max) ldh.lat_max = d;
+		}
+	}
+	midi_packet(&hm, &uh_in, &lh, p, n, stamp, 0);
+#endif
 }
 
 static void idle(void)
 {
 	gen_poll();
+#ifdef USBH
+	usbh_poll();
+#endif
 	usb_midi_poll();
 	usb_poll();
 }
@@ -1294,6 +1350,89 @@ static __attribute__((noinline)) void pin_line(void)    /* [2026-10-19] 'X': usb
 	s[n++] = '\n';
 	put_line(s, n);
 }
+
+#ifdef USBH
+static __attribute__((noinline)) void host_line(int clear)   /* [2026-10-20] 'H' */
+{
+	char s[300];
+	const usbh_stats_t *u = &uh;
+	int n = snprintf(s, sizeof s, "usbh state %u power %u flt %u speed %u addr %u vid %04x pid %04x ep_in %02x "
+	                 "in_size %u in_type %u interval %u ep_out %02x out_size %u ms_if %u ms_alt %u enum_ms %u "
+	                 "attaches %lu detaches %lu enums %lu enum_fails %lu resets %lu faults %lu ", u->state, u->power,
+	                 u->flt, u->speed, u->addr, u->vid, u->pid, u->ep_in, u->in_size, u->in_type, u->interval,
+	                 u->ep_out, u->out_size, u->ms_if, u->ms_alt, u->enum_ms, u->attaches, u->detaches, u->enums,
+	                 u->enum_fails, u->resets, u->faults);
+	put_line(s, n);
+	n = snprintf(s, sizeof s, "sofs %lu polls %lu naks %lu pkts %lu bytes %lu tog_err %lu errors %lu stalls %lu "
+	             "ring_full %lu late_sof %lu outs %lu sof_age_max %u cpu_max %u cpu_sum %lu ctl_naks %lu xfer_err %lu "
+	             "last_err %u last_res %u events %lu sysex %lu ", u->sofs, u->polls, u->naks, u->pkts, u->bytes,
+	             u->tog_err, u->errors, u->stalls, u->ring_full, u->late_sof, u->outs, u->sof_age_max, u->cpu_max,
+	             u->cpu_sum, u->ctl_naks, u->xfer_err, u->last_err, u->last_res, hm.events, hm.sysex);
+	put_line(s, n);
+	n = snprintf(s, sizeof s, "hlat_n %lu hlat_min %u hlat_max %u hlat_mean %lu hlat_proc_max %u hlat_proc_mean %lu "
+	             "dlat_n %lu dlat_min %u dlat_max %u dlat_mean %lu product ", lh.n, lh.n ? lh.lat_min : 0, lh.lat_max,
+	             lh.n ? lh.lat_sum / lh.n : 0, lh.proc_max, lh.n ? lh.proc_sum / lh.n : 0, ldh.n,
+	             ldh.n ? ldh.lat_min : 0, ldh.lat_max, ldh.n ? ldh.lat_sum / ldh.n : 0);
+	for (int i = 0; u->product[i]; i++)
+		s[n++] = u->product[i] == ' ' ? '_' : u->product[i];
+	if (!u->product[0])
+		s[n++] = '-';
+	s[n++] = '\n';
+	put_line(s, n);
+	if (clear) {
+		usbh_clear();
+		memset(&hm, 0, sizeof hm);
+		memset(&lh, 0, sizeof lh);
+		memset(&ldh, 0, sizeof ldh);
+		lh.lat_min = ldh.lat_min = 0xFFFF;
+	}
+}
+
+static __attribute__((noinline)) void host_cmd(int op)   /* [2026-10-20] 'h' */
+{
+	char s[560];
+	if (op == 3) {
+		int n = usbh_pd_probe(s, sizeof s - 1);
+		s[n++] = '\n';
+		put_line(s, n);
+	} else if (op == 4) {
+		const uint8_t *d, *c;
+		int len = usbh_descriptors(&d, &c);
+		if (!len) {
+			put_line("none\n", 5);
+			return;
+		}
+		put_line("dev ", 4);
+		for (int i = 0; i < 18 + len; i++) {
+			if (i == 18)
+				put_line(" cfg ", 5);
+			uint8_t b = i < 18 ? d[i] : c[i - 18];
+			uart_putc("0123456789abcdef"[b >> 4]);
+			uart_putc("0123456789abcdef"[b & 15]);
+		}
+		uart_putc('\n');
+	} else if (op == 5) {
+		uint8_t b[64];
+		int n = uart_getc();
+		for (int i = 0; i < n; i++)
+			b[i < 64 ? i : 63] = uart_getc();
+		uint32_t t = now();
+		int r;
+		while ((r = usbh_midi_send(b, n > 64 ? 64 : n)) < 0 &&
+		       (int32_t)(now() - t) < (int32_t)(FUNCONF_SYSTEM_CORE_CLOCK / 10))
+			idle();
+		uart_putc(r < 0 ? '-' : '+');
+	} else {
+		if (op == 0)
+			usbh_power(0);
+		else if (op == 1)
+			usbh_power(1);
+		else if (op == 2)
+			usbh_restart();
+		uart_putc('+');
+	}
+}
+#endif
 
 static uint16_t get16(void)
 {
@@ -1428,6 +1567,26 @@ static __attribute__((noinline)) void bus_command(int c)
 		while (usb_midi_inject(buf, n) < 0)
 			idle();
 		uart_putc('+');
+#ifdef USBH
+	} else if (c == 'H') {
+		host_line(uart_getc());
+	} else if (c == 'h') {
+		host_cmd(uart_getc());
+	} else if (c == 'I') {                                /* [2026-10-20] a packet on our own MIDI IN endpoint */
+		int n = uart_getc();
+		for (int i = 0; i < n; i++)
+			buf[i] = uart_getc();
+		uint32_t t = now();
+		int r;
+		while ((r = usb_midi_send(buf, n > 64 ? 64 : n)) < 0 &&
+		       (int32_t)(now() - t) < (int32_t)(FUNCONF_SYSTEM_CORE_CLOCK / 10))
+			idle();
+		if (r == 0) {
+			i_stamp = usb_stamp();
+			i_pending = 1;
+		}
+		uart_putc(r < 0 ? '-' : '+');
+#endif
 	} else if (c == 'u') {                                /* D+ pull-up: 0 off, 1 on, n: off for n x 10 ms */
 		int m = uart_getc();
 		uart_putc('+');
@@ -1493,6 +1652,9 @@ static void hw_init(void)
 	NVIC_EnableIRQ(TIM1_UP_IRQn);
 	TIM1->CTLR1 = TIM_CEN;
 	usb_init();
+#ifdef USBH
+	usbh_init();                                          /* [2026-10-20] USBFS host; the port power on last */
+#endif
 }
 
 /* [2026-10-19] diagnostics: the reset cause, the stack's low-water mark (painted at start-up) */
@@ -1524,7 +1686,13 @@ int main(void)
 	memset(slot_preset, 0xFF, sizeof slot_preset);
 	hw_init();
 	printf("bench_ctrl: Ardulink SWIO programmer on USART1, SYNC 1 kHz on PA8, voice bus 1 Mbaud on USART3, "
-	       "USB-MIDI + CDC (%s)\n", usb_port_name);
+	       "USB-MIDI + CDC (%s)%s\n", usb_port_name,
+#ifdef USBH
+	       ", USB-MIDI host (USBFS)"
+#else
+	       ""
+#endif
+	      );
 	__builtin_setjmp(cmd_jmp);                            /* a CDC command cut off by its port lands here */
 	for (;;) {
 		int c = next_command();

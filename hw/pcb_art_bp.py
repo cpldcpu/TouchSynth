@@ -103,6 +103,9 @@ def front(board, F, pad_xy):
         text(board, S, label, pcbnew.ToMM(pos.x), pcbnew.ToMM(pos.y) + 2.2, TEXT)
     pos = F["SW1"].GetPosition()
     text(board, S, "RESET", pcbnew.ToMM(pos.x), pcbnew.ToMM(pos.y) + 3.9, TEXT)
+    pos = F["U7"].GetPosition()                     # SPI flash (not fitted): named between its pad rows
+    text(board, S, "SPI", pcbnew.ToMM(pos.x), pcbnew.ToMM(pos.y) - 0.75, 0.8, 0.15)
+    text(board, S, "FLASH", pcbnew.ToMM(pos.x), pcbnew.ToMM(pos.y) + 0.75, 0.8, 0.15)
     x, y = pad_xy(F["J1"], "A6")
     text(board, S, "USB", pcbnew.ToMM(F["J1"].GetPosition().x), y + 2.4, 1.0)
     # connectors with a descriptive label: their references on the fab layer only

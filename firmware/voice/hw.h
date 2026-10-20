@@ -54,9 +54,13 @@ int hw_dac_rendering(void);                            /* 1 while a buffer half 
 uint16_t hw_dac_count(void);                           /* DMA transfers left in the ring (diagnostics) */
 void hw_dac_stats(dac_stats_t *s, int clear);          /* diagnostics */
 #if defined(CH32V006)
-#define HW_SCRATCH (BOARD_CARD ? 3584 : 4096)          /* bytes (card: 512 bytes went to the bus buffers) */
+#define HW_SCRATCH (BOARD_CARD ? 2560 : 3584)          /* bytes. [2026-10-20] card 2560 (was 3584), board 1 3584 (was
+                                                          4096): stack room for the renderer's code in RAM (dsp.c) */
 extern uint16_t hw_scratch[HW_SCRATCH / 2];            /* shared RAM: console capture buffer, or the DAC ring in
                                                           DAC mode (captures are refused while DAC mode is on) */
+#define HW_SCRATCH_DSP (DAC_RING + 256)                /* [2026-10-20] the ring, then the renderer's work area (the
+                                                          oscillators' block buffer or the mallet table, dsp.c), up to
+                                                          here; the console's bench and check render after it */
 #endif
 
 /* board 1: 74HC595 chain, 16 LEDs (bit i = LED above key i) and the VCA trim DAC;

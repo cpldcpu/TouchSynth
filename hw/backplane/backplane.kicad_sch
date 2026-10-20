@@ -6,7 +6,7 @@
 	(paper "A4")
 	(title_block
 		(title "TouchSynth Poly backplane")
-		(date "2026-10-19")
+		(date "2026-10-20")
 		(rev "0.1")
 	)
 	(lib_symbols)
@@ -61,7 +61,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "6cb09bfc-416e-49fa-882a-5b3b08e7b807")
+		(uuid "1465a267-7b62-4377-9eb9-012a035e763f")
 	)
 	(text "USB-C device port, USB-A host port"
 		(exclude_from_sim no)
@@ -72,7 +72,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "19740762-c756-40c0-99d2-dbaf14634f39")
+		(uuid "c44c1af3-31f7-4a39-ae42-b1c4af0e26d4")
 	)
 	(sheet
 		(at 150 40)
@@ -125,7 +125,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "169c7f70-f22a-48d4-b453-8260221694cd")
+		(uuid "5b4ecbed-42e8-48d3-b857-25fff27e6bf4")
 	)
 	(text "MIDI in (option), SPI flash (option), LEDs"
 		(exclude_from_sim no)
@@ -136,7 +136,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "703cebc6-24d7-4740-8f1c-bd05d337f7d3")
+		(uuid "7b594905-f76e-4b3f-88ca-0b5945f9510b")
 	)
 	(sheet
 		(at 20 105)
@@ -189,7 +189,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "42dc7e33-93d5-4145-be2f-b4770baf1251")
+		(uuid "7e9610ad-821e-40c6-bac1-ce9bcee38876")
 	)
 	(text "slot sockets"
 		(exclude_from_sim no)
@@ -200,7 +200,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "ee9bac1a-4c8d-4357-8ca5-63a043f93a24")
+		(uuid "62920aee-3fc3-424b-9b11-305a8319799c")
 	)
 	(sheet
 		(at 150 105)
@@ -253,7 +253,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "24851e1c-a805-4fe4-811e-2267626cf1f7")
+		(uuid "d97166b6-06e2-4a41-b4e7-a381e8afabdc")
 	)
 	(text "TouchSynth Poly backplane"
 		(exclude_from_sim no)
@@ -266,7 +266,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "cc488cef-c05f-46ad-a226-8661f743c7d9")
+		(uuid "cfea5649-d1df-4f81-9ef8-97bcb96d7695")
 	)
 	(sheet_instances
 		(path "/"

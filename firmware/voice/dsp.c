@@ -26,12 +26,15 @@
 #define MAXM 18
 #define MAXMALLET 128                                 /* 4 ms of mallet contact */
 
+typedef struct { int32_t a1, a2, b, y[2]; } res_t;  /* [2026-10-20] one resonator, Q30, its last two outputs
+                                                       (y[par] the newest: the new one overwrites the older) */
 typedef struct {
-	int32_t a1[MAXM], a2[MAXM], b[MAXM], y1[MAXM], y2[MAXM];
+	res_t md[MAXM];
 	int32_t vel, pvel;                              /* Q24; pvel: of a staged strike */
 	uint16_t k;                                     /* mallet sample index */
 	uint8_t note, n, on;
 	uint8_t pnew;                                   /* staged strike of a new note: the bank starts from rest */
+	uint8_t par;
 	uint32_t age;
 } voice_t;
 
@@ -40,24 +43,40 @@ static const dsp_osc_t osc_tab[] = DSP_OSC_TABLE;
 static const dsp_patch_t patches[] = DSP_PATCH_TABLE;
 static const dsp_patch_t *cur;                      /* 0 while a patch is being set up: the renderer is silent */
 static voice_t voices[MAXV];
-static uint16_t mallet[MAXMALLET];                  /* Q16, unit sum (Q20 overflowed 16 bit below 32 samples) */
+/* the mallet pulse, Q16, unit sum (Q20 overflowed 16 bit below 32 samples). [2026-10-20] In hw_scratch after the DAC
+   ring, where the oscillators keep their block buffer (osc_fill): a patch is either kind, and dsp_select sets the
+   table up while the renderer is silent */
+#define mallet_tab ((uint16_t *)((uint8_t *)hw_scratch + DAC_RING))
+_Static_assert(DAC_RING + 2 * MAXMALLET <= HW_SCRATCH_DSP, "the mallet table lies after the DAC ring");
 static uint32_t age;
-static int32_t sd1, sd2;                            /* error feedback state, 1/256 code */
+static int32_t sd1 = 128, sd2 = 128;                /* error feedback state, 1/256 code, + 128 (sdm2) */
 static int32_t c_prev = 16384;                      /* previous sample (1/256 code), for the interpolation */
 
-/* second-order error feedback: target v (code 0...DSP_ARR in 1/256) -> duty code */
-__attribute__((always_inline)) static inline uint8_t sdm2(int32_t v, int32_t *e1, int32_t *e2)
+/* second-order error feedback: target v (code 0...DSP_ARR in 1/256) -> duty code. [2026-10-20] The state is the
+   error plus half a code (f = e + 128): w = v + 2 f1 - f2 is then the rounding sum, q = w >> 8, and unless q clips
+   the new error is w's low byte, so one compare does for the four clamps (the same codes as before). sdm_step
+   leaves the new error in the older state's place (an unrolled loop alternates them), sdm2 keeps f1 the newest. */
+__attribute__((always_inline)) static inline uint8_t sdm_step(int32_t v, int32_t *fa, int32_t *fb)
 {
-	int32_t w = v + 2 * *e1 - *e2;
-	int32_t q = (w + 128) >> 8;
-	if (q < 0) q = 0;
-	if (q > DSP_ARR) q = DSP_ARR;
-	*e2 = *e1;
-	int32_t e = w - (q << 8);
-	if (e > 1024) e = 1024;                         /* clipped: keep the loop stable */
-	if (e < -1024) e = -1024;
-	*e1 = e;
+	int32_t w = v + 2 * *fa - *fb;
+	int32_t q = w >> 8, f = w & 255;
+	if (__builtin_expect((uint32_t)q > DSP_ARR, 0)) {
+		q = q < 0 ? 0 : DSP_ARR;
+		f = w - (q << 8);
+		if (f > 1024 + 128) f = 1024 + 128;         /* clipped: keep the loop stable (|e| <= 1024) */
+		if (f < -1024 + 128) f = -1024 + 128;
+	}
+	*fb = f;
 	return (uint8_t)q;
+}
+
+__attribute__((always_inline)) static inline uint8_t sdm2(int32_t v, int32_t *f1, int32_t *f2)
+{
+	uint8_t q = sdm_step(v, f1, f2);
+	int32_t t = *f1;
+	*f1 = *f2;
+	*f2 = t;
+	return q;
 }
 
 /* one carrier period into the ring (hw.h): v = target code 0...DSP_ARR in 1/256 */
@@ -80,6 +99,7 @@ __attribute__((always_inline)) static inline uint8_t *dac_out(uint8_t *dst, int3
 }
 
 static inline int32_t mulh(int32_t a, int32_t b) { return (int32_t)(((int64_t)a * b) >> 32); }
+static inline uint32_t mulhu(uint32_t a, uint32_t b) { return (uint32_t)(((uint64_t)a * b) >> 32); }
 static void osc_init(const dsp_patch_t *p);
 static void mallet_init(const dsp_patch_t *p);
 
@@ -156,7 +176,7 @@ static void mallet_init(const dsp_patch_t *p)
 {
 	int L = p->mallet < MAXMALLET ? p->mallet : MAXMALLET;
 	if (L < 2) {                                    /* one sample takes the whole unit */
-		mallet[0] = 0xFFFF;
+		mallet_tab[0] = 0xFFFF;
 		return;
 	}
 	int32_t s0, c0;
@@ -170,7 +190,7 @@ static void mallet_init(const dsp_patch_t *p)
 			if (pass == 0)
 				sum += sq;
 			else
-				mallet[k] = (sq << 6) / (sum >> 10);       /* sq / sum in Q16 */
+				mallet_tab[k] = (sq << 6) / (sum >> 10);   /* sq / sum in Q16 */
 			int32_t next = (mulh(cstep, cur) << 2) - prev;
 			prev = cur;
 			cur = next;
@@ -210,10 +230,10 @@ void dsp_strike(uint8_t note, uint8_t vel)
 		sincos_half_q31(w << 2, &s, &c);            /* of w / 2, Q31 */
 		int32_t cosw = Q31_ONE - (mulh(s, s) << 2); /* 1 - 2 sin^2(w / 2) */
 		int32_t sinw = mulh(s, c) << 2;             /* 2 sin(w / 2) cos(w / 2) */
-		v->a1[n] = mulh(md->r, cosw) << 2;          /* 2 r cos w, Q30 (r < 1: no overflow) */
-		v->a2[n] = mulh(md->r, md->r) << 2;
-		v->b[n] = mulh(md->gain, sinw) << 1;        /* level Q30 * sin(w): impulse amplitude = level */
-		v->y1[n] = v->y2[n] = 0;
+		v->md[n].a1 = mulh(md->r, cosw) << 2;       /* 2 r cos w, Q30 (r < 1: no overflow) */
+		v->md[n].a2 = mulh(md->r, md->r) << 2;
+		v->md[n].b = mulh(md->gain, sinw) << 1;     /* level Q30 * sin(w): impulse amplitude = level */
+		v->md[n].y[0] = v->md[n].y[1] = 0;
 		n++;
 	}
 	v->n = n;
@@ -224,7 +244,52 @@ void dsp_strike(uint8_t note, uint8_t vel)
 	st_flags |= VS_STRIKE0 << (v - voices);        /* sounds from its V_n on (vs_apply) */
 }
 
-/* hot loop: own function (registers) and run from RAM (no flash wait states), like the TIM1 interrupt */
+/* free ringing of a bank: y = (a1 y[p] - a2 y[p ^ 1]) << 2 into y[p ^ 1], two resonators per loop (in assembly: the
+   compiler reloads the end pointer from the stack every resonator; the C loop is the host's) */
+#define RING_ASM(Y1, Y2, Y1B, Y2B) \
+	__asm volatile( \
+		"1:	lw %[t], 0(%[r])\n	lw %[u], " Y1 "(%[r])\n	mulh %[t], %[t], %[u]\n" \
+		"	lw %[u], 4(%[r])\n	lw %[w], " Y2 "(%[r])\n	mulh %[u], %[u], %[w]\n" \
+		"	sub %[t], %[t], %[u]\n	slli %[t], %[t], 2\n	sw %[t], " Y2 "(%[r])\n	add %[acc], %[acc], %[t]\n" \
+		"	lw %[t], 20(%[r])\n	lw %[u], " Y1B "(%[r])\n	mulh %[t], %[t], %[u]\n" \
+		"	lw %[u], 24(%[r])\n	lw %[w], " Y2B "(%[r])\n	mulh %[u], %[u], %[w]\n" \
+		"	sub %[t], %[t], %[u]\n	slli %[t], %[t], 2\n	sw %[t], " Y2B "(%[r])\n	add %[acc], %[acc], %[t]\n" \
+		"	addi %[r], %[r], 40\n	bltu %[r], %[e], 1b\n" \
+		: [r] "+r"(r), [acc] "+r"(acc), [t] "=&r"(t), [u] "=&r"(u), [w] "=&r"(w) \
+		: [e] "r"(re) \
+		: "memory")
+
+__attribute__((always_inline)) static inline int32_t ring(res_t *r, res_t *re, int p, int32_t acc)
+{
+	_Static_assert(sizeof(res_t) == 20 && __builtin_offsetof(res_t, y) == 12, "RING_ASM offsets");
+	if ((re - r) & 1) {
+		int32_t y = (mulh(r->a1, r->y[p]) - mulh(r->a2, r->y[p ^ 1])) << 2;
+		r->y[p ^ 1] = y;
+		acc += y;
+		r++;
+	}
+	if (r >= re)
+		return acc;
+#if defined(__riscv)
+	int32_t t, u, w;
+	if (p)
+		RING_ASM("16", "12", "36", "32");
+	else
+		RING_ASM("12", "16", "32", "36");
+#else
+	for (; r < re; r++) {
+		int32_t y = (mulh(r->a1, r->y[p]) - mulh(r->a2, r->y[p ^ 1])) << 2;
+		r->y[p ^ 1] = y;
+		acc += y;
+	}
+#endif
+	return acc;
+}
+
+/* hot loop: own function (registers) and run from RAM (no flash wait states). [2026-10-20] The resonators of a bank
+   interleaved (one pointer, the coefficients and both outputs at fixed offsets) and their two outputs alternating
+   (one store per resonator and sample instead of two; the V006: lw 2 cycles, sw 3); the interpolation unrolled by
+   two (sdm_step). The same codes as before (test/render_test.py) */
 __attribute__((noinline, section(".srodata"))) static void modal_fill(uint8_t *dst, int ns)
 {
 	int32_t e1 = sd1, e2 = sd2;
@@ -235,22 +300,18 @@ __attribute__((noinline, section(".srodata"))) static void modal_fill(uint8_t *d
 				voice_t *v = &voices[i];
 				if (!v->on)
 					continue;
+				res_t *r = v->md, *re = r + v->n;
+				int p = v->par;
+				v->par = p ^ 1;
 				if (v->k < cur->mallet && v->k < MAXMALLET) {          /* mallet contact: excite */
-					int32_t x = mulh(v->vel, (int32_t)mallet[v->k++] << 8) << 8;   /* vel Q24 * pulse Q24 */
-					for (int m = 0; m < v->n; m++) {
-						int32_t y = (mulh(v->a1[m], v->y1[m]) - mulh(v->a2[m], v->y2[m]) + mulh(v->b[m], x)) << 2;
-						v->y2[m] = v->y1[m];
-						v->y1[m] = y;
+					int32_t x = mulh(v->vel, (int32_t)mallet_tab[v->k++] << 8) << 8;   /* vel Q24 * pulse Q24 */
+					for (; r < re; r++) {
+						int32_t y = (mulh(r->a1, r->y[p]) - mulh(r->a2, r->y[p ^ 1]) + mulh(r->b, x)) << 2;
+						r->y[p ^ 1] = y;
 						acc += y;
 					}
 				} else {                                                   /* free ringing: 2 multiplies */
-					int32_t *a1 = v->a1, *a2 = v->a2, *y1 = v->y1, *y2 = v->y2;
-					for (int m = 0; m < v->n; m++) {
-						int32_t y = (mulh(a1[m], y1[m]) - mulh(a2[m], y2[m])) << 2;
-						y2[m] = y1[m];
-						y1[m] = y;
-						acc += y;
-					}
+					acc = ring(r, re, p, acc);
 				}
 			}
 			acc = (acc >> 8) * cur->gain;           /* Q24 */
@@ -263,10 +324,23 @@ __attribute__((noinline, section(".srodata"))) static void modal_fill(uint8_t *d
 		int32_t c = 16384 + (acc >> 10);            /* (x + 1) / 2 * 128 in 1/256 code (Q24: 2^24 / 16384 = 2^10) */
 		int32_t step = ((c - c_prev) * 5461) >> 16; /* linear interpolation over DSP_UPS = 12 periods */
 		int32_t v = c_prev;
+#if DAC_DUAL
 		for (int u = 0; u < DSP_UPS; u++) {
 			v = (u == DSP_UPS - 1) ? c : v + step;
 			dst = dac_out(dst, v, &e1, &e2);
 		}
+#else
+		_Static_assert(DSP_UPS % 2 == 0, "pairs of periods");
+		for (int u = 0; u < DSP_UPS - 2; u += 2, dst += 2) {
+			v += step;
+			dst[0] = sdm_step(v, &e1, &e2);         /* (the newest error: e2) */
+			v += step;
+			dst[1] = sdm_step(v, &e2, &e1);
+		}
+		dst[0] = sdm_step(v + step, &e1, &e2);
+		dst[1] = sdm_step(c, &e2, &e1);             /* the last period: the sample itself */
+		dst += 2;
+#endif
 		c_prev = c;
 	}
 	sd1 = e1;
@@ -275,11 +349,14 @@ __attribute__((noinline, section(".srodata"))) static void modal_fill(uint8_t *d
 
 /* ------------------------------------------------------------------ oscillators */
 #define MAXO 3
-typedef struct { uint32_t ph, inc, inv; int32_t lvl; uint8_t wave; } osc_t;
+typedef struct { uint32_t ph, inc, inv, sinv; int32_t lvl; uint8_t wave; } osc_t;   /* sinv: scheduling inverse */
 static osc_t osc[MAXO];
 static uint8_t n_osc;
 static volatile uint8_t osc_gate;
 static uint32_t pw_off;                             /* pulse width as a phase offset */
+static uint32_t osc_bias;                           /* 16384 << 16 - 32768 x the saws' levels (osc_block) */
+static uint8_t n_saw;                               /* saws: the fused runs take two, a third adds (osc_block) */
+static osc_t *saw_o[MAXO];
 
 static void osc_init(const dsp_patch_t *p)
 {
@@ -290,11 +367,18 @@ static void osc_init(const dsp_patch_t *p)
 		osc[i].lvl = t->level;
 		osc[i].ph = (uint32_t)i * 0x55555555u;      /* spread start phases */
 		osc[i].inc = 0;
-		osc[i].inv = 0;
+		osc[i].inv = osc[i].sinv = 0;
 	}
+	osc_bias = 16384u << 16;
+	n_saw = 0;
+	for (int i = 0; i < n_osc; i++)
+		if (osc[i].wave != OSC_PULSE) {
+			osc_bias -= 32768u * (uint32_t)osc[i].lvl;
+			saw_o[n_saw++] = &osc[i];
+		}
 	pw_off = (uint32_t)p->mallet << 24;
 	osc_gate = 0;
-	sd1 = sd2 = 0;
+	sd1 = sd2 = 128;
 }
 
 /* phase step and its inverse for a pitch (1/256 semitone), from the top-octave tables (as the DCO's timer counts) */
@@ -310,6 +394,8 @@ static void osc_rate(int32_t p, osc_t *o)
 	uint32_t inv = osc_inv_top[i] - (((osc_inv_top[i] - osc_inv_top[i + 1]) * f) >> 4);
 	o->inv = inv << oct;
 	o->inc = (uint32_t)(((uint64_t)(inc >> oct) * clk_scale) >> 16);   /* pitch lock to the controller's crystal */
+	inv = (uint32_t)(((uint64_t)o->inv * (131072 - clk_scale)) >> 16);   /* / clk_scale: x (2 - s) < 1 / s */
+	o->sinv = inv - (inv >> 10);                    /* below 2^48 / inc (the tables' error is about 1e-5): osc_run */
 }
 
 void dsp_pitch(int32_t p, int gate)                 /* staged: applied with the state (vs_apply) */
@@ -351,7 +437,7 @@ static void vs_apply(const vstate_t *v)
 		voice_t *b = &voices[i];
 		if (b->pnew) {
 			for (int m = 0; m < MAXM; m++)
-				b->y1[m] = b->y2[m] = 0;
+				b->md[m].y[0] = b->md[m].y[1] = 0;
 			b->pnew = 0;
 		}
 		b->k = 0;
@@ -383,8 +469,6 @@ void dsp_commit(uint32_t t)                         /* control tick */
 	vq_w = nw;
 }
 
-static inline uint32_t mulhu(uint32_t a, uint32_t b) { return (uint32_t)(((uint64_t)a * b) >> 32); }
-
 /* rising saw -1...1 (Q31) with a 2-point polyBLEP: the jump at the wrap becomes a band-limited step,
    +(1 - x)^2 one sample after it and -(1 - x)^2 one sample before (x = distance to the wrap in samples) */
 __attribute__((always_inline)) static inline int32_t saw_blep(uint32_t ph, uint32_t inc, uint32_t inv)
@@ -402,48 +486,230 @@ __attribute__((always_inline)) static inline int32_t saw_blep(uint32_t ph, uint3
 	return s;
 }
 
-/* blocks of OBLK samples: each oscillator runs over the block with its state in registers (RV32E has 16), adding
-   into acc[], then the error feedback runs over the block */
-#define OBLK 32
-__attribute__((noinline, section(".srodata"))) static void osc_fill(uint8_t *dst, int n)
+/* [2026-10-20] Blocks of OBLK samples: the oscillators add up into acc[] (in hw_scratch after the DAC ring, not on
+   the stack), then the error feedback runs over the block. The oscillators run together between their polyBLEP
+   regions (the samples within one step of a wrap, phase in [-inc, inc)), whose distance blep_run bounds from below
+   with the scheduling inverse sinv: there a saw is (ph >> 16) - 32768 and a pulse a constant (pw_off has no low 16
+   bits, so the two saws' difference only changes at a wrap), so a run is one loop over at most two saws and a
+   constant, with one store per sample (the V006: lw 2 cycles, sw 3, a taken branch 3, mul 1). The saws' -32768 lvl
+   and the output's offset of 16384 codes (<< 16) are in the constant; the sum stays below 2^30 in magnitude as the
+   levels of a patch add up to at most 1 (gen_tables.py). A sample with an oscillator in its region takes the full
+   saw_blep (osc_edge); a third saw (no preset has one) adds in a second pass. The same codes as the
+   former sample-by-sample loop (test/render_test.py), in a fifth of the cycles (docs/bus.md 9.3). */
+#define OBLK 64
+#define acc_blk ((uint32_t *)((uint8_t *)hw_scratch + DAC_RING))
+_Static_assert(DAC_RING + 4 * OBLK <= HW_SCRATCH_DSP, "the block accumulator lies after the DAC ring");
+
+static inline uint32_t blep_run(uint32_t p, uint32_t inc, uint32_t sinv)   /* samples from p (outside its region)
+                                                                            on before the region: >= 1 */
 {
-	int32_t acc[OBLK];
-	int32_t e1 = sd1, e2 = sd2;
-	int no = osc_gate ? n_osc : 0;
+	uint32_t n = (mulhu(-inc - p, sinv) >> 16) + 1; /* (2^32 - inc - p) / inc rounded down, + 1 <= the exact count */
+	uint32_t q = p + n * inc;                       /* often one short: is the sample after the run outside too? */
+	return q + inc < 2 * inc ? n : n + 1;
+}
+
+/* rising saw (Q15) with the polyBLEP, any phase */
+__attribute__((noinline, section(".srodata"), optimize("O2"))) static int32_t saw_blep16(uint32_t ph, uint32_t inc,
+                                                                                          uint32_t inv)
+{
+	return saw_blep(ph, inc, inv) >> 16;
+}
+
+/* one sample of all oscillators, exact: one of them is within one step of a wrap */
+__attribute__((noinline, section(".srodata"), optimize("O2"))) static uint32_t osc_edge(void)
+{
+	uint32_t v = osc_bias;
+	for (osc_t *o = osc, *oe = osc + n_osc; o < oe; o++) {
+		uint32_t inc = o->inc, p = o->ph + inc;
+		int32_t x = saw_blep16(p, inc, o->inv);
+		o->ph = p;
+		if (o->wave == OSC_PULSE)               /* pulse = (saw(ph) - saw(ph + pw)) / 2; Q15 * Q15 = Q30 */
+			v += (uint32_t)(x - saw_blep16(p + pw_off, inc, o->inv)) * (uint32_t)(o->lvl >> 1);
+		else
+			v += (uint32_t)(x + 32768) * (uint32_t)o->lvl;
+	}
+	return v;
+}
+
+/* a run of two saws and a constant: a[k] = s + (ph0 >> 16) l0 + (ph1 >> 16) l1, two samples per loop. In assembly:
+   the compiler cannot keep the eleven values in RV32E's registers here and reloads three of them every sample (the
+   C loop is the host's, test/render_test.py) */
+__attribute__((always_inline)) static inline uint32_t *run2(uint32_t *a, uint32_t *e, uint32_t s, osc_t *o0, osc_t *o1)
+{
+	uint32_t p0 = o0->ph, i0 = o0->inc, l0 = o0->lvl, p1 = o1->ph, i1 = o1->inc, l1 = o1->lvl;
+	if ((e - a) & 1) {
+		p0 += i0;
+		p1 += i1;
+		*a++ = s + (p0 >> 16) * l0 + (p1 >> 16) * l1;
+	}
+#if defined(__riscv)
+	uint32_t t, u;
+	if (a < e)
+		__asm volatile(
+			"1:	add %[p0], %[p0], %[i0]\n"
+			"	add %[p1], %[p1], %[i1]\n"
+			"	srli %[t], %[p0], 16\n"
+			"	mul %[t], %[t], %[l0]\n"
+			"	srli %[u], %[p1], 16\n"
+			"	mul %[u], %[u], %[l1]\n"
+			"	add %[t], %[t], %[u]\n"
+			"	add %[t], %[t], %[s]\n"
+			"	sw %[t], 0(%[a])\n"
+			"	add %[p0], %[p0], %[i0]\n"
+			"	add %[p1], %[p1], %[i1]\n"
+			"	srli %[t], %[p0], 16\n"
+			"	mul %[t], %[t], %[l0]\n"
+			"	srli %[u], %[p1], 16\n"
+			"	mul %[u], %[u], %[l1]\n"
+			"	add %[t], %[t], %[u]\n"
+			"	add %[t], %[t], %[s]\n"
+			"	sw %[t], 4(%[a])\n"
+			"	addi %[a], %[a], 8\n"
+			"	bltu %[a], %[e], 1b\n"
+			: [a] "+r"(a), [p0] "+r"(p0), [p1] "+r"(p1), [t] "=&r"(t), [u] "=&r"(u)
+			: [e] "r"(e), [s] "r"(s), [i0] "r"(i0), [l0] "r"(l0), [i1] "r"(i1), [l1] "r"(l1)
+			: "memory");
+#else
+	for (; a < e; a++) {
+		p0 += i0;
+		p1 += i1;
+		*a = s + (p0 >> 16) * l0 + (p1 >> 16) * l1;
+	}
+#endif
+	o0->ph = p0;
+	o1->ph = p1;
+	return a;
+}
+
+__attribute__((always_inline)) static inline uint32_t *run1(uint32_t *a, uint32_t *e, uint32_t s, osc_t *o0)
+{
+	uint32_t p0 = o0->ph, i0 = o0->inc, l0 = o0->lvl;
+	if ((e - a) & 1) {
+		p0 += i0;
+		*a++ = s + (p0 >> 16) * l0;
+	}
+#if defined(__riscv)
+	uint32_t t;
+	if (a < e)
+		__asm volatile(
+			"1:	add %[p0], %[p0], %[i0]\n"
+			"	srli %[t], %[p0], 16\n"
+			"	mul %[t], %[t], %[l0]\n"
+			"	add %[t], %[t], %[s]\n"
+			"	sw %[t], 0(%[a])\n"
+			"	add %[p0], %[p0], %[i0]\n"
+			"	srli %[t], %[p0], 16\n"
+			"	mul %[t], %[t], %[l0]\n"
+			"	add %[t], %[t], %[s]\n"
+			"	sw %[t], 4(%[a])\n"
+			"	addi %[a], %[a], 8\n"
+			"	bltu %[a], %[e], 1b\n"
+			: [a] "+r"(a), [p0] "+r"(p0), [t] "=&r"(t)
+			: [e] "r"(e), [s] "r"(s), [i0] "r"(i0), [l0] "r"(l0)
+			: "memory");
+#else
+	for (; a < e; a++) {
+		p0 += i0;
+		*a = s + (p0 >> 16) * l0;
+	}
+#endif
+	o0->ph = p0;
+	return a;
+}
+
+__attribute__((noinline, section(".srodata"), optimize("O2"))) static void osc_block(uint32_t *a, uint32_t *end)
+{
+	while (a < end) {
+		uint32_t r = end - a, s = osc_bias;         /* run length, constant */
+		for (int i = 0; i < n_osc && r; i++) {
+			osc_t *o = &osc[i];
+			uint32_t inc = o->inc, p = o->ph + inc, k;
+			if (p + inc < 2 * inc) {
+				r = 0;
+				break;
+			}
+			k = blep_run(p, inc, o->sinv);
+			if (o->wave == OSC_PULSE) {
+				uint32_t p2 = p + pw_off;
+				if (p2 + inc < 2 * inc) {
+					r = 0;
+					break;
+				}
+				uint32_t k2 = blep_run(p2, inc, o->sinv);
+				if (k2 < k) k = k2;
+				s += ((p >> 16) - (p2 >> 16)) * (uint32_t)(o->lvl >> 1);
+			}
+			if (k < r) r = k;
+		}
+		if (!r) {
+			*a++ = osc_edge();
+			continue;
+		}
+		uint32_t *e = a + r;
+		if (n_saw >= 2) {
+			uint32_t *b = a;
+			a = run2(a, e, s, saw_o[0], saw_o[1]);
+			if (n_saw == 3) {                       /* (no preset yet) a third saw: one more pass, lw / add / sw */
+				osc_t *o2 = saw_o[2];
+				uint32_t p2 = o2->ph, i2 = o2->inc, l2 = o2->lvl;
+				for (; b < e; b++) {
+					p2 += i2;
+					*b += (p2 >> 16) * l2;
+				}
+				o2->ph = p2;
+			}
+		} else if (n_saw == 1)
+			a = run1(a, e, s, saw_o[0]);
+		else
+			do *a++ = s; while (a < e);
+		for (int i = 0; i < n_osc; i++)
+			if (osc[i].wave == OSC_PULSE)
+				osc[i].ph += r * osc[i].inc;
+	}
+}
+
+__attribute__((noinline, section(".srodata"), optimize("O2"))) static void osc_fill(uint8_t *dst, int n)
+{
+	int32_t f1 = sd1, f2 = sd2;
+	int on = osc_gate && n_osc;
 	while (n > 0) {
 		int m = n < OBLK ? n : OBLK;
-		for (int k = 0; k < m; k++)
-			acc[k] = 0;
-		for (int i = 0; i < no; i++) {
-			osc_t *o = &osc[i];
-			uint32_t ph = o->ph, inc = o->inc, inv = o->inv;
-			int32_t lvl = o->lvl;
-			if (o->wave == OSC_PULSE) {                 /* pulse = (saw(ph) - saw(ph + pw)) / 2 */
-				uint32_t off = pw_off;
-				lvl >>= 1;
-				for (int k = 0; k < m; k++) {
-					ph += inc;
-					int32_t s = (saw_blep(ph, inc, inv) >> 16) - (saw_blep(ph + off, inc, inv) >> 16);
-					acc[k] += s * lvl;                  /* Q15 * Q15 = Q30 */
-				}
-			} else {
-				for (int k = 0; k < m; k++) {
-					ph += inc;
-					acc[k] += (saw_blep(ph, inc, inv) >> 16) * lvl;
-				}
+		uint32_t *a = acc_blk, *e = a + m;
+		if (on)
+			osc_block(a, e);
+#if DAC_DUAL
+		for (; a < e; a++)
+			dst = dac_out(dst, on ? (int32_t)*a >> 16 : DSP_ARR << 7, &f1, &f2);
+#else
+		if (!on && f1 == f2 && (uint32_t)f1 < 256) {   /* silent and settled (f1 = f2 < 256): mid-scale codes */
+			for (uint8_t *de = dst + m; dst < de; )
+				*dst++ = DSP_ARR / 2;
+		} else {
+			if (!on)                                /* silent: mid-scale (Q30 + bias), until it has settled */
+				for (uint32_t *b = a; b < e; b++)
+					*b = 16384u << 16;
+			for (uint32_t *e2 = a + (m & ~1); a < e2; a += 2, dst += 2) {   /* Q30 + bias -> code 0...128 / 256 */
+				dst[0] = sdm_step((int32_t)a[0] >> 16, &f1, &f2);           /* (the newest error: f2) */
+				dst[1] = sdm_step((int32_t)a[1] >> 16, &f2, &f1);           /* (f1) */
 			}
-			o->ph = ph;
+			if (m & 1)
+				*dst++ = sdm2((int32_t)*a >> 16, &f1, &f2);
 		}
-		for (int k = 0; k < m; k++)
-			dst = dac_out(dst, 16384 + (acc[k] >> 16), &e1, &e2);   /* Q30 -> code 0...128 in 1/256 */
+#endif
 		n -= m;
 	}
-	sd1 = e1;
-	sd2 = e2;
+	sd1 = f1;
+	sd2 = f2;
 }
 
 /* ------------------------------------------------------------------ dispatch */
 int dsp_kind(void) { return cur ? cur->kind : -1; }
+
+void dsp_rest(void)                                 /* not while the renderer runs */
+{
+	sd1 = sd2 = 128;
+	c_prev = 16384;
+}
 
 void dsp_carrier(uint16_t *arr, uint16_t *half)
 {

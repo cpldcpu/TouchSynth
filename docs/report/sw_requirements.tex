@@ -1,0 +1,375 @@
+% Software requirements (input file of touchsynth_poly_report.tex). Draft for review, 2026-10-20.
+\newcommand{\stmet}{\textcolor{green!40!black}{\textbf{met}}}
+\newcommand{\stpart}{\textcolor{orange!80!black}{\textbf{partial}}}
+\newcommand{\stopen}{\textcolor{red!70!black}{\textbf{open}}}
+\newcommand{\stdes}{\textcolor{blue!60!black}{\textbf{design}}}
+\newcommand{\review}[1]{\par\smallskip\noindent\fcolorbox{blue!60!black}{blue!5}{\parbox{0.97\linewidth}{%
+  \small\textbf{For review.} #1}}\par\smallskip}
+
+% =====================================================================================================================
+\section{Software requirements}\label{sec:srs}
+
+This section states what the software of the instrument must do, as requirements that can be verified one by one.
+They are derived from the system requirements (Tables~\ref{tab:reqf} and~\ref{tab:reqp}; \file{docs/design.md} 2), the voice bus protocol
+(\file{docs/bus.md}), the MIDI and patch model (\file{docs/midi.md}) and the controller plan
+(\file{docs/controller.md}). Section~\ref{sec:sad} describes the architecture that implements them, and
+Section~\ref{sec:fw} describes the firmware as built.
+
+\review{This is a first draft, status 20 October 2026. Please check three things: the scope of each requirement
+(Section~\ref{sec:srsdec} lists the choices that are still open); the numeric targets marked \emph{proposed}; and the
+split between what the cards do and what the controller does.}
+
+\subsection{Scope, terms and conventions}
+
+\paragraph{Software items.}
+\begin{itemize}
+  \item \textbf{Card firmware (CF):} \file{firmware/voice}, built with \texttt{make BOARD=card} for the CH32V006 on each
+    voice card. The same code base builds for board~1, the rev 0.1 test bed, which keeps its analog DCO and its MIDI
+    input.
+  \item \textbf{Controller firmware (CT):} the backplane's CH32V203. Today \file{firmware/bench\_ctrl} stands in for it
+    on a development board. It implements the frame engine, the bus, USB-MIDI and CDC, and the SWIO bridge, but not
+    the parts, the storage or the 74HC595.
+  \item \textbf{Voice bus (BUS):} the protocol between the two firmwares. Its requirements bind both sides.
+  \item \textbf{Tools (TL):} the host-side generators, tests and bench scripts (\file{tools/},
+    \file{firmware/voice/test/}, \file{firmware/voice/gen\_tables.py}, \file{sim/behav/}).
+\end{itemize}
+
+\paragraph{Columns.} \emph{Source} names the system requirement or document the requirement comes from.
+\emph{Verification} names the method:
+\begin{itemize}
+  \item T: an automated test, named;
+  \item B: a bench measurement;
+  \item I: an inspection or review;
+  \item S: a simulation or model;
+  \item H: needs the new boards (verification stage V2--V4, Table~\ref{tab:vstages}).
+\end{itemize}
+\emph{Status} says how far the requirement is shown today:
+\begin{itemize}
+  \item \stmet: shown on the bench (CH32V203 development board plus one V006 card) or on board~1;
+  \item \stpart: implemented in part, or shown only in a bench variant;
+  \item \stopen: not implemented;
+  \item \stdes: follows from the design, to be confirmed on hardware.
+\end{itemize}
+
+\paragraph{Terms.} A frame is the \SI{1}{ms} between two rising SYNC edges. $L$ is the bus lead, two frames; $D$
+is the presentation delay, four frames. A buffer half is 256 carrier periods of the PWM DAC (\SI{1.37}{ms}). A carrier
+period is \SI{5.33}{\micro s}. A patch slot is one of the 4 patches a card holds. A part is one instrument of the
+multitimbral setup.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Card firmware}\label{sec:srscf}
+
+\begingroup\small\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright}p{0.9cm} >{\raggedright}p{7.5cm} >{\raggedright}p{1.5cm}
+  >{\raggedright}p{2.7cm} >{\raggedright\arraybackslash}p{2.6cm}@{}}
+\caption{Card firmware requirements.}\label{tab:srscf}\\
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endfirsthead
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endhead
+\bottomrule\endfoot
+\multicolumn{5}{@{}l}{\textit{Start-up, time base and clock}} \\
+CF1 & From reset until the first SYNC edge, and indefinitely without SYNC, the card runs standalone: SysTick
+  ticks, a mono synth on its built-in presets, the SWIO console, the receiver off. The first SYNC edge starts the
+  trim (CF3). & F8, bus.md 6 & T \texttt{sync}; B & \stmet \\
+CF2 & The control tick runs on each rising SYNC edge. Edges less than $3/4$ frame after the last are ignored and
+  counted. A missing edge is bridged by a SysTick tick \SI{0.25}{ms} late. After 10 frames without SYNC the VCA is
+  muted, and the card re-locks when SYNC returns. & P10, bus.md 6 & T \texttt{sync} (gaps of 3 and 40 frames) &
+  \stmet \\
+CF3 & After 100 SYNC periods the card sets HSITRIM so that its HSI is within \SI{\pm0.1}{\%} of the crystal. It
+  enables its receiver only after that trim. & P1, bus.md 2, 6 & B (STATUS clock error 186--617\,ppm) & \stmet \\
+CF4 & The oscillator phase steps are scaled by the measured SYNC period, filtered over about 64 frames, so the
+  pitch follows the controller's crystal and voices cannot drift apart. & P1, P11 & B; H (V3: two cards against the
+  crystal) & \stpart{} (built; error against the crystal not measured) \\
+\multicolumn{5}{@{}l}{\textit{Voice bus, card side}} \\
+CF5 & The card receives packets at \SI{1}{Mbaud} by DMA into a ring and parses them in the control tick: COBS,
+  CRC-8. A packet for another card is dropped at its dst byte, before the CRC. Every error class is counted. &
+  bus.md 4, 9.5 & T \texttt{crc}, \texttt{load} & \stmet \\
+CF6 & A timed event runs in the tick of its execution frame. A late event runs at once and is counted. An event
+  more than 32 frames ahead is dropped and counted. At least 16 events can wait. & bus.md 4 & T \texttt{late} &
+  \stmet \\
+CF7 & Whatever a tick computes reaches the outputs $D$ frames later: the CVs through a delay line, the DAC state
+  exact to one carrier period. The VCA trim is not delayed. & P8, P10, bus.md 3.1 & B (scope: 4.008\,ms, spread
+  \SI{8}{\micro s}) & \stmet \\
+CF8 & An unaddressed card answers ASSIGN to dst 0x00 with HELLO: its 64-bit chip ID, firmware version and
+  capabilities. After a reset over NRST the card is found again within \SI{0.4}{s}. & F1, bus.md 6 & T
+  \texttt{reset}; H (V3: NRST from the 74HC595) & \stpart{} (shown with an SWIO reset; the NRST path needs the
+  backplane) \\
+CF9 & The card answers REQUEST (STATUS, COUNTERS, HELLO) within 2 frames, on an open-drain return line that it
+  releases when idle. & bus.md 2, 5.2 & T \texttt{enum}, \texttt{counters}; B (open drain with \SI{1}{k\ohm}) & \stpart{} (the bench
+  ran the push-pull variant, \texttt{BUS\_TX\_PP}; the open-drain build is untested) \\
+\multicolumn{5}{@{}l}{\textit{Voice engine and sound}} \\
+CF10 & One voice per card at a \SI{1}{kHz} control rate: amplitude and filter envelopes, LFO, glide, pitch envelope,
+  and the cutoff, resonance and VCA laws onto the CVs. & F5 & B (board~1, bench) & \stmet \\
+CF11 & DSP engines: up to 3 band-limited oscillators (saw and pulse, polyBLEP), noise, and modal drums in fixed point,
+  one sample per \SI{187.5}{kHz} carrier period. The output is a 7-bit PWM DAC with second-order error feedback. The
+  render is bit-exact with the previous revision and follows \file{sim/behav/dsp.py}. & F5, P2 & T
+  \texttt{render\_test.py} (197 scenarios), card \texttt{check}; S (S9) & \stmet \\
+CF12 & No DAC buffer half is missed with any patch under 8-voice bus load or the stress test. Each half keeps at least
+  50 carrier periods of slack (\emph{proposed} margin). & F5 & T \texttt{load --voices 8}, \texttt{stress} &
+  \stmet{} (least 99 periods) \\
+CF13 & Four CVs as 10-bit PWM with 2-bit dither at \SI{46.875}{kHz}, loaded by DMA without a CPU interrupt, on
+  TIM1 CH1--CH4 (PC6, PC7, PC0, PD3). & F5 & B (pin activity on the V006) & \stmet \\
+CF14 & Stereo pan: a 7-bit PWM on PC5 (TIM2 CH1, the DAC's carrier) sets the steering pairs. Pan law: linear
+  steering, with CV\_VCA raised towards the centre for constant power and capped at 70.6\,\% at hard pan. Pan is set
+  per voice by PARAM. & F7, spec 3.1 & B (PC5 output shown with TIM2 CH1 enabled by hand); H (V2: L / R levels) &
+  \stopen{} (pin and timer shown; firmware missing) \\
+CF15 & Patches: 4 patch slots per card. PATCH\_DATA writes a slot that is not active; a timed PATCH\_SELECT switches
+  on the tick. All parameters of midi.md 4 are implemented. & F6, midi.md 4 & T \texttt{patch}; I & \stpart{}
+  (built-in presets through PATCH\_PRESET; PARAM IDs 20, 28, 32--35, 38--47 only) \\
+CF16 & Performance controls (CTRL): bend with the patch's BEND\_RANGE, mod wheel, channel pressure, expression,
+  tempo, LFO phase reset. & midi.md 3, bus.md 5.1 & T \texttt{ctrl} & \stpart{} (bend fixed at \SI{\pm2}{}
+  semitones; pressure and tempo missing) \\
+\multicolumn{5}{@{}l}{\textit{Calibration and self-test}} \\
+CF17 & On CALIBRATE the card mutes, measures cutoff, the resonance threshold and the VCA trim through its loopback ADC
+  (PC4) and, if fitted, the dual-PWM weight. It reports busy in STATUS and delivers its results as CAL\_DATA. & F9,
+  bus.md 6 & H (V2) & \stopen{} (rev 0.1 calibration on board~1; the \SI{5}{V} tables need a card) \\
+CF18 & Self-test inputs (option): the ladder bias on PA2 (A0) and the analog rail on PD2 (A3), readable over the
+  console and STATUS. & spec 3.2 & H & \stopen{} (option) \\
+\multicolumn{5}{@{}l}{\textit{Maintenance, resources and safety}} \\
+CF19 & The card is programmed and debugged over SWIO alone, by a WCH-LinkE or the controller (minichlink compatible),
+  and has no bootloader of its own. PD7 stays configured as NRST (option byte RST\_MODE $\neq$ 11). & F4, F8 & B
+  (40\,s through the V203 bridge; option bytes 0xF7 read) & \stmet \\
+CF20 & SWIO console: status, counters, the DAC and render diagnostics (\texttt{dac}, \texttt{bench}, \texttt{check}),
+  ADC captures, manual CVs. & F8 & B & \stmet \\
+CF21 & Resources: static RAM at most \SI{7.2}{KB} of \SI{8}{KB}; at least 512 bytes of stack never used under bus
+  load; flash at most \SI{60}{KB} of \SI{62}{KB} (\emph{proposed} limits). & C3 & B (stack low-water mark), I (link
+  map) & \stmet{} (\SI{7.0}{KB}, 656 bytes, \SI{55}{KB}) \\
+CF22 & PA4 is never configured as an output: it is bonded to PD7 (NRST) in the TSSOP-20. & C3 & I (code review) &
+  \stmet \\
+CF23 & Build options: dual-PWM DAC (PC1, TIM2 CH4) and an external \SI{24}{MHz} clock on PA1. & spec 3.5, 6 & B
+  (board~1); H & \stpart{} (the dual-PWM build compiles; untested on a V006 card) \\
+\end{longtable}
+\endgroup
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Voice bus}\label{sec:srsbus}
+
+\begingroup\small\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright}p{0.9cm} >{\raggedright}p{7.5cm} >{\raggedright}p{1.5cm}
+  >{\raggedright}p{2.7cm} >{\raggedright\arraybackslash}p{2.6cm}@{}}
+\caption{Voice bus requirements (both firmwares).}\label{tab:srsbus}\\
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endfirsthead
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endhead
+\bottomrule\endfoot
+BUS1 & \SI{1}{Mbaud} 8N1 on BCAST and RETURN; COBS framing with 0x00 delimiters; CRC-8/SMBUS; at most 64 decoded
+  bytes per packet; little-endian values; unknown message types ignored and counted. & bus.md 2, 4 & T \texttt{all}
+  & \stmet \\
+BUS2 & Every frame starts with FRAME at the SYNC edge. A card's frame counter that disagrees with FRAME is set again
+  and counted as a slip. & bus.md 3 & T \texttt{sync} & \stmet \\
+BUS3 & Timed events execute at the frame $a + L$ of their arrival; sound follows $D$ frames later, the same for
+  every event and every voice. USB-MIDI to sound at most \SI{10}{ms}, constant. & P8 & B (\texttt{latency
+  --scope}: 5.0--6.0\,ms) & \stmet \\
+BUS4 & The same event sounds on every card within \SI{10}{\micro s}. & P10 & B (one card: spread \SI{8}{\micro s});
+  H (V3/V4: two or more cards) & \stdes \\
+BUS5 & Broadcast without acknowledgement. A VOICE\_STATE refresh repairs a lost NOTE\_ON or NOTE\_OFF within
+  \SI{50}{ms}; a resent patch repairs a lost PARAM. & bus.md 1, 5.3 & T \texttt{repair} & \stpart{} (patch resend
+  by PATCH\_PRESET only) \\
+BUS6 & One card speaks at a time, only when asked: one REQUEST or ASSIGN outstanding; the controller times out after
+  5 frames. & bus.md 5.2 & T \texttt{enum}, \texttt{reset} & \stmet \\
+BUS7 & An 8-voice chord fits one frame. Per-voice records and notes ahead of controllers keep legato chord changes and
+  multi-part controllers inside the bus lead. & bus.md 5.3, 9.5 & T \texttt{load} & \stmet \\
+BUS8 & Enumeration of 8 slots and power-up to playable within \SI{3}{s} (P9): about \SI{1}{s} plus \SI{0.3}{s} per
+  empty slot. & F1, P9 & H (V3/V4) & \stdes{} (one card: 0.3--0.5\,s) \\
+\end{longtable}
+\endgroup
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Controller firmware}\label{sec:srsct}
+
+Status refers to \file{firmware/bench\_ctrl} where it implements the function; the backplane build does not exist yet.
+
+\begingroup\small\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright}p{0.9cm} >{\raggedright}p{7.5cm} >{\raggedright}p{1.5cm}
+  >{\raggedright}p{2.7cm} >{\raggedright\arraybackslash}p{2.6cm}@{}}
+\caption{Controller firmware requirements.}\label{tab:srsct}\\
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endfirsthead
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endhead
+\bottomrule\endfoot
+\multicolumn{5}{@{}l}{\textit{Frame engine and voice management}} \\
+CT1 & SYNC at \SI{1}{kHz} from the \SI{8}{MHz} crystal on TIM1 CH1 (PA8). At each edge: FRAME, then enumeration
+  packets, queued packets up to 95 bytes, refreshes, all in one DMA transfer that has started within
+  \SI{40}{\micro s} of the edge. SYNC jitter stays unchanged by USB traffic. & P1, P10, bus.md 3 & B (\texttt{usbtest.py jitter}: 0.6--0.9\,ns) & \stmet \\
+CT2 & At start-up: all slots held in reset through the 74HC595, then released slot by slot. ASSIGN and HELLO each
+  slot; a slot without HELLO within \SI{300}{ms} is empty. CONFIG and the patches go to all. The chip ID is mapped
+  to its slot. & F1, P9, backplane.md 3.5 & T \texttt{reset}; H (V3) & \stpart{} (one slot without NRST; the 595
+  path is not written) \\
+CT3 & Supervision: the controller polls STATUS. A card that disappears or resets is found and enumerated again;
+  a card that hangs is reset through NRST, or over SWIO if that fails. & bus.md 6 & T \texttt{reset} & \stpart{}
+  (periodic ASSIGN on the bench) \\
+CT4 & Voice allocation within a part's slot mask: a free voice, else the oldest released, else the oldest held.
+  PATCH\_SELECT goes in the NOTE\_ON's frame when a voice changes parts; PATCH\_DATA goes first if the patch is not
+  in the card's slots. & F6, midi.md 2 & T (to write) & \stpart{} (allocator over 8 voices, one patch) \\
+CT5 & Scheduling: every event is stamped with frame $a + L$, and notes go ahead of controllers. Queued controller
+  values of the same voice and ID are coalesced. An event that leaves after its frame is counted. & bus.md 3.2, 9.5
+  & T \texttt{load} & \stpart{} (no coalescing) \\
+CT6 & Refreshes: VOICE\_STATE of every voice within \SI{50}{ms}; the active patches round robin through PATCH\_DATA;
+  a refresh never overtakes a queued note. & bus.md 5.3 & T \texttt{repair} & \stpart{} (PATCH\_PRESET) \\
+\multicolumn{5}{@{}l}{\textit{MIDI and parts}} \\
+CT7 & A class-compliant USB-MIDI device (one cable each way) on the backplane's USB-C, which is USBD (PA11 / PA12).
+  Flow control by NAK: no message is lost. & F2 & T \texttt{usbtest.py all}; H (USBD) & \stpart{} (shown on USBFS
+  with a computer; USBD enumerated by the V203's own host) \\
+CT8 & USB host for class-compliant MIDI keyboards on USBFS (PB6 / PB7): power switch HOST\_EN, fault input
+  HOST\_FLT\_N. & F3 & T \texttt{hosttest.py}; B (development board: its USB-C is USBFS); H & \stpart{}
+  (self-loop: enumeration, MIDI to the card, detach; no real keyboard yet) \\
+CT9 & MIDI implementation of midi.md 3: notes and velocity; pitch bend; channel pressure; program change;
+  CC 1, 5, 7, 11, 64 (sustain), 65, 71--78; NRPN over all patch IDs; CC 120, 121, 123; MIDI clock, start and stop.
+  & F2, F6 & T (to write) & \stpart{} (notes, program change, bend, CC 1 / 7 / 11 / 71 / 74) \\
+CT10 & Up to 8 parts, each with: channel; key range; slot mask; mode (poly, mono, legato, unison, kit); patch;
+  volume; transpose; pan. Default setup: part 1 on channel 1, all voices, poly. & F6, F7 & T (to write) &
+  \stpart{} (one poly part, or one part per channel) \\
+CT11 & Kit mode: notes map to (patch, pitch), using up to 4 patches preloaded into the cards of the kit's mask. &
+  midi.md 2.1 & T (to write) & \stopen \\
+\multicolumn{5}{@{}l}{\textit{Configuration, storage and updates}} \\
+CT12 & Patch library of 64 programs (144 bytes each) and the setups, in the V203's flash with wear-levelled pages;
+  working copies in SRAM; an empty or corrupt store falls back to the built-in default. & F6, midi.md 1 & T (to
+  write) & \stopen \\
+CT13 & CDC command interface (text, one command per line): patches, setups, parts, card status, calibration,
+  firmware update, a bridge to one card's console. SysEx (ID 0x7D) offers the same patch and setup dumps; the
+  universal identity request is answered. & F4, midi.md 6 & T (to write) & \stpart{} (binary bench commands;
+  identity reply) \\
+CT14 & Card firmware update: an image is received over CDC and programmed into one card or all over that slot's SWIO
+  line (8 lines, PA2--PA7, PB12, PB13), then verified; the card is enumerated again. & F4 & B (Ardulink bridge on
+  PB13) & \stpart{} (bridge only; on-controller programming open) \\
+CT15 & Calibration: CALIBRATE per card, CAL\_DATA read back and stored by chip ID; sent back after a card has moved
+  slots. & F9, bus.md 6 & H & \stopen \\
+CT16 & Controller firmware update in the field without a programmer: the factory bootloader through BOOT0 (JP2) over
+  USB or USART1 (J6). & F4 & H (or the development board) & \stopen{} (a software jump was inconclusive) \\
+\multicolumn{5}{@{}l}{\textit{Options, resources and robustness}} \\
+CT17 & USB audio input (UAC1) of the mix through the ADC taps (PA0, PA1). & F10 & H & \stopen{} (option) \\
+CT18 & CLK\_OUT: \SI{24.000}{MHz} on TIM3 CH4 (PB1) for the cards' CLK\_IN, off by default. & spec 6 & H &
+  \stopen{} (option) \\
+CT19 & The USB D+ pull-up is enabled only while VBUS\_DET (PB15) sees a host. & controller.md 1 & H & \stopen \\
+CT20 & Resources: \SI{64}{KB} flash and \SI{20}{KB} SRAM, USB stacks included; at least \SI{2}{KB} of stack never
+  used (\emph{proposed}). & C3 & I (link map), B & \stmet{} for the bench build (\SI{20.5}{KB}, \SI{8.0}{KB}) \\
+CT21 & Robustness: a watchdog. After any controller reset the cards keep running muted until they are reset and
+  enumerated again; nothing depends on the cards staying in reset while the controller boots. & backplane.md 3.5 &
+  B; H & \stdes \\
+CT22 & Effects slot: an effects card in slot~1 is recognised at enumeration (HELLO capability bit), excluded from
+  voice allocation, and receives its parameters as timed messages; MIDI CC~91 sets the reverb level. &
+  Section~\ref{sec:fxslot} & H (with an effects card) & \stopen{} (backplane prepared) \\
+\end{longtable}
+\endgroup
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Tools and non-functional requirements}\label{sec:srstl}
+
+\begingroup\small\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright}p{0.9cm} >{\raggedright}p{7.5cm} >{\raggedright}p{1.5cm}
+  >{\raggedright}p{2.7cm} >{\raggedright\arraybackslash}p{2.6cm}@{}}
+\caption{Tools and non-functional requirements.}\label{tab:srstl}\\
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endfirsthead
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endhead
+\bottomrule\endfoot
+TL1 & A bench test suite runs unattended against one card and up to 7 virtual voices: \texttt{bustest.py all} (17
+  checks), \texttt{stress}, \texttt{load}, \texttt{latency}, \texttt{counters}; \texttt{usbtest.py all}. & C5 & I
+  & \stmet \\
+TL2 & A host test compares the DAC renderer, compiled for x86, with a reference revision to the duty code; on the card,
+  a console command prints a hash of the same render. & CF11 & T \texttt{render\_test.py} & \stmet \\
+TL3 & Tables in the firmware (presets, CV laws, mode tables) are generated from the result files by
+  \file{gen\_tables.py}. The generator checks the invariants, among them that a patch's oscillator levels sum to at
+  most 1. & C5 & I & \stmet \\
+TL4 & Environment-specific settings (lab host, ports, programmer serials) live only in the gitignored
+  \file{tools/lab.conf}; the repository contains no host names, user names or local paths. & -- & I & \stmet \\
+NF1 & Bare metal on ch32fun: no RTOS, no dynamic memory, all buffers static; interrupt priorities and nesting set
+  explicitly. & C5 & I & \stmet \\
+NF2 & Builds with \texttt{make} in WSL (riscv64-unknown-elf-gcc); the build variants of Table~\ref{tab:sadbuild}
+  build without errors. & C5 & B & \stmet \\
+NF3 & Every timing-critical path has a measured budget and a counter visible over the bus or the console: tick run
+  time, render time and slack, missed halves, late events, stack low-water mark. & -- & T \texttt{counters} &
+  \stmet \\
+NF4 & Forward compatibility: HELLO carries the firmware version and capabilities; unknown message types and PARAM IDs
+  are ignored and counted, never fatal. & bus.md 4 & T \texttt{ctrl} & \stmet \\
+\end{longtable}
+\endgroup
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Software checks before the boards are ordered}\label{sec:srsorder}
+
+What has to hold before the PCBs are ordered is not the software's completeness. It is whether the boards fix
+anything the software cannot change later: which pin drives what, which timer and DMA channel serve it, and what the
+driver circuits need. Table~\ref{tab:srsorder} lists these checks; the four marked \emph{new} were done on
+20 October 2026, three of them on the bench V006.
+
+\begingroup\small\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright}p{5.4cm} >{\raggedright}p{4.6cm} >{\raggedright\arraybackslash}p{5.6cm}@{}}
+\caption{Hardware commitments the software depends on.}\label{tab:srsorder}\\
+\toprule
+Check & Fixed by the boards & Result \\
+\midrule\endfirsthead
+\toprule
+Check & Fixed by the boards & Result \\
+\midrule\endhead
+\bottomrule\endfoot
+\multicolumn{3}{@{}l}{\textit{Done}} \\
+Card pin map in the firmware (\file{board.h}) against the schematic netlist (\file{hw/voice.py}) & all 20 MCU pins
+  & agree pin for pin (inspection, \emph{new}) \\
+V006 reset pin default & no NRST series resistor or pull-down; 595 drives NRST push-pull & option byte USER = 0xF7:
+  RST\_MODE = 10b, PD7 is NRST with a \SI{12}{ms} filter, the factory default (reference manual 18.5; read from the
+  bench chip, \emph{new}) \\
+TIM1 remap 0010b on the V006: CV PWM pins & CV\_RES, CV\_CUT, VCA trim, CV\_VCA on PC0, PC7, PC6, PD3 & all four
+  pins toggle with a note held (GPIO input registers sampled, \emph{new}) \\
+TIM2 CH1 on PC5 beside the running DAC (pan) & PWM\_PAN on PC5 & PC5 toggles at the carrier with CH1 enabled by hand,
+  the DAC unaffected (\emph{new}); firmware still to write (CF14) \\
+ADC channel of the loopback & ADC\_AUDIO on PC4 & PC4 is ADC A2 (datasheet pin table); capture to be shown on a card
+  \\
+Bus pins of both MCUs & SYNC PA8 / PD4, BCAST PB10 / PD6, RETURN PB11 / PD5, SWIO PB13 / PD1 & bench, since
+  2026-10-19 (the backplane uses the same V203 pins; PB13 is SWIO\_8) \\
+DAC on TIM2 CH2 (PC2), DMA ch1 & PWM\_DAC & bench (carrier on PC2) \\
+USB device without an external pull-up (USBFS) & -- (the host port) & enumerates on the development board \\
+\multicolumn{3}{@{}l}{\textit{Recommended before ordering (a resistor and a wire on the bench)}} \\
+Return line open drain with the backplane's \SI{1}{k\ohm} pull-up: the default card build (no \texttt{BUS\_TX\_PP})
+  & R on RETURN (\SI{1}{k\ohm}), card TX open drain & \stopen: fit \SI{1}{k\ohm} from PB11 to 3.3\,V, build without
+  \texttt{BUS\_TX\_PP}, run \texttt{bustest.py all} \\
+NRST driven push-pull, as by the 74HC595 & U6 drives each slot's NRST directly & \stopen: wire a V203 GPIO to the
+  V006's NRST, reset and re-enumerate (\texttt{bustest.py reset} with NRST) \\
+\multicolumn{3}{@{}l}{\textit{Can follow the order (footprints or jumpers cover them)}} \\
+USBD (PA11 / PA12) enumeration and the internal D+ pull-up & the \SI{1.5}{k\ohm} footprint (not fitted) &
+  enumerated on the internal pull-up against the V203's own host (\emph{new}); a computer as the host still to try \\
+USBFS host pull-downs & two \SI{15}{k\ohm} footprints (not fitted) & internal, about 13--15\,k$\Omega$ (\emph{new}) \\
+Factory bootloader through BOOT0 & JP2, J6 (USART1) & USART1 and SWD remain if the bootloader's USB port is the
+  other one \\
+74HC595 at \SI{9}{MHz} and \SI{3.3}{V}; SPI1 remap & U6 on SPI1 remap 1 & the clock can be lowered in firmware \\
+CLK\_IN \SI{24}{MHz}, SPI flash, MIDI DIN & not fitted & options \\
+\end{longtable}
+\endgroup
+
+\paragraph{Assessment.} Nothing found so far blocks the order. The two recommended checks take one resistor and one
+wire on the bench and exercise the production configuration of the return line and the reset path. Both have so
+far only run in bench variants. The firmware still to write (pan, PATCH\_DATA and the full parameter set, the
+\SI{5}{V} calibration, the backplane controller) depends on these pins and circuits, but none of it changes them.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Decisions for review}\label{sec:srsdec}
+
+\begin{enumerate}
+  \item \textbf{Proposed margins.} CF12 (50 carrier periods of slack), CF21 and CT20 (RAM, stack, flash limits) are
+    proposals and come from no system requirement.
+  \item \textbf{Pan ownership.} CF14 puts the pan law (constant power, the CV\_VCA cap) in the card and the position
+    in a per-voice PARAM. The alternative is to let the controller compute both and send raw values.
+  \item \textbf{Parameter coverage for the first build.} Is the full patch set of midi.md 4 needed (CF15), or the
+    subset of the built-in presets plus the most used IDs, with PATCH\_PRESET kept?
+  \item \textbf{CDC format.} CT13 asks for text commands (as the board~1 console). The bench uses binary commands,
+    which the test suite relies on. Keep both?
+  \item \textbf{Storage.} CT12 uses the V203's internal flash (about \SI{12}{KB} of 64). The SPI flash footprint (not
+    fitted) would hold more patches or samples later.
+  \item \textbf{Controller updates.} If the factory bootloader does not run on the USB-C port (CT16), is USART1 (J6)
+    plus SWD enough for field updates, or should the controller get an own USB update path (a DFU-like mode in its
+    firmware)?
+  \item \textbf{Board~1.} Keep board~1 (the rev 0.1 test bed, V003 pin functions plus its DCO) in the code base, or
+    freeze it at the current revision?
+\end{enumerate}

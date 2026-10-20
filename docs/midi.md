@@ -68,6 +68,7 @@ Received on each part's channel:
 | CC 72 / 73 / 75 | amplitude release / attack / decay (relative) |
 | CC 76 / 77 / 78 | LFO rate / vibrato depth / LFO delay |
 | CC 99 / 98, 6 / 38 | NRPN: any patch parameter by ID (MSB 0, LSB = ID), 14-bit data entry over the parameter's full range |
+| CC 91 | *[2026-10-20]* reverb level, if an effects card sits in slot 1 (backplane.md 5.1) |
 | CC 120 / 121 / 123 | all sound off / reset controllers / all notes off |
 | Poly pressure | ignored (later: per-voice modulation, MPE) |
 

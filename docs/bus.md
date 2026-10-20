@@ -286,6 +286,14 @@ until "busy" clears → reads CAL_DATA blocks and stores them by chip ID. The ca
   20 s; the three-oscillator patch misses 33–49 (the wheel's vibrato changes its `V_n` every tick; none without
   traffic), and a switch to the modal patch occasionally costs one half. Open: a cheaper oscillator render or CV
   PWM interrupt, or at most two oscillators per voice.
+- *[2026-10-20]* After the render rewrite (9.5, end): CPU load 8 % without a DAC patch, 25 % with two oscillators,
+  23 % with three (moog_bass; moog_open 21 %), 32–43 % with the modal patch and two ringing banks (was 8, 82, 91, 88,
+  59–79 % in the same probe: a held note, refresh traffic). The render takes 6.5–12 k cycles of the 65.5 k of a
+  half with oscillators and 21 k with the modal patch; the CV dithering no longer interrupts. The stress test with
+  three oscillators misses nothing (slack ≥ 157 periods). The half "missed" at a patch change was a counting
+  artefact: a PATCH_SELECT tick that stops or restarts the DAC preempts a render, which then checked its end against
+  the new DMA ring; such a render is no longer counted (the mixed stress test: 0 in 8 runs, before 1 in about every
+  other run; slack ≥ 96 periods, the modal PATCH_SELECT tick 27 k cycles).
 
 ### 9.4 Bench deviations
 
@@ -350,6 +358,47 @@ The tick without replies: 7 k cycles without traffic, 9 k under this load. Free 
 As one of 8 poly voices (14 bytes per frame) lead_dac and kettle miss nothing, moog_bass 18–372 halves in 10 s. A fully
 decoded byte still costs 100–125 cycles, a foreign packet 300–450.
 
+*[2026-10-20]* **Render rewrite.** Instruction costs measured on the V006 from RAM: ALU and `mul` 1 cycle, `mulh(u)`
+1–1.25, `lw` 2, `sw` 3, a taken branch 3. The oscillators now render together in runs between their polyBLEP regions
+(there a saw is `(ph >> 16) l`, a pulse a constant): one store per sample instead of a load and a store per
+oscillator, the run loops and the modal free-ringing loop in assembly (the compiler reloaded values from the stack
+with RV32E's 16 registers); the error feedback keeps the error + ½ code, so one compare replaces the four clamps; the
+modal resonators are interleaved with alternating outputs (one store instead of two); the samples within one step of
+a wrap take the full polyBLEP (in RAM). The CV dithering moved from the 46.875 kHz TIM1 interrupt to a DMA burst at
+each TIM1 update (DMA1 ch2), the render interrupt lost its three software divisions, the COUNTERS reply its stack
+scan (the main loop keeps the value). Output bit-exact with the old renderer (firmware/voice/test/render_test.py, and
+the card's render-check hashes). Render cycles per buffer half (console `bench`, interrupts off), step by step:
+
+| Step | moog_bass (3 osc), note 48 | lead_dac (2 osc), note 48 | kettle (modal, 2 banks) |
+|---|---|---|---|
+| before | 44.2 k (at note 84 too) | 37.1 k | 38.2 k |
+| runs between the polyBLEP regions, error feedback with one compare, block buffer off the stack | 16.8 k | 13.0 k | 35.5 k |
+| run loops unrolled by four | 14.3 k | 11.1 k | |
+| `-O2` for the render functions (cold paths out of line) | 12.8 k | 9.0 k | |
+| oscillators fused, one store per sample, run loops in assembly | 8.3 k | 7.1 k | |
+| edge samples in RAM, runs end exactly at a region | 8.0–9.0 k (note 84: 11.9 k) | 6.7–7.5 k (9.6 k) | |
+| resonators interleaved, alternating outputs; interpolation by two | | | 22.9 k |
+| free ringing in assembly, `-Os` | | | 20.7 k |
+
+Without a note the oscillator render takes 1.8 k (16.3 k). Not in the table: the TIM1 interrupt took about 7 k cycles
+of every half (64 interrupts of about 110 cycles, from its instructions and the costs above), the divisions about
+1.5 k. Under load (10 s each, the card holds a note; missed halves, fill_max in cycles including the preempting ticks,
+slack_min in periods; before → after):
+
+| Patch | No traffic | Foreign traffic (71 B/frame) | One of 8 poly voices | Stress 20 s (`--progs 17`) |
+|---|---|---|---|---|
+| lead_dac (2 osc) | 0, 59.9 k, 22 → 0, 15.7–20.7 k, 175–195 | 0, 65.5 k, 12 → 0, 18.4–24.1 k, 162–184 | 0, 58.6 k, 23 → 0, 19.8–23.7 k, 164–179 | |
+| kettle (modal) | 0, 42.8 k, 85 → 0, 23.1–26.0 k, 150–162 | 0, 46.2 k, 71 → 0, 23.4–27.4 k, 145–161 | 1, 64.7 k, 16 → 0, 35.3–39.2 k, 99–114 | |
+| moog_bass (3 osc) | 1, 65.5 k, 4 → 0, 18.4–23.5 k, 164–184 | 1 796, 65.5 k, 1 → 0, 24.0–26.2 k, 154–162 | 33, 65.5 k, 1 → 0, 21.7–25.3 k, 157–171 | 188, 65.5 k, 1 → 0, 22.8–25.3 k, 157–167 |
+
+(after: three runs.) Free stack 156 → 656–680 bytes under all of it (about 340 with the console): the console's command function is no
+longer inlined into `main`, the oscillators' block buffer and the mallet table share `hw_scratch` after the DAC ring,
+the TIM1 interrupt's code left RAM, and `hw_scratch` shrank from 3584 to 2560 bytes (console captures: 1280 samples)
+to make room for the 2.3 KB of render code in RAM. A three-oscillator mode restricted to one waveform would not pay:
+three saws take 12.1 k per half on the general path (a dedicated loop about 8 k), three pulses 7.1 k (15.3 k at note 84,
+two edges each), the existing three-oscillator presets (2 saws and a pulse an octave down) 8–9 k, and all of them
+(programs 17, 18, 19, 24) would change sound.
+
 **Latency** (scope, the SYNC edge of the execution frame to the note on PC2, 10 notes):
 
 | Load | Mean | Spread |
@@ -394,6 +443,7 @@ time), the bus saturates at 183 bytes per frame. But a burst now reaches the car
    7–8 ms latency.
 4. 1 Mbaud until the cards parse outside the tick (8, open points).
 5. Three-oscillator patches stay outside the CPU budget with the bus (4–11 periods of slack without traffic): a
-   cheaper render or two oscillators per voice (9.3).
+   cheaper render or two oscillators per voice (9.3). *[2026-10-20]* Done: with the render rewrite they keep at
+   least 154 periods of slack under all the load above (end of 9.5).
 6. The refresh rates can stay: 1.5 bytes per frame for 8 voices; a whole patch per part and second as PATCH_DATA about
    1.5 more.

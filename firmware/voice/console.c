@@ -11,8 +11,9 @@
  *  trim <0...255>           VCA offset trim DAC
  *  leds <hex>               the 16 LEDs of the 74HC595 chain
  *  dac [clear]              DAC mode, DMA ring counter twice 100 us apart, render and control-tick statistics
- *  bench <0|1> [n]          CPU cycles of the loaded DSP patch per carrier period over n periods (default one
- *                           buffer half), interrupts off (DAC mode off)
+ *  bench <0|1> [n] [midi]   CPU cycles of the loaded DSP patch per carrier period over n periods (default one
+ *                           buffer half) at a note (default 48), interrupts off (also in DAC mode)
+ *  check <patch>            render check: hash of a fixed render of DSP patch 1... (dsp_check.h, test/render_test.py)
  *  cap <n> [us]             capture n loopback samples (PD5) every us microseconds, hex dump
  *  adc <ch>                 mean / min / max of 64 conversions of ADC channel ch (diagnostics)
  *  latch <0|1>              hold the 595 latch line PD4 low / high (diagnostics; board 1)
@@ -30,6 +31,9 @@
 #include "synth.h"
 #include "dsp.h"
 #include "bus.h"
+#if defined(CH32V006)
+#include "dsp_check.h"
+#endif
 
 #define FW_VERSION "0.2"
 
@@ -92,7 +96,9 @@ uint32_t stack_free(void);
 static uint8_t trim_dac = 128;                      /* VCA offset trim (74HC595 #3) */
 static uint16_t leds;
 
-static void run(const char *s)
+/* [2026-10-20] noinline: its locals (about 170 bytes) are on the stack only while a command runs, not in main's frame
+   all the time (the render and the tick nest on top of it) */
+static __attribute__((noinline)) void run(const char *s)
 {
 	const char *r;
 	if (starts(s, "id", &r)) {
@@ -164,27 +170,31 @@ static void run(const char *s)
 		       st.fill_max, st.slack_min);
 		printf("tick_lat_max %lu tick_lat_dac_max %lu ticks_in_render %lu tick_run_max %lu\n", lm, ld, nd, rm);
 #if defined(CH32V006)
-	} else if (starts(s, "bench", &r)) {              /* bench <0|1> [n]: n carrier periods (default one buffer
+	} else if (starts(s, "bench", &r)) {              /* bench <0|1> [n] [midi]: n carrier periods (default one buffer
 		                                                 half) of the loaded DSP patch with interrupts off
-		                                                 (oscillators silent / at C3) */
-		if (hw_dac_active()) {
-			printf("busy: DAC mode on\n");
-		} else {
-			dsp_pitch(48 << 8, parse_int(&r));
-			dsp_commit(0);
-			uint16_t arr, half;
-			dsp_carrier(&arr, &half);
-			if (*r) {
-				int n = parse_int(&r);
-				half = n < 1 ? 1 : n > HW_SCRATCH / DAC_BPP ? HW_SCRATCH / DAC_BPP : n;
-			}
-			__disable_irq();
-			uint32_t t0 = SysTick->CNT;
-			dsp_fill((uint8_t *)hw_scratch, half, t0);
-			uint32_t c = SysTick->CNT - t0;
-			__enable_irq();
-			printf("bench %u periods %lu cycles, %lu per period\n", half, c, c / half);
+		                                                 (oscillators silent / at the note, default C3) */
+		int gate = parse_int(&r), n = *r ? parse_int(&r) : 0, note = *r ? parse_int(&r) : 48;
+		uint16_t arr, half;
+		dsp_carrier(&arr, &half);
+		if (n) {                                    /* [2026-10-20] after the ring and the renderer's buffer, so it */
+			int max = (HW_SCRATCH - HW_SCRATCH_DSP) / DAC_BPP;      /* also runs in DAC mode (a ring half or */
+			half = n < 1 ? 1 : n > max ? max : n;   /* two play twice meanwhile: an underrun) */
 		}
+		__disable_irq();
+		dsp_pitch(note << 8, gate);
+		dsp_commit(0);
+		uint32_t t0 = SysTick->CNT;
+		dsp_fill((uint8_t *)hw_scratch + HW_SCRATCH_DSP, half, t0);
+		uint32_t c = SysTick->CNT - t0;
+		__enable_irq();
+		printf("bench %u periods %lu cycles, %lu per period\n", half, c, c / half);
+	} else if (starts(s, "check", &r)) {              /* check <patch>: the render check (dsp_check.h), interrupts
+		                                                 off; test/render_test.py prints the host's hashes */
+		int p = parse_int(&r);
+		__disable_irq();
+		uint32_t h = dsp_check(p, (uint8_t *)hw_scratch + HW_SCRATCH_DSP);
+		__enable_irq();
+		printf("check %d %08lx\n", p, h);
 #endif
 	} else if (hw_dac_active() && (starts(s, "capcv", &r) || starts(s, "cap", &r) || starts(s, "adc", &r))) {
 		printf("busy: DAC mode uses the capture buffer\n");     /* hw_scratch is the DAC ring buffer now */

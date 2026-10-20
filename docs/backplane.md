@@ -1,11 +1,11 @@
 # TouchSynth Poly: backplane and controller PCB
 
-Status: 0.3 (2026-10-19), drawn in KiCad: `hw/backplane.py` (design), schematic (`docs/schematics/backplane.pdf`),
+Status: 0.3 (2026-10-19; 2026-10-20: the host port fitted, 4.2), drawn in KiCad: `hw/backplane.py` (design), schematic (`docs/schematics/backplane.pdf`),
 PCB (`hw/gen_pcb_bp.py`, 4 layers, routed and DRC clean, figures in `docs/figures/backplane_pcb/`). Changes from 0.1,
 decided by the user: board
 fixed at 100 × 100 mm; an SPI flash (not fitted) on SPI1; the 8 NRST lines through a 74HC595 on the same bus; the
 soft start not fitted (0 Ω bypass). Changes from 0.2 while drawing: the 595 drives NRST directly, no pull-downs or
-series resistors (user decision, 3.5); the host port not fitted, its switch a TPS2051C (4.2); VREF from the
+series resistors (user decision, 3.5); the host port not fitted (fitted again on 2026-10-20), its switch a TPS2051C (4.2); VREF from the
 controller's +3V3 through two RC stages, no CJ431 and no buffer (user proposal, 5); the per-slot input capacitors
 in 0805 (the +5 V rail passes between their pads); the 8 MHz crystal in the 2-pad 5032 package (C115962 is a 2-pad
 part); SYNC joins the bus riser between slots 6 and 7 (the east margin carries the +5 V trunk and both 47 µF);
@@ -261,8 +261,8 @@ PB0 and PB14 sit between ribbons (test pads, or local use only).
 
 | Source | Pins | Protection |
 |---|---|---|
-| USB-C cable (D± shorted to VBUS) | PA11, PA12 (FT) | SRV05-4A |
-| USB-A device | PB6, PB7 (FT) | SRV05-4A |
+| USB-C cable (D± shorted to VBUS) | PA11, PA12 (FT) | SRV05-4 |
+| USB-A device | PB6, PB7 (FT) | SRV05-4 |
 | VBUS sense | PB15 (FT) | 22k/33k: 3.0 V at 5.0 V, 3.3 V at 5.5 V |
 | USART1 header (a 5 V USB-serial adapter) | PA9, PA10 (FT) | none needed |
 | SWD header | PA13, PA14 (FT) | none needed |
@@ -312,7 +312,9 @@ flash up to 36 MHz. Faster flash traffic only scrambles the 595's shift register
 
 **Against the bench lesson "NRST open drain":** the 595 drives NRST push-pull. The card's NRST is an input with a
 pull-up, so that is fine as long as the card's PD7 is configured as NRST (option bytes; **unverified** for the V006
-default, set it when the card is programmed). Without the series resistor nothing limits the current if a card
+default, set it when the card is programmed). *[2026-10-20]* Verified: the reference manual (V1.4, 18.5) gives
+RST_MODE = 10b as the V006's reset value (PD7 is NRST, pin input ignored for 12 ms after enabling; 11b would make it
+a GPIO), and the bench V006 reads USER = 0xF7 (RST_MODE = 10b). A push-pull reset into a card is still to be shown. Without the series resistor nothing limits the current if a card
 drives its own NRST low (an internal reset on parts that do that, or PD7 left as a GPIO output): the 74HC595's
 output (about 25 mA short-circuit at 3.3 V) and the card pin survive it, and the firmware sees the card as missing.
 
@@ -323,7 +325,7 @@ output (about 25 mA short-circuit at 3.3 V) and the card pin survive it, and the
 | Ref | Part | Value / note |
 |---|---|---|
 | J1 | USB-C receptacle, 16 pins (USB 2.0), hand-soldered | CC1, CC2 each 5.1 kΩ to GND (separate resistors); SBU open; shield to GND |
-| U3 | SRV05-4A (C20615829), on D+, D−, CC1, CC2; VDD pin to VBUS_C | stock in the list snapshot: 128; alternative H5VU13U (C20615795, 2 lines) |
+| U3 | SRV05-4 (C7420376, Promotional Extended), on D+, D−, CC1, CC2; VDD pin to VBUS_C | 0.3: the SRV05-4A (C20615829) had 3 in stock on 2026-10-20; the SRV05-4 is the same package and pinout (42 528 in stock); alternative H5VU13U (C20615795, 2 lines) |
 | R | 22k / 33k (C31850 / C4216) | VBUS_C → PB15 (VBUS_DET): enables the D+ pull-up only with a computer present |
 | J4 | 2-pin 2.54 mm header, external 5 V (≥ 1 A adapter), hand-soldered | |
 | JP1 | 1×3 header + jumper: 1 = VBUS_C, 2 = +5V_SEL, 3 = +5V_EXT | no diode: the cards get the full 5 V; with EXT selected, VBUS only feeds VBUS_DET (self-powered) |
@@ -349,10 +351,11 @@ fitted, the LDO (on +5V_IN) starts before the cards.
 
 ### 4.2 Host port
 
-**Not fitted in the first build** (user decision, 2026-10-19: nothing to plug in yet). The whole port is drawn and
-routed, but all its parts are DNP: U4, J2, the ESD array U5, the capacitors, the HOST_EN pull-down, the fault
-pull-up and both LEDs. Fitting them later needs no board change. Until then the firmware keeps USBFS off, drives
-HOST_EN low and reads HOST_FLT_N (PB9) with its internal pull-up, if at all.
+**Fitted** (user decision, 2026-10-20; on 2026-10-19 it was left unfitted because there was nothing to plug in).
+JLCPCB assembles the ESD array U5, the capacitors, the HOST_EN pull-down, the fault pull-up and both LEDs (10 parts);
+U4 and J2 are hand-soldered. Only the two 15 kΩ pull-down options stay unfitted. Until the host firmware runs, the
+100 kΩ pull-down holds HOST_EN low, so the port stays unpowered; the firmware keeps USBFS off until then. The host
+driver is being developed on the development board, whose USB-C goes to the same USBFS pins (controller.md).
 
 No current-limited power switch is on the Basic or Promotional lists. The design uses the **TI TPS2051C**
 (SOT-23-5, fixed 0.5 A limit, enable active high, open-drain fault output; hand-soldered; KiCad symbol
@@ -362,18 +365,23 @@ VBUS_HOST with 2 × 47 µF (C96123). USB 2.0 asks for 120 µF at a host port; th
 (**risk**, usually harmless for a keyboard). HOST_EN (PB8, 100 kΩ pull-down) keeps the port off until the firmware
 has configured the USB device and decided the power budget. HOST_FLT_N (PB9) has a 10 kΩ pull-up and also drives
 the red fault LED (LED + 1 kΩ from +3V3 into the open-drain output). A yellow LED on VBUS_HOST (2.2 kΩ) shows that
-the port is powered. ESD: a second SRV05-4A on D+/D−, VDD pin on VBUS_HOST. U4 sits on the west side of J2, next to
+the port is powered. ESD: a second SRV05-4 on D+/D−, VDD pin on VBUS_HOST. U4 sits on the west side of J2, next to
 PB8/PB9.
 
 USBFS in host mode needs 15 kΩ pull-downs on D+/D−; whether the V203's USBFS has them inside is **unverified**:
-two 15 kΩ footprints, not fitted. Likewise the USBD D+ pull-up is expected to be internal and switchable
+two 15 kΩ footprints, not fitted. *[2026-10-20]* The USBFS host control register has a bit that disables internal
+D+/D− pull-downs (`USBOTG_UH_PD_DIS` in ch32fun's `ch32v20xhw.h`), so they exist. Measured on the development board
+(same pins): with them on, D+ / D− discharge twice as fast as through a PC's 15 kΩ pull-downs alone, so they are
+about 13–15 kΩ (12.8–24.5 kΩ over the USB tolerance of the reference). The 15 kΩ footprints stay unfitted. Likewise the USBD D+ pull-up is expected to be internal and switchable
 (**unverified**, reference manual); a 1.5 kΩ footprint from PA12 to +3V3, not fitted.
 *[2026-10-19]* Bench (controller.md 5): `EXTEN_USBD_PU_EN` does switch an internal pull-up on PA12 (PA12 rises in
 about 80 ns with the bit set and the transceiver powered, never without it), but its strength against a host could
 not be shown: the development board has no host on PA11 / PA12 (its USB-C goes to USBFS, PB6 / PB7), and the
 powered transceiver itself pulls PA12 low, so the pull-up loses once the 40 kΩ GPIO pull-down is added. Keep the
 1.5 kΩ footprint (fit it if the USBD build does not enumerate). USBFS's internal device pull-up works without an
-external resistor (the board has none and enumerates).
+external resistor (the board has none and enumerates). *[2026-10-20]* Shown: with PA11 / PA12 wired to the
+development board's own USBFS host (controller.md 6), the USBD device enumerated at full speed in 162 ms on its
+internal pull-up alone; the 1.5 kΩ stays unfitted (a computer as the host is still to try on the backplane).
 
 ### 4.3 Current budget
 
@@ -437,6 +445,52 @@ row, beyond slot 1, with at least 4 mm to slot 1's column. The jack sits on the 
 user decision): sockets → summing band → op-amps → line-out stage → jack, all at the west end, so the line-out run
 is about 10 mm; the ADC dividers sit at the MCU, so the long runs carry the op-amps' low-impedance outputs
 (electrically the same circuit as S12).
+
+### 5.1 Effects slot *[2026-10-20]*
+
+User decision: slot 1 can hold an **effects card** (reverb and similar, a separate future board in the card
+format) instead of a voice. The slot needs a send, the mix into the card; everything else it already has: +5 V,
+BCAST and SYNC (control, tempo), NRST, and its AUDIO_L / AUDIO_R / AUDIO_GND pins into the mixer.
+
+| Part | Fitted | Connection |
+|---|---|---|
+| R79 0 Ω | yes | CLK → slot 1 pin 15 (net FX_P15), as on every other slot |
+| R80 220 Ω | no | MIX_L → slot 1 pin 15: send L |
+| R81 0 Ω | yes | SWIO_1 → slot 1 pin 14 (net FX_P14) |
+| R82 220 Ω | no | MIX_R → slot 1 pin 14: send R |
+| R83 220 Ω | no | slot 1 pin 3 (FX_RET_L) → LO_L: loop-through return L |
+| R84 220 Ω | no | slot 1 pin 4 (FX_RET_R) → LO_R: loop-through return R |
+| R71 / R75 220 Ω | yes | MIX_L / MIX_R → LO_L / LO_R: the normal line-out feed (remove for loop-through) |
+
+Slot 1's pins 3 and 4 are not GND on the backplane (they are on every other slot): they carry the effects card's
+loop-through output. A voice card ties them to its ground, which does not matter, since in voice mode they only
+reach the not-fitted R83 / R84; slot 1 keeps GND on pins 8, 13 and 16 (and its AUDIO_GND on 6), plenty for a
+card's 10 mA, and the mixer reads every card against its own AUDIO_GND.
+
+Converting the slot: remove R79 and R81, fit R80 and R82 (the sends); for loop-through also remove R71 and R75 and
+fit R83 and R84. All values are on the board's BOM. The 220 Ω isolate
+the summing amps' outputs from the trace and the card's input capacitance. The sends carry the stereo mix at VREF
+(2.41 V DC); the effects card AC-couples them. A voice card in slot 1 does not care: its pin 15 goes to a not-fitted
+0 Ω link, and with the 0 Ω fitted it sees CLK and SWIO as before.
+
+Two ways to use it, chosen by the effects card's firmware:
+
+- **Mixing in:** the card returns the effect through its AUDIO pins into the mixer like a voice. The send then
+  contains the card's own return (one summing stage), so the effect partly feeds back into itself. That is stable
+  as long as the loop gain (mixer 0.357 × wet level × the effect's gain) stays below 1; the card measures it at
+  start-up, caps the wet level (at about 0.5 loop gain without any cancellation) and may cancel its own return
+  digitally (its delay is fixed: one codec clock for ADC and DAC); a limiter in the wet path guards against runaway.
+- **Loop-through:** the card mutes its AUDIO pins and drives dry plus effect on pins 3 / 4, which then feed the
+  line-out stage instead of the mixer (R83 / R84 fitted, R71 / R75 removed; the 10 µF after them AC-couples the
+  card). No loop at all, and the instrument keeps its one line out (user proposal). A voice card in a slot converted
+  for loop-through grounds the return: the line out stays silent, nothing is damaged.
+
+In either case slot 1 then holds no voice (7 voices at most), loses CLK (an option, off by default) and SWIO (the
+effects card, e.g. a CH32V307 with an ES8388 codec, is programmed over its own interface); the controller finds it
+by enumeration like a card (a capability bit in HELLO) and maps MIDI CC 91 (reverb level) to it. Layout: the four
+send positions sit west of socket 1 above the line-out stage, a few millimetres from MIX_L / MIX_R and from the
+socket's pins 14 and 15, the two return positions north of the jack beside them; slot 1's CLK branch in the socket
+field is left out (the CLK reaches pin 15 through R79).
 
 ## 6. Connectors and mechanics
 
@@ -739,7 +793,7 @@ H = hand-soldered, DNP = not fitted.
 | LDO | XC6206P332MR | C5446 | B | 1 |
 | | 1 µF 0603 | C15849 | B | 2 |
 | USB-C | 5.1 kΩ (CC1, CC2) | C23186 | B | 2 |
-| | SRV05-4A ESD | C20615829 | P | 1 |
+| | SRV05-4 ESD | C7420376 | P | 1 |
 | | 22 kΩ / 33 kΩ (VBUS_DET) | C31850 / C4216 | B | 1 + 1 |
 | | 0 Ω (D± series positions) | C21189 | B | 2 |
 | Power | SMAJ5.0A | C2925443 | P | 1 |
@@ -748,10 +802,10 @@ H = hand-soldered, DNP = not fitted.
 | | AO3401A, 1 MΩ, 220 kΩ, 100 nF (soft start) | C15127, C22935, C22961, C14663 | B | DNP (4) |
 | | 47 µF 10 V 1206 (+5V_SLOTS) | C96123 | B | 2 |
 | | 10 µF 0603 (one per socket) | C19702 | B | 8 |
-| Host port | 1 µF (U4 input), 2 × 47 µF 1206 (VBUS_HOST) | C15849, C96123 | B | DNP (3) |
-| | SRV05-4A ESD (host) | C20615829 | P | DNP (1) |
-| | 100 kΩ (HOST_EN), 10 kΩ (HOST_FLT_N pull-up) | C25803, C25804 | B | DNP (2) |
-| | LED yellow 0603 + 2.2 kΩ (host on), LED red 0603 + 1 kΩ (fault) | C89811, C4190, C2286, C21190 | P / B | DNP (4) |
+| Host port | 1 µF (U4 input), 2 × 47 µF 1206 (VBUS_HOST) | C15849, C96123 | B | 3 |
+| | SRV05-4 ESD (host) | C7420376 | P | 1 |
+| | 100 kΩ (HOST_EN), 10 kΩ (HOST_FLT_N pull-up) | C25803, C25804 | B | 2 |
+| | LED yellow 0603 + 2.2 kΩ (host on), LED red 0603 + 1 kΩ (fault) | C89811, C4190, C2286, C21190 | P / B | 4 |
 | Status | LED red 0603 + 2.2 kΩ (PWR), LED yellow 0603 + 1 kΩ (ACT) | C2286, C4190, C89811, C21190 | B / P | 4 |
 | Bus | 33 Ω (BCAST, SYNC, CLK) | C23140 | B | 3 |
 | | 1 kΩ (RETURN pull-up) | C21190 | B | 1 |
@@ -769,11 +823,11 @@ H = hand-soldered, DNP = not fitted.
 | | MCP6002T-I/SN | C7377 | P | 1 |
 | MIDI | 220 Ω, 1N4148W, LTV-817S, 1 kΩ; JP3 0 Ω or 2-pin jumper | C22962, C81598, C109227, C21190, C21189 | B | DNP (5) |
 
-**Totals (as drawn, 0.3):** 140 assembled SMD parts (85 of them the mixer: 56 per slot + 29 common, i.e. section
+**Totals (as drawn, 0.3; host port and effects slot 2026-10-20):** 152 assembled SMD parts (85 of them the mixer: 56 per slot + 29 common, i.e. section
 5's 30 without the hand-soldered jack; ADC dividers included), 36 distinct LCSC numbers, all Basic except four
-Promotional Extended (C7377, C2925443, C20615829, the
-yellow LED C89811), so no extended-part fees. Parts cost at the list prices: **about US$ 4.6 per board** (mixer
-2.7). Not fitted at first: the host port, the soft start, MIDI in, the flash, the USB pull-up / pull-down options. The
+Promotional Extended (C7377, C2925443, C7420376, the
+yellow LED C89811), so no extended-part fees. Parts cost at the list prices: **about US$ 5.3 per board** (mixer
+2.7; the host port 0.7). Not fitted at first: the soft start, MIDI in, the flash, the USB pull-up / pull-down options. The
 flash adds US$ 2.55 when a W25Q128JVSIQ is fitted (the BY25D16ASTIG is own stock).
 
 ### 8.2 Hand-soldered
@@ -781,7 +835,7 @@ flash adds US$ 2.55 when a W25Q128JVSIQ is fitted (the BY25D16ASTIG is own stock
 | Ref | Part | Note | Rough price (**unverified**) |
 |---|---|---|---|
 | U1 | CH32V203C8T6 | own stock | – |
-| U4 | TPS2051C (DBV, SOT-23-5) | not on the lists; not fitted at first | 0.3–1.0 |
+| U4 | TPS2051C (DBV, SOT-23-5) | not on the lists; fitted since 2026-10-20 | 0.3–1.0 |
 | U7 | BY25D16ASTIG (own stock) or W25Q128JVSIQ | not fitted at first; SOIC-8 208 mil (`SOIC-8_5.3x5.3mm_P1.27mm`) | – / 2.55 |
 | F1 | PTC 0.75 A, 1206/1812 | not on the lists | 0.1–0.2 |
 | J1 | USB-C 16-pin | | 0.3–0.6 |
@@ -801,14 +855,14 @@ quantity of a few.
 |---|---|---|
 | Inrush | without the soft start, about 1.8 A for a few ms at plug-in (8 × 230 mA through the cards' 22 Ω) | accept; if a port or hub drops out, remove R_BYP and fit Q1 + RC (values to simulate first, S14) |
 | USB unit load | about 115 mA before configuration (limit 100 mA); the cards' supply is not switched | accept (hosts rarely enforce it) |
-| 595 power-up | the cards run freely until the controller firmware resets them (no NRST pull-downs, by design); PD7 must be configured as NRST on every card (V006 option-byte default unverified) | card programming sets the reset function; bench-check a 595-driven reset on the first card |
+| 595 power-up | the cards run freely until the controller firmware resets them (no NRST pull-downs, by design); PD7 must be configured as NRST on every card (V006 option-byte default unverified; *[2026-10-20]* verified: RST_MODE = 10b by default, 3.5) | card programming sets the reset function; bench-check a 595-driven reset on the first card |
 | 595 speed at 3.3 V | about 13 MHz by interpolation (unverified) | write it at 9 MHz |
 | SPI remap 1 layout | SCK and MOSI must leave the corner between the USB pairs: two short hops under the USB-A pair | accepted (user decision); SPI1 default pins (PA5–PA7) would avoid the hops but take three SWIO pins |
 | Flash commands | BY25D16 command set and JEDEC ID (68 40 15) assumed, no datasheet read | read 0x9F at bring-up; firmware sizes the part from the ID |
 | MIDI on USART1 | MIDI in and the UART bootloader / debug RX share PA10 | JP3 not fitted by default; fit only for DIN MIDI |
-| Host switch | none on the lists | TPS2051C (fixed 0.5 A), hand-soldered; the port is not fitted in the first build |
+| Host switch | none on the lists | TPS2051C (fixed 0.5 A), hand-soldered; the port was not fitted at first, fitted since 2026-10-20 |
 | Host VBUS capacitance | 120 µF asked by USB 2.0; ceramics give about 40 µF | accept for keyboards; a 100 µF electrolytic footprint if trouble shows |
-| USB pull-ups | internal D+ pull-up of USBD and host pull-downs of USBFS unverified. *[2026-10-19]* USBD: the pull-up exists and is switchable (`EXTEN_USBD_PU_EN`), its strength against a host is not shown (no host on PA11 / PA12 on the bench board, 4.2); USBFS device pull-up: works without a resistor | DNP footprints (1.5 kΩ, 2 × 15 kΩ); enumerate the USBD build once (a cable to PA11 / PA12, `make USB=usbd`) before deciding the 1.5 kΩ |
+| USB pull-ups | internal D+ pull-up of USBD and host pull-downs of USBFS unverified. *[2026-10-19]* USBD: the pull-up exists and is switchable (`EXTEN_USBD_PU_EN`), its strength against a host is not shown (no host on PA11 / PA12 on the bench board, 4.2); USBFS device pull-up: works without a resistor. *[2026-10-20]* Both shown: USBD enumerates on its internal pull-up (against the V203's own USBFS host), the USBFS host pull-downs measure about 13–15 kΩ (4.2) | DNP footprints (1.5 kΩ, 2 × 15 kΩ); enumerate the USBD build once (a cable to PA11 / PA12, `make USB=usbd`) before deciding the 1.5 kΩ |
 | Bootloader port | datasheet 2.5.2: USART1 and USB, which USB not stated. *[2026-10-19]* a software jump into the system flash made a device appear on USBFS that did not take an address (inconclusive; not tested with BOOT0 = 1) | keep USART1 (J6) free (JP3 out); test with the BOOT0 jumper and wchisp on the development board |
 | 5 V on slot lines | SWIO 1–6 on non-FT pins; only a reversed card can stress them | keyed card guides, silkscreen; FT for SYNC, RETURN, SWIO 7/8 |
 | Socket geometry | card-plane offset (3.3 mm) and the KiCad rotation (180°) assume standard parts | check with the chosen header and socket before generating the board |
@@ -816,7 +870,7 @@ quantity of a few.
 | Summing band | the one long break in the bottom pour | justified in 7.4; alternative: top band with bridging resistors |
 | Pin budget | 34 of 37 used, 3 free (PC15, PB0, PB14), all hemmed in by ribbons | test pads; PC15 as a slow input if needed |
 | SWIO from the V203 | bit-banged one-wire timing at 144 MHz not yet shown (controller.md 4) | develop on the V203 board + board 1 first |
-| ESD part stock | SRV05-4A: 128 in the list snapshot; SRV05-4 (C7420376) only 2 | check at order time; H5VU13U (C20615795) as fallback |
+| ESD part stock | 2026-10-20: SRV05-4A (C20615829) 3 in stock, so the design uses the SRV05-4 (C7420376, 42 528) | check at order time; H5VU13U (C20615795) as fallback |
 | Crystal | C115962 has 80 Ω ESR, the datasheet's recommended maximum (Table 4-11); gain margin about 30 (estimate: start-up g_m 17 mA/V against about 0.6 mA/V needed) | fine; C12674 (HC-49S, 70 Ω) as alternative |
 | MIDI DIN | LTV-817S speed and CTR at 3.3 V | not fitted; test if wanted, or a 6N138 by hand |
 | Docs to update | done in 0.3 (spec, design, controller.md, midi.md now match this document) | - |

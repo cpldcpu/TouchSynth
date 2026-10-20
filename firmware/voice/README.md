@@ -39,11 +39,22 @@ make BOARD=card               # voice card on the backplane (return line open dr
 make                          # board 1 (CH32V006, TouchSynth rev 0.1 hardware)
 python3 check_pins.py         # firmware pins vs. schematic and chip remap tables
 python3 gen_tables.py         # regenerate tables.h after new simulation results / tunes
+python3 test/render_test.py   # [2026-10-20] the DAC renderer on the host against a reference revision (bit-exact)
 ```
 
 Flash a card through the bench controller's SWIO bridge: `minichlink -C ardulink -c <port> -w touchsynth.bin flash
 -b`; board 1 directly with a WCH-LinkE (`make flash`). Card build: about 54 KB of 62 KB flash, 7.3 KB of 8 KB static
 RAM; the stack keeps about 150-200 bytes free under bus load (bus.md 9.5): watch it when adding RAM or deep calls.
+*[2026-10-20]* Now about 55 KB flash and 7.0 KB static RAM (the shared `hw_scratch` 2560 bytes instead of 3584, about
+2.3 KB of renderer code in RAM, no TIM1 interrupt); 650-680 bytes of stack stay free under bus load and the stress
+test, about 340 with the console. Board 1: `hw_scratch` 3584 bytes (was 4096), 7.5 KB static RAM.
+
+`test/render_test.py` (WSL, x86 gcc) builds `dsp.c` and a reference revision's (`--ref`, default 9294199, before the
+render rewrite) with `test/render_test.c` and compares their duty codes in 197 scenarios (all DSP patches plus test
+patches with other pulse widths, levels, offsets and three saws; notes over the whole range, vibrato, glides with gate
+and phase resets, pitch lock, immediate states, modal strikes; `--dual` for the dual-PWM build); differences would be
+reported as maximum / rms error in codes and in-band level. It also prints the hash of the render check
+(`dsp_check.h`) per patch, which the card's console command `check <patch>` must print as well.
 
 ## Structure
 
@@ -51,10 +62,12 @@ RAM; the stack keeps about 150-200 bytes free under bus load (bus.md 9.5): watch
 |---|---|
 | `board.h` | pin maps (card: docs/spec.md 3.2; board 1: `hw/design.py` on master), timer remap codes per chip family |
 | `touchsynth.c` | main loop, control tick (SYNC edge on the card, SysTick on board 1), interrupt levels |
-| `hw.c` | TIM1 CV PWM with 2-bit dithering and noise LFSR (46.875 kHz interrupt), the PWM DAC (TIM2, DMA1 ch1, render interrupt), SYNC input and HSI trim, bus UART with RX / TX DMA (card) or MIDI UART (board 1), board 1's DCO, 74HC595 chain and loopback ADC |
+| `hw.c` | TIM1 CV PWM with 2-bit dithering and noise LFSR (46.875 kHz interrupt; *[2026-10-20]* card: the dithered compare values by DMA1 ch2, a TIM1 burst at every update, no interrupt), the PWM DAC (TIM2, DMA1 ch1, render interrupt), SYNC input and HSI trim, bus UART with RX / TX DMA (card) or MIDI UART (board 1), board 1's DCO, 74HC595 chain and loopback ADC |
 | `bus.c` | card: voice bus receiver, timed events, presentation delay, replies (docs/bus.md) |
 | `synth.c` | voice engine at 1 kHz: glide, LFO, envelopes, CV laws, percussion pitch envelope and wave switch, presets and patch slots, tune player (board 1) |
-| `dsp.c` | digital voices on the PWM DAC (up to 3 oscillators, noise, modal drums in fixed point; mirrors `sim/behav/dsp.py`) |
+| `dsp.c` | digital voices on the PWM DAC (up to 3 oscillators, noise, modal drums in fixed point; mirrors `sim/behav/dsp.py`); *[2026-10-20]* the oscillators render in runs between their polyBLEP regions, the hot loops partly in assembly (RV32E registers), bit-exact with the former loops |
+| `dsp_check.h` | *[2026-10-20]* the render check (console `check`, `test/render_test.py`) |
+| `test/` | *[2026-10-20]* host test of the renderer (`render_test.py`, `render_test.c`, a stand-in `ch32fun.h`) |
 | `console.c` | test console over SWIO (`minichlink -T`, on the bench through the bridge) |
 | `tables.h` | **generated** by `gen_tables.py` from `docs/results/*.csv`, `sim/behav/tunes.py` and `pieces.py` |
 
@@ -68,7 +81,10 @@ pulses), its CH3 compare requests DMA1 channel 1, which loads the duty from a ri
 one byte per period; the dual-PWM format 3 with the low byte on PC1 as an option, docs/spec.md 3.5). The DMA's
 half / full interrupt renders the half that has just played (`dsp_fill`) at the lowest interrupt level, so the
 control tick, the CV PWM and the UART preempt it. A render that ends late counts as an underrun (console `dac`,
-bus COUNTERS). CPU limits per patch type: docs/bus.md 9.5.
+bus COUNTERS). CPU limits per patch type: docs/bus.md 9.5. *[2026-10-20]* A buffer half now takes 8-12 k cycles to
+render with three oscillators (was 44 k), 6.5-10 k with two, 21 k for the modal patch with two ringing banks (38 k), of
+65.5 k; the V006's costs that shaped the code (measured, from RAM): ALU and `mul` 1 cycle, `mulh(u)` 1-1.25, `lw` 2,
+`sw` 3, a taken branch 3.
 
 ### Timer remaps
 
@@ -94,6 +110,7 @@ note on / off and program change on any channel (velocity >= 100 = accent). Wave
 
 `id`, `status`, `bus` (card), `sync` (SYNC timestamps), `hsi` (trim), `note <midi>`, `off`, `wave <mask> [pw]`,
 `preset <i>`, `tune <i>`, `cv <amp|cut|res|vca> <code>` (manual mode), `dco <midi>` (manual mode), `auto`,
-`trim <0..255>`, `leds <hex>`, `dac` (DAC state, DMA position, underruns, longest render), `bench`, `adc <ch>`,
+`trim <0..255>`, `leds <hex>`, `dac` (DAC state, DMA position, underruns, longest render), `bench <0|1> [n] [midi]`
+(render cycles with interrupts off, also in DAC mode), `check <patch>` (render check hash), `adc <ch>`,
 `cap <n> [us]` (loopback capture), `capcv <ch> <code> <n> [us]`, `wait <ms>`, `latch <0|1>`, `drive <port><pin>
 0|1|z`, `peek <hex address>`. See the header of `console.c`; `tools/synthtest.py` drives the console from a script.

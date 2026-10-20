@@ -12,7 +12,7 @@ PAPER = {}
 ROOT_GRID = (2, 130, 65, 115, 50, 58)                   # root page: 2 x 2 sheet symbols, titles wrapped
 # drawn as global labels like the cross-sheet nets around them, so the label stacks stay uniform: on the bus sheet
 # the bus nets at the slot sockets, on the MCU sheet the local nets at the controller and flash pins
-GLOBAL = {"SYNC", "BCAST", "CLK"} | {f"NRST_{k}" for k in range(1, D.SLOTS + 1)} | \
+GLOBAL = {"SYNC", "BCAST", "CLK", "FX_P14", "FX_P15", "FX_RET_L", "FX_RET_R"} | {f"NRST_{k}" for k in range(1, D.SLOTS + 1)} | \
     {"PC15", "PB0", "PB14", "LED_ACT", "BOOT0", "SPI_MISO", "FLASH_CS_N", "FLASH_WP_N", "FLASH_HOLD_N"}
 PART = {p.ref: p for p in D.PARTS}
 
@@ -530,11 +530,23 @@ def sheet_bus(sh):
         bus_row(sh, nets(_1=o, _2=n), x, y + 12.7 * (k + 1), o, n, tpnet=n if n != "CLK" else None)
     sh.text("33 R series at the driver; RETURN: the cards' TX are open drain", 20.32, 104.14, 1.27, False)
 
+    # ---- effects slot: slot 1 pins 15 / 14
+    sh.heading("Effects slot 1: pins 15 / 14 = CLK / SWIO_1 or the mix sends; pins 3 / 4 = loop-through return",
+               15, 109.22, 150)
+    fx = {p.pins["1"]: p.ref for p in D.PARTS if p.note and p.note.startswith("effects slot")}
+    for k, (src, dst) in enumerate((("CLK", "FX_P15"), ("MIX_L", "FX_P15"), ("SWIO_1", "FX_P14"),
+                                    ("MIX_R", "FX_P14"), ("FX_RET_L", "LO_L"), ("FX_RET_R", "LO_R"))):
+        bus_row(sh, fx[src], x, 119.38 + 7.62 * k, src, dst)
+    sh.text("effects card in slot 1: remove R79 / R81, fit R80 / R82 (the stereo mix to the card); loop-through:",
+            20.32, 162.56, 1.27, False)
+    sh.text("also remove the line-out 220 R from MIX_L / MIX_R (R71 / R75) and fit R83 / R84 (pins 3 / 4 to the line out)",
+            20.32, 166.37, 1.27, False)
+
     # ---- NRST shift register
     sh.heading("NRST: 74HC595 drives each card's NRST directly (outputs off at reset: the cards run freely)", 15,
-               152.4, 195)
+               175.26, 195)
     u6 = "U6"
-    xu, yu = 60.96, 195.58
+    xu, yu = 60.96, 218.44
     sh.place(u6, xu, yu, fields=(-17.78, 15.24))
     xl = xu - 17.78                                               # input labels
     for pin, net in ((14, "SPI_MOSI"), (11, "SPI_SCK"), (12, "SR_LATCH"), (13, "SR_OE_N")):
@@ -562,10 +574,10 @@ def sheet_bus(sh):
     sh.text("the firmware resets the cards through the 595 or over SWIO", 81.28, yu + 26.67, 1.27, False)
 
     # ---- SWIO pull-ups
-    sh.heading("SWIO pull-ups (1 k each: the one-wire protocol samples 0.6 us after an edge)", 205.74, 152.4, W)
+    sh.heading("SWIO pull-ups (1 k each: the one-wire protocol samples 0.6 us after an edge)", 205.74, 175.26, W)
     for k, (a, rn) in enumerate(((1, "RN1"), (5, "RN2"))):
         x0 = 228.6 + k * 50.8
-        y0 = 182.88
+        y0 = 205.74
         left, right = pack(sh, rn, x0, y0, fields="below")
         xg = left[0][0] - U
         for lp in left:
@@ -581,7 +593,8 @@ def sheet_bus(sh):
         j = f"J{10 + k}"
         c = note(f"slot {k + 1} supply")
         socket(sh, j, c, 182.88 + (k % 4) * 60.96, 60.96 + (k // 4) * 55.88)
-    sh.text("pins 1/2 +5V, 3/4/8/13/16 GND; 5, 6, 7: the card's AUDIO_L, AUDIO_GND, AUDIO_R", 165.1, 140.97, 1.27,
+    sh.text("pins 1/2 +5V, 3/4/8/13/16 GND (slot 1: 3/4 the effects return); 5, 6, 7: the card's AUDIO_L, "
+            "AUDIO_GND, AUDIO_R", 165.1, 140.97, 1.27,
             False)
 
 

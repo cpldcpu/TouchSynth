@@ -129,6 +129,8 @@ def main():
             return 0
         if d["kind"] == "osc":                                  # oscillators: wave, level Q15, offset 1/256 semitone
             first = len(dsp_oscs)
+            # [2026-10-20] dsp.c's oscillator sum carries an offset of 2^30: the levels may add up to 1 at most
+            assert sum(abs(round(lvl * 32767)) for _, lvl, _ in d["osc"]) <= 32767, f"levels > 1: {d['osc']}"
             for wave, lvl, semis in d["osc"]:
                 dsp_oscs.append(({"saw": 0, "pulse": 1}[wave], round(lvl * 32767), round(semis * 256)))
             dsp_patches.append((first, len(d["osc"]), round(d.get("pw", 0.5) * 255), 0, 0, 1))

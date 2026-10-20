@@ -58,7 +58,7 @@ connectors hand-soldered.
 
 | Block | Design | Against rev 0.1 |
 |---|---|---|
-| Oscillators | firmware: up to 3 saw / pulse oscillators (polyBLEP), modal drums, noise; 184 cycles per sample for 3 oscillators (board 1) | replaces DCO, sub, pulse, noise GPIOs |
+| Oscillators | firmware: up to 3 saw / pulse oscillators (polyBLEP), modal drums, noise; 184 cycles per sample for 3 oscillators (board 1); *[2026-10-20]* 31–47 after the render rewrite (bench card, bus.md 9.5) | replaces DCO, sub, pulse, noise GPIOs |
 | PWM DAC | TIM2 CH2, 187.5 kHz, 7 bit, error feedback (dsp.c); option: dual PWM with TIM2 CH4 as low byte (into the filter input through 1M + 330k = 1.33 MΩ next to the filter's 11k, calibrated in firmware, section 3.5) on the same carrier | was the pulse output |
 | Reconstruction filter | unity-gain 2-pole Sallen-Key (Butterworth), MCP6002 half: 11k / 11k, C1 2 × 330 pF (feedback), C2 330 pF, all C0G (the C0G values on the JLCPCB lists near this range are 100 pF, 330 pF and 2.2 nF), fc 31 kHz. S11 (10k, 750 pF, 375 pF, 30 kHz): the 187.5 kHz carrier at −74 dB re full scale at the line out (without: −42 dB), droop 0.04 dB at 10 kHz, 0.8 dB at 20 kHz. The dual-PWM option runs on the same 187.5 kHz carrier and uses the same filter. Fixed cutoff, not voltage-controlled: the firmware shapes everything below Nyquist, the filter only removes carrier and images | new (rev 0.1 earmark: carrier crosstalk) |
 | Mixer into the ladder | the filtered DAC (0–3.3 V full scale) through 240 kΩ: the drive of rev 0.1's saw (2 Vpp through 150 kΩ), S11 (on board 1 the DAC came through 470 kΩ, 3–10 dB less signal-to-noise) | |
@@ -148,7 +148,7 @@ period. The dual split is high = v >> 8, low = round((v & 255) × k / 256), one 
 dependency: its pulses are symmetric only if the first request falls on a bottom update, which the current code
 reaches by chance (more than 128 cycles between CEN and UDE); waiting for CTLR1.DIR = 1 before UDE fixes it. The
 voice firmware uses format 4 (dual: format 3); in its build the 3 oscillators take 175 cycles per period (dual PWM:
-141, its split has no error feedback). Start sequence (hw_dac_start): TIM2 reset through RCC, configured while
+141, its split has no error feedback; *[2026-10-20]* after the render rewrite 31–47 cycles per period, bus.md 9.5). Start sequence (hw_dac_start): TIM2 reset through RCC, configured while
 stopped, preloads loaded with UG, flags cleared; the DMA channel armed and CC3DE set with the counter at 0; CEN
 last. On board 1, 1000 starts (format 4) and 470 (format 3), after DCO mode, an ADC conversion or a running DAC: no
 transfer before the first compare, exactly one entry at the first request, read-back exact over 2.0 M and 0.96 M
@@ -170,7 +170,10 @@ format 3 burst is complete by CNT 82 (request at 64, top at 128).
 | 13 | GND | 14 | SWIO |
 | 15 | CLK_IN (option) | 16 | GND |
 
-All logic at 3.3 V (both MCUs).
+All logic at 3.3 V (both MCUs). *[2026-10-20]* On the backplane, slot 1's pins 15 and 14 can carry the stereo mix
+(send L / R, through 220 Ω) instead of CLK and SWIO, and its pins 3 / 4 are the effects card's loop-through
+return instead of GND, for an effects card in that slot (backplane.md 5.1); a voice card ignores pin 15 (not-fitted
+link), needs SWIO only for programming, and grounds pins 3 / 4 harmlessly.
 
 **Programming header**, 1×3 (card top, left, above the MCU): +5 V, SWIO, GND, the rev 0.1 order. The WCH-LinkE's 5 V
 powers the whole

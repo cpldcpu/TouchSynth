@@ -149,7 +149,7 @@ static void reply_status(void)
 }
 
 extern volatile uint32_t tick_run_max, tick_core_max;
-uint32_t stack_free(void);
+extern volatile uint32_t stack_free_last;           /* touchsynth.c */
 
 /* parser load (COUNTERS extension): cycles per tick (mean over 256 ticks, longest; replies not included), most bytes
    in one tick, packets for other cards */
@@ -171,7 +171,7 @@ static void reply_counters(int clear)                /* extension (bus.md 5.2): 
 		put16(p + n, s[i]);
 	put16(p + n, bus.frame); n += 2;
 	put16(p + n, tick_run_max > 0xFFFF ? 0xFFFF : tick_run_max); n += 2;
-	put16(p + n, stack_free()); n += 2;
+	put16(p + n, stack_free_last); n += 2;
 	p[n++] = synth_gate();                          /* voice state: gate, preset, active slot, D, pitch */
 	p[n++] = synth_preset_index();
 	p[n++] = bus.slot;

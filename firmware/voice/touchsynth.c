@@ -1,7 +1,8 @@
 /* TouchSynth Poly voice firmware (from TouchSynth firmware 0.1), CH32V006 on board 1 (ch32fun)
  *
  * Timing (interrupt levels: all at the high preemption level except the DAC render, which everything preempts):
- *   TIM1 update  46.875 kHz  dithered CV PWM (4 channels), noise LFSR     (hw.c)
+ *   TIM1 update  46.875 kHz  dithered CV PWM (4 channels), noise LFSR     (hw.c; [2026-10-20] card: no interrupt,
+ *                            the dithered compare values come by DMA1 ch2)
  *   TIM2 update  = pitch     DCO reset / pulse, sub-oscillator toggle     (hw.c)
  *   control tick 1 kHz       voice bus (card), envelopes, LFO, glide, CV laws, tune player (bus.c, synth.c)
  *                            card: the SYNC edge (EXTI4, PD4), SysTick only while SYNC is missing; board 1: SysTick
@@ -125,6 +126,10 @@ uint32_t stack_free(void)                           /* bytes never used by the s
 	return (uint32_t)(p - _ebss) * 4;
 }
 
+volatile uint32_t stack_free_last;                  /* [2026-10-20] the main loop's latest stack_free(), for the bus
+                                                       COUNTERS: with 1 KB free the scan takes about 5 k cycles,
+                                                       which the reply in the tick added to a render's preemption */
+
 int main(void)
 {
 	SystemInit();
@@ -150,5 +155,6 @@ int main(void)
 		midi_poll();                                /* the card's bus runs in the control tick (bus.c) */
 #endif
 		console_poll();
+		stack_free_last = stack_free();
 	}
 }

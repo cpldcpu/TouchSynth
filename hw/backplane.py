@@ -23,6 +23,7 @@ FLAG_SHEETS = {"power": ("GND", "VBUS_C", "+5V_EXT", "+5V_IN", "+5V"),   # PWR_F
 FLAGS = sum(FLAG_SHEETS.values(), ())
 LAYOUTS = "layouts_backplane"                   # hand-drawn sheet layouts (power, mcu, bus, mixer)
 SLOTS = 8
+FX_SLOT = 1                    # the effects slot (pins 15 / 14 switchable to the mix sends, end of file)
 
 SHEETS = OrderedDict([
     ("power", "Power entry, 3.3 V, soft start (option), USB-C device port, USB-A host port"),
@@ -177,9 +178,9 @@ add("J", "Connector:USB_C_Receptacle_USB2.0_16P", "USB-C", FP["USBC"],
      "A8": "NC_SBU1", "B8": "NC_SBU2", "SH": "GND"}, ref="J1", bom=False, note="GCT USB4105, hand-soldered")
 R(None, "5.1k", "CC1", "GND", note="sink: CC1")
 R(None, "5.1k", "CC2", "GND", note="sink: CC2")
-add("U", "Power_Protection:SRV05-4", "SRV05-4A", FP["SOT236"],
-    {1: "USBC_DM", 3: "USBC_DP", 4: "CC1", 6: "CC2", 5: "VBUS_C", 2: "GND"}, ref="U3", lcsc="C20615829",
-    note="ESD on D-, D+, CC1, CC2 (stock low at times: H5VU13U C20615795 as fallback)")
+add("U", "Power_Protection:SRV05-4", "SRV05-4", FP["SOT236"],
+    {1: "USBC_DM", 3: "USBC_DP", 4: "CC1", 6: "CC2", 5: "VBUS_C", 2: "GND"}, ref="U3", lcsc="C7420376",
+    note="ESD on D-, D+, CC1, CC2 (SRV05-4A C20615829 was nearly out of stock on 2026-10-20)")
 R(None, "0", "USBC_DM", "USBD_DM", note="D- series position")
 R(None, "0", "USBC_DP", "USBD_DP", note="D+ series position")
 R(None, "1.5k", "USBD_DP", "+3V3", dnp=True, note="D+ pull-up option (the USBD pull-up is expected inside)")
@@ -187,7 +188,7 @@ R(None, "22k", "VBUS_C", "VBUS_DET", note="VBUS sense: 3.0 V at 5.0 V")
 R(None, "33k", "VBUS_DET", "GND", note="VBUS sense divider")
 
 group("USB-A host port (USBFS: class-compliant MIDI keyboards), 0.5 A switch")
-HOST = dict(dnp=True)          # host port not fitted for now (user decision): footprints only, fit when needed
+HOST = dict()                  # host port fitted (user decision 2026-10-20; 2026-10-19: not fitted); U4, J2 by hand
 add("U", "Power_Management:TPS2051CDBV", "TPS2051C", FP["SOT235"],
     {5: "+5V_IN", 1: "VBUS_HOST", 2: "GND", 4: "HOST_EN", 3: "HOST_FLT_N"}, ref="U4", bom=False, **HOST,
     note="0.5 A current-limited switch, enable active high, open-drain fault; hand-soldered: not on the lists")
@@ -202,8 +203,8 @@ R(None, "2.2k", "VBUS_HOST", "LED_HOST_A", note="host power LED series", **HOST)
 LED("yellow", "LED_HOST_A", "GND", "host port powered", **HOST)
 add("J", "Connector:USB_A", "USB-A", FP["USBA"], {1: "VBUS_HOST", 2: "USBH_DM", 3: "USBH_DP", 4: "GND", "SH": "GND"},
     ref="J2", bom=False, **HOST, note="right-angle THT receptacle, hand-soldered")
-add("U", "Power_Protection:SRV05-4", "SRV05-4A", FP["SOT236"],
-    {1: "USBH_DM", 3: "USBH_DP", 4: "NC_ESD3", 6: "NC_ESD4", 5: "VBUS_HOST", 2: "GND"}, ref="U5", lcsc="C20615829",
+add("U", "Power_Protection:SRV05-4", "SRV05-4", FP["SOT236"],
+    {1: "USBH_DM", 3: "USBH_DP", 4: "NC_ESD3", 6: "NC_ESD4", 5: "VBUS_HOST", 2: "GND"}, ref="U5", lcsc="C7420376",
     note="ESD on the host D-, D+", **HOST)
 R(None, "15k", "USBH_DM", "GND", dnp=True, note="host pull-down option (USBFS pull-downs expected inside)")
 R(None, "15k", "USBH_DP", "GND", dnp=True, note="host pull-down option")
@@ -292,8 +293,10 @@ for a in (1, 5):
 group("Slot sockets (2 x 8 female, vertical; card part side faces west)")
 for k in range(1, SLOTS + 1):
     add("J", "Connector_Generic:Conn_02x08_Odd_Even", f"SLOT {k}", FP["SOCK"],
-        {1: "+5V", 2: "+5V", 3: "GND", 4: "GND", 5: f"AUDIO_L_{k}", 6: f"AUDIO_GND_{k}", 7: f"AUDIO_R_{k}", 8: "GND",
-         9: "SYNC", 10: "BCAST", 11: "RETURN", 12: f"NRST_{k}", 13: "GND", 14: f"SWIO_{k}", 15: "CLK", 16: "GND"},
+        {1: "+5V", 2: "+5V", 3: "GND" if k != FX_SLOT else "FX_RET_L", 4: "GND" if k != FX_SLOT else "FX_RET_R",
+         5: f"AUDIO_L_{k}", 6: f"AUDIO_GND_{k}", 7: f"AUDIO_R_{k}", 8: "GND",
+         9: "SYNC", 10: "BCAST", 11: "RETURN", 12: f"NRST_{k}", 13: "GND",
+         14: f"SWIO_{k}" if k != FX_SLOT else "FX_P14", 15: "CLK" if k != FX_SLOT else "FX_P15", 16: "GND"},
         ref=f"J{9 + k}", bom=False, note="voice card socket, hand-soldered")
     C(None, "10u", "+5V", "GND", 5, note=f"slot {k} supply")
 for n in ("SYNC", "BCAST", "RETURN"):
@@ -332,7 +335,7 @@ for ch in ("l", "r"):
 group("Line out (3.5 mm stereo) and ADC taps (USB audio)")
 for ch in ("l", "r"):
     X = ch.upper()
-    R(f"ROS{ch}0", "220", f"MIX_{X}", f"LO_{X}"); C(f"COL{ch}0", "10u", f"LO_{X}", f"LINE_{X}", 2.5)
+    R(f"ROS{ch}0", "220", f"MIX_{X}", f"LO_{X}", note="line-out series (remove for a loop-through effects card)"); C(f"COL{ch}0", "10u", f"LO_{X}", f"LINE_{X}", 2.5)
     R(f"RBL{ch}0", "100k", f"LINE_{X}", "GND", note="line-out bleeder")
     R(f"RA1{ch}0", "15k", f"MIX_{X}", f"ADC_{X}", note="ADC divider, at the MCU")
     R(f"RA2{ch}0", "27k", f"ADC_{X}", "GND", note="ADC divider, at the MCU")
@@ -341,6 +344,21 @@ add("J", "Connector_Audio:AudioJack3", "LINE OUT", FP["JACK"], {"T": "LINE_L", "
     ref="J3", bom=False, note="CUI SJ1-3523N, hand-soldered")
 for n in ("VREF", "MIX_L", "MIX_R"):
     TP(n)
+
+# effects slot (user decision 2026-10-20; appended last so that no other reference changes): slot FX_SLOT's pins
+# 15 and 14 carry CLK and SWIO as on every slot (0 R fitted), or, for an effects card, the stereo mix as sends
+# (220 R fitted instead: isolates the summing amps from the trace and the card input). The effects card returns
+# its signal through the slot's AUDIO pins into the mixer like a voice (mixing in), or on pins 3 / 4 (GND on every
+# other slot; a voice card grounds them, which these not-fitted positions ignore) into the line-out stage
+# instead of the mix (loop-through: remove the line-out 220 R from MIX_L / MIX_R, fit the two below).
+sheet("bus")
+group("Effects slot 1: pins 15 / 14 = CLK / SWIO_1 or the mix sends; pins 3 / 4 = the loop-through return")
+R(None, "0", "CLK", "FX_P15", note="effects slot: CLK to slot 1 pin 15 (remove for an effects card)")
+R(None, "220", "MIX_L", "FX_P15", dnp=True, note="effects slot: send L to slot 1 pin 15 (fit for an effects card)")
+R(None, "0", "SWIO_1", "FX_P14", note="effects slot: SWIO_1 to slot 1 pin 14 (remove for an effects card)")
+R(None, "220", "MIX_R", "FX_P14", dnp=True, note="effects slot: send R to slot 1 pin 14 (fit for an effects card)")
+R(None, "220", "FX_RET_L", "LO_L", dnp=True, note="effects slot: return L from slot 1 pin 3 to the line out (loop-through)")
+R(None, "220", "FX_RET_R", "LO_R", dnp=True, note="effects slot: return R from slot 1 pin 4 to the line out (loop-through)")
 
 # --------------------------------------------------------------------------- simulation cross-reference (S12 --bus2)
 SIM_ONLY = {f"{e}{x}{s}_0".upper() for e in ("RO", "LO", "CC", "RBC") for x in "lr" for s in range(SLOTS)} | \

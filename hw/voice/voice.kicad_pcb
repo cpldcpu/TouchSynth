@@ -25609,7 +25609,7 @@
 				)
 			)
 		)
-		(property "Note" "external clock from the backplane MCO (fallback, spec 6)"
+		(property "Note" "external 24 MHz clock from the backplane (TIM3 CH4; fallback, spec 6)"
 			(at 0 0 90)
 			(layer "F.Fab")
 			(hide yes)
@@ -46747,7 +46747,7 @@
 	(gr_text "CV"
 		(at 2.237857 42.1 0)
 		(layer "F.SilkS")
-		(uuid "f17f6f03-3334-4fbd-b860-d1edef7d5c19")
+		(uuid "f8191d12-ca44-48a9-a3d8-a24d4acefa09")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46758,7 +46758,7 @@
 	(gr_text "MCU"
 		(at 2.77119 22.25 0)
 		(layer "F.SilkS")
-		(uuid "cfbc98bd-934c-4d7c-974c-0a3d28ab5380")
+		(uuid "ce97e6c3-306f-4464-9084-f7dcae6476f5")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46769,7 +46769,7 @@
 	(gr_text "PWR"
 		(at 3.2 2.75 0)
 		(layer "F.SilkS")
-		(uuid "85a2969e-ccce-41e6-a346-a93faaa7b3f6")
+		(uuid "3382b040-2e4b-4edd-9db2-1e35aec0891d")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46780,7 +46780,7 @@
 	(gr_text "PLAY"
 		(at 6.3 2.75 0)
 		(layer "F.SilkS")
-		(uuid "2f107721-b239-4649-b781-8d1831985b3b")
+		(uuid "39a248dd-5d04-4762-8477-971b530de1d1")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46791,7 +46791,7 @@
 	(gr_text "STAT"
 		(at 9.4 2.75 0)
 		(layer "F.SilkS")
-		(uuid "a9d0e0c5-999a-42d3-a1a5-9d3c80dab8a7")
+		(uuid "d2ed8871-bd90-4b69-8216-87a2eaa7b0da")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46802,7 +46802,7 @@
 	(gr_text "5V"
 		(at 13.2 5.99 0)
 		(layer "F.SilkS")
-		(uuid "31626147-7784-4890-8414-2c84a29932bd")
+		(uuid "6a56ba9b-77a7-4801-a03d-95a0e9237759")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46813,7 +46813,7 @@
 	(gr_text "SWIO"
 		(at 15.74 6.99 0)
 		(layer "F.SilkS")
-		(uuid "0fbb9ebd-1394-4d65-a087-15706fb4bed2")
+		(uuid "a86e0dbf-bb0f-4a1a-8d93-93cbd366505d")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46824,7 +46824,7 @@
 	(gr_text "GND"
 		(at 18.28 5.99 0)
 		(layer "F.SilkS")
-		(uuid "81d65336-822b-4b0a-82c6-da767011e74f")
+		(uuid "ab58a884-9d5a-4ca4-95c2-ae8283222aa7")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46835,7 +46835,7 @@
 	(gr_text "DAC"
 		(at 20.137857 8 0)
 		(layer "F.SilkS")
-		(uuid "e177a9c8-839e-446d-b000-0e5ed0f4c2d5")
+		(uuid "cd507721-3b5e-4351-a1a1-3f828e85d6bf")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46846,7 +46846,7 @@
 	(gr_text "VCA"
 		(at 22.080714 35.85 0)
 		(layer "F.SilkS")
-		(uuid "3c2f264c-d9dd-4865-bd42-2ece33333a8e")
+		(uuid "9bf0a556-ba59-495c-b391-17383271968d")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46854,10 +46854,10 @@
 			)
 		)
 	)
-	(gr_text "rev 0.1  2026-10-19"
+	(gr_text "rev 0.1  2026-10-20"
 		(at 29.5 2.5 0)
 		(layer "F.SilkS")
-		(uuid "c0666c01-87f8-4354-8a80-859e084f0ca6")
+		(uuid "ef91fc32-ded7-47f8-a4d4-41ce25e4b848")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46868,7 +46868,7 @@
 	(gr_text "REF"
 		(at 29.599762 7.5 0)
 		(layer "F.SilkS")
-		(uuid "50beb5e6-1762-45a1-93a1-b608a43041af")
+		(uuid "3d7e526f-2e54-47c4-b663-9153a231a77e")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46879,7 +46879,7 @@
 	(gr_text "INA"
 		(at 33.94738 17.6 0)
 		(layer "F.SilkS")
-		(uuid "06cfdf9d-82d1-476a-9263-132e59c4b1e0")
+		(uuid "8d9b25a6-8d6d-4aaa-8e09-c7479d17b196")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46890,7 +46890,7 @@
 	(gr_text "PWR"
 		(at 40.502143 7.75 0)
 		(layer "F.SilkS")
-		(uuid "74eab04c-6ff7-4599-b751-196559983de7")
+		(uuid "961f031e-8b09-417f-8810-df19bbf8c199")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46901,7 +46901,7 @@
 	(gr_text "L"
 		(at 41.4 5.99 0)
 		(layer "F.SilkS")
-		(uuid "d71b3029-5d56-4765-a6b1-5af0a2254aa9")
+		(uuid "49174625-f2b4-406f-9c32-0fb37f6e47df")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46912,7 +46912,7 @@
 	(gr_text "RES"
 		(at 42.637857 22.1 0)
 		(layer "F.SilkS")
-		(uuid "a3bed7fb-e046-4a70-a71d-8f1bbc7caf9c")
+		(uuid "ca5c0dca-e896-49fc-8d58-46d9a6c5b173")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46923,7 +46923,7 @@
 	(gr_text "R"
 		(at 43.94 6.99 0)
 		(layer "F.SilkS")
-		(uuid "9a71acb2-448f-4b10-9107-8aeee89222e3")
+		(uuid "96e50fd3-12db-4a3b-b437-820b1e5d9652")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46934,7 +46934,7 @@
 	(gr_text "DIFF"
 		(at 46.27119 33.85 0)
 		(layer "F.SilkS")
-		(uuid "3b467957-0f40-4675-8ec8-de641124e33f")
+		(uuid "2326ba9d-69f9-49ec-9f74-6243dbbfb123")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46945,7 +46945,7 @@
 	(gr_text "GND"
 		(at 46.48 5.99 0)
 		(layer "F.SilkS")
-		(uuid "8983991d-4588-4e73-b92f-92394a48e52b")
+		(uuid "808ea5cf-1ea3-49da-a22a-145b7bdd97fb")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -46956,7 +46956,7 @@
 	(gr_text "TouchSynth Poly — voice"
 		(at 29.5 1.05 0)
 		(layer "F.SilkS")
-		(uuid "587e54f2-ea70-455a-b69f-540c23cbfa9a")
+		(uuid "d3e89c44-7c6e-4e9d-b486-f61eefc7e479")
 		(effects
 			(font
 				(size 0.9 0.9)
@@ -47205,7 +47205,7 @@
 			(justify mirror)
 		)
 	)
-	(gr_text "github.com/cpldcpu/TouchSynth"
+	(gr_text "github.com/cpldcpu/TouchSynthPoly"
 		(at 25 11.3 0)
 		(layer "B.SilkS")
 		(uuid "d43e79d6-e108-4c47-afef-16a2bc25987e")

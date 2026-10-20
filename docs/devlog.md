@@ -217,3 +217,52 @@ The rev 0.1 tree (report, S1–S7, KiCad project, tools for the report) is kept 
   1.5 kΩ footprint). With the lab user in the audio group the USB-MIDI endpoints pass through ALSA too: all bus
   checks as USB-MIDI, USB → note 5.0–6.0 ms, floods without loss (beyond the bus capacity the events arrive late,
   as expected), SYNC unchanged under a MIDI flood.
+- **DAC render four to five times cheaper (bus.md 9.3, 9.5) [2026-10-20]:** measured on the V006 that a store costs
+  3 cycles, a load 2, a taken branch 3, `mul` 1; the oscillators now run together between their polyBLEP regions
+  (a saw is a phase shift and a multiply there, a pulse a constant), one store per sample, the hot loops in assembly
+  where RV32E's 16 registers defeated the compiler; the error feedback needs one compare instead of four clamps; the
+  modal resonators sit interleaved with alternating outputs. Bit-exact with the old renderer (a host test against
+  the previous revision, and render-check hashes on the card). Three oscillators 44 k → 8–12 k cycles per buffer
+  half, the modal patch 38 k → 21 k; the CV dithering moved from a 46.875 kHz interrupt to a DMA burst. Under 8-voice
+  bus load and the stress test no patch misses a half (slack ≥ 99 periods, three oscillators ≥ 154), the CPU load
+  with three oscillators is 23 % (was 91 %), and 650–680 bytes of stack stay free (156). A restriction of the
+  three-oscillator mode to one waveform was not needed: it would change the existing presets and save nothing.
+  The occasional half "missed" at a patch change was a render preempted by the DAC restart and checked against the
+  new ring: no longer counted.
+- **Pre-order software checks; software requirements and architecture [2026-10-20]:** the card firmware's pin map
+  (`board.h`) agrees with the schematic netlist pin for pin. On the bench V006: the option bytes read USER = 0xF7, so
+  PD7 is NRST by default (RST_MODE = 10b, reference manual 18.5), which the 74HC595 reset path relies on; the four CV
+  PWMs toggle on PC6, PC7, PC0 and PD3 (TIM1 remap 0010b); TIM2 CH1, enabled by hand, drives PC5 beside the running
+  DAC, so the pan PWM needs only firmware. Still to run before ordering: the return line open drain with a 1 kΩ
+  pull-up (the bench always used `BUS_TX_PP`) and a push-pull NRST reset into the card. The design report gained a
+  software requirements section (60 requirements with source, verification and status) and a software architecture
+  section (context, decisions, card and controller views), both drafts for review.
+- **Host port fitted [2026-10-20]:** user decision; the USB-A host port (J2, TPS2051C U4, ESD U5, VBUS capacitors,
+  enable and fault resistors, two LEDs) is now populated: 10 more assembled parts (150), U4 and J2 hand-soldered,
+  parts cost about US$ 5.3 per board, all codes already on the board and in stock. Only the two 15 kΩ host
+  pull-downs stay unfitted: ch32fun's register map has a bit that disables USBFS's internal host pull-downs, so they
+  exist. Schematic, PCB attributes (DRC with parity clean), fab data, renders and the report regenerated. The host
+  driver is being tried on the development board, whose USB-C is the same USBFS peripheral.
+- **USB host on the development board (controller.md 6) [2026-10-20]:** a minimal USB-MIDI host for USBFS in the
+  bench controller (`make USBH=1`, `usbhost.c`, main loop only, one poll per USB frame after SOF; the USB device then
+  on USBD). The internal D+ / D− host pull-downs exist: the GPIOs cannot reach PB6 / PB7 while USBFS is configured,
+  so a pin charged with the SIE held in reset is timed after release. Against the lab PC's 15 kΩ the lines fall
+  twice as fast with `UH_PD_DIS` = 0, and with `UH_PD_DIS` = 1 exactly as through the PC alone, giving about
+  13–15 kΩ: the 15 kΩ footprints stay unfitted. Loop test with the controller's own USBD device jumpered onto its
+  host port:
+  - enumerated in 162 ms; also the first proof of the USBD driver, with its internal pull-up only;
+  - bustest's MIDI checks pass through device → host → card;
+  - a 32 000-event burst arrives with no loss and no errors; host OUT works; detach / re-attach works (0.57 s);
+  - SYNC unaffected (TIE p-p 0.9 ns, frame interrupt ≤ 4 µs); host CPU 2.75 µs per USB frame;
+  - USBD device + USBFS host together: 27.7 KB flash, 9.0 KB SRAM.
+
+  A real keyboard (needs 5 V on the board's VBUS), low speed and the TPS2051C fault path are still untested.
+- **Effects slot, new repository name [2026-10-20]:** reverb cannot run on the cards (8 KB) or the controller (no
+  RAM, no DAC); it needs its own DSP and codec after the mixer. There is no room for an extra header, so slot 1 is
+  convertible instead (user decision): pins 15 / 14 carry CLK / SWIO_1 through 0 Ω (fitted) or the stereo mix
+  through 220 Ω (not fitted, R80 / R82); an effects card returns through the slot's audio pins (mixing in, with a
+  capped loop gain because the send contains the return) or, for loop-through, on slot 1's pins 3 / 4 (GND on the
+  other slots; user proposal: a voice card grounds them harmlessly) into the line-out stage instead of the mix
+  (R83 / R84 not fitted; R71 / R75 removed then). Backplane re-routed for the four 0603 positions. The silkscreen of both boards names the new
+  repository github.com/cpldcpu/TouchSynthPoly (the project becomes its own repository, a fork of TouchSynth;
+  the move itself is still open). The backplane's flash footprint is labelled SPI FLASH.

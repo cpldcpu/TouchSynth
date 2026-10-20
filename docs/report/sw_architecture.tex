@@ -1,0 +1,489 @@
+% Software architecture (input file of touchsynth_poly_report.tex). Draft for review, 2026-10-20.
+
+% =====================================================================================================================
+\section{Software architecture}\label{sec:sad}
+
+This section describes how the software is built to meet the requirements of Section~\ref{sec:srs}. It covers where
+each part runs, how it is divided into modules, what runs in which execution context with which budget, how data flows
+from a MIDI event to the DAC, and how the software is configured and verified. Section~\ref{sec:fw} gives the
+details of the firmware as built; the voice bus is specified in Section~\ref{sec:bus}.
+
+\review{First draft. Read the card firmware views as a description of working code (measured on the bench). Read the
+controller views as a target design: only the frame engine, the bus scheduler, USB-MIDI and CDC, and the SWIO bridge
+exist (\file{firmware/bench\_ctrl}). The decisions in Table~\ref{tab:sadadr} and the questions in
+Section~\ref{sec:sadopen} are the points to confirm.}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Context and deployment}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\small\sffamily, >={Stealth[length=2mm]},
+  blk/.style={draw, rounded corners=2pt, fill=#1, minimum height=9mm, align=center}, blk/.default=white,
+  lab/.style={font=\scriptsize}]
+  \node[blk=gray!6, minimum width=38mm] (link) at (0,3.9) {WCH-LinkE\\\scriptsize development only};
+  \node[blk=gray!12, minimum width=38mm, minimum height=24mm] (pc) at (0,0.9)
+    {\textbf{computer}\\[2pt]\scriptsize DAW, keyboard software\\\scriptsize editor / librarian (CDC, SysEx)\\
+     \scriptsize minichlink, test suite};
+  \node[blk=gray!12, minimum width=38mm] (kbd) at (0,-2.3) {USB-MIDI keyboard\\\scriptsize (USB-A host port)};
+  \node[blk=blue!18, minimum width=50mm, minimum height=50mm] (ct) at (7.2,0.4)
+    {\textbf{controller firmware}\\\scriptsize CH32V203, 144\,MHz, 64\,KB / 20\,KB\\[4pt]
+     \scriptsize USB device (MIDI + CDC), USB host\\\scriptsize MIDI router, parts, allocator\\
+     \scriptsize bus scheduler, frame engine\\\scriptsize enumeration, supervision\\\scriptsize patch store,
+     calibration store\\\scriptsize SWIO programmer};
+  \foreach \n/\y in {1/2.6, 2/1.1, 8/-2.2}
+    \node[blk=yellow!20, minimum width=48mm, minimum height=11mm] (c\n) at (15.6,\y)
+      {\textbf{card firmware} (slot \n)\\\scriptsize CH32V006, 48\,MHz HSI, 62\,KB / 8\,KB};
+  \node at (15.6,-0.45) {\large$\vdots$};
+  \draw[<->] (1.9,0.9) -- node[above,lab]{USB-MIDI, CDC} (4.7,0.9);
+  \draw[->] (kbd.east) -- node[above,lab]{USB host} (kbd.east -| ct.west);
+  \draw[->, gray] (link.east) -- node[above,lab]{SWD} (link.east -| ct.west);
+  \draw[->, thick] (9.7,2.0) -- node[above,lab]{BCAST, SYNC} (12.3,2.0);
+  \draw[thick] (12.3,2.6) -- (12.3,-2.2);
+  \foreach \n in {1,2,8} \draw[->, thick] (c\n.west -| 12.3,0) -- (c\n.west);
+  \fill (12.3,2.0) circle (0.6mm);
+  \draw[dashed] (12.8,2.6) -- (12.8,-2.2);
+  \foreach \n in {1,2,8} \fill (c\n.west -| 12.8,0) circle (0.5mm);
+  \draw[->, dashed] (12.8,0.3) -- node[below,lab]{RETURN} (9.7,0.3);
+  \draw[<->] (9.7,-1.8) -- (11.0,-1.8) -- (11.0,-3.3) -- node[below,lab]{NRST$_k$ (74HC595) and SWIO$_k$: one pair
+    per slot} (15.6,-3.3) -- (c8.south);
+\end{tikzpicture}}
+\caption{Software context. Two firmwares on nine microcontrollers. The computer plays and edits the instrument
+over USB, and also runs the test suite and the programming tools during development. The controller is the only bus
+master and the only owner of the instrument's state; each card runs one voice.}
+\label{fig:sadctx}
+\end{figure}
+
+\begin{itemize}
+  \item \textbf{Card firmware:} one image, identical on every card. A card knows nothing about its slot until it is
+    enumerated, and it stores nothing except its calibration. It can be programmed by a WCH-LinkE (development, a card
+    on its own) or by the controller over its SWIO line.
+  \item \textbf{Controller firmware:} one image on the backplane. It holds the patches, the setups, the part
+    configuration and the calibration copies, and is the time reference (crystal, SYNC). It is programmed over SWD
+    or by the factory bootloader (BOOT0).
+  \item \textbf{Host side:} no driver (class-compliant USB-MIDI, CDC ACM). The editor and librarian are not part
+    of this project; CDC and SysEx are their interface.
+\end{itemize}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Architectural drivers}
+
+\begin{enumerate}
+  \item \textbf{Alignment over latency} (P8, P10): every card must sound the same event at the same carrier period,
+    independent of when its bytes arrive or what it is computing. A constant latency of a few milliseconds is
+    acceptable.
+  \item \textbf{One voice in \SI{48}{MHz} and \SI{8}{KB}} (C3): the DAC renderer needs one sample per
+    \SI{5.33}{\micro s}, the control tick 1\,kHz, the bus parser up to 100 bytes per frame, all without a missed buffer
+    half.
+  \item \textbf{Robustness without acknowledgements:} lost packets, card resets, controller resets and missing SYNC
+    edges must heal by themselves.
+  \item \textbf{Testability on the bench:} one real card plus virtual voices must exercise the full protocol and load;
+    timing must be observable through counters.
+  \item \textbf{Updatable in the field:} cards from the controller, the controller from the computer.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Principal decisions}
+
+\begingroup\small\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright}p{0.7cm} >{\raggedright}p{4.4cm} >{\raggedright}p{3.6cm}
+  >{\raggedright\arraybackslash}p{6.9cm}@{}}
+\caption{Architecture decisions.}\label{tab:sadadr}\\
+\toprule
+ID & Decision & Alternative & Reason, consequence \\
+\midrule\endfirsthead
+\toprule
+ID & Decision & Alternative & Reason, consequence \\
+\midrule\endhead
+\bottomrule\endfoot
+A1 & Time-triggered bus: events carry their execution frame ($a + L$); outputs follow $D$ frames later & events run on
+  arrival & Alignment to one carrier period on every card, whatever the parse and render timing. Costs a constant
+  5--7\,ms latency (P8 allows 10). \\
+A2 & The controller owns all state; cards are stateless except for their calibration; periodic refreshes repair
+  losses & an acknowledged protocol; patches stored on the cards & Broadcast stays simple, one card speaks at a time,
+  a card can be swapped or reset at any time. Costs about 1.5 bytes per frame of refresh. \\
+A3 & DAC render in the DMA half / complete interrupt at the low preemption level, with nesting; everything else at
+  the high level & render in the main loop & A stall in the main loop (console) can never cost audio, and the tick
+  enters within 27--28 cycles during a render. The render's budget must include the ticks that preempt it. \\
+A4 & Bus parsing in the control tick, with early discard of foreign packets & parsing in the main loop below the
+  render & Keeps $L = 2$. Affordable since the render rewrite (at least 99 periods of slack). The fallback, if card CPU
+  becomes tight again, needs $L = 3$. \\
+A5 & Bare metal on ch32fun: static buffers, no RTOS, no heap & FreeRTOS or similar & \SI{8}{KB} RAM, four execution
+  contexts, deterministic timing; the stack is monitored instead (NF3). \\
+A6 & One card code base for board~1 and the voice card (\texttt{BOARD}) & a separate card firmware & The engine,
+  DSP and drivers stay tested on both; costs conditional code in \file{hw.c} and \file{board.h}. \\
+A7 & The renderer is bit-exact against a reference revision; its hot loops are inline assembly, run from SRAM, and
+  verified by an on-target hash & plain C; a half-rate render & Four to five times faster with an unchanged sound. The
+  assembly is verified only by the hash, and the RAM code costs \SI{2.3}{KB}. \\
+A8 & Controller USB: an own USBD driver and ch32fun's \file{fsusb.c} for USBFS behind one API, flow control by NAK &
+  ch32fun \file{usbd.c}; TinyUSB & No message is lost, and DMA1 stays on (\file{usbd.c} switches it off). TinyUSB is
+  reconsidered for the host port. \\
+A9 & Cards are updated over SWIO from the controller (WCH one-wire debug protocol, bit-banged) & a bootloader on the
+  card, over the bus & No card bootloader to maintain or to brick, and the same path as the WCH-LinkE (minichlink).
+  Costs 8 controller GPIOs. \\
+A10 & NRST through the 74HC595 without pull-downs; cards run freely while the controller is not running & cards held
+  in reset & A controller reset or a debugger halt needs no special handling. The firmware must take the cards back
+  (reset all, enumerate). \\
+A11 & Each card trims its HSI to SYNC and scales its pitch by the measured frame period & a shared \SI{24}{MHz} clock &
+  No clock distribution. The HSI's short-term wander (0.35\,cent rms) remains; CLK\_IN stays as an option. \\
+\end{longtable}
+\endgroup
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Card firmware}\label{sec:sadcard}
+
+\paragraph{Modules.} The card firmware has four layers. Each module calls only those below it, except for the
+callbacks named in Table~\ref{tab:sadmod}.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Card firmware modules and their interfaces (\file{firmware/voice/}).}\label{tab:sadmod}
+\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\toprule
+Layer & Module & Responsibility; interface \\
+\midrule
+application & \file{touchsynth.c} & start-up, interrupt levels, the control tick dispatcher (\texttt{control\_tick}:
+  bus, synth, CV commit, $V_n$ commit), SysTick fallback, main loop; stack monitor \\
+ & \file{console.c} & SWIO console: diagnostics, manual control, render bench and check \\
+protocol & \file{bus.c} & bus state machine (Figure~\ref{fig:sadstate}), HSI trim, frame counter, $\bar P$, in-place
+  COBS / CRC parser, event queue, replies; \texttt{bus\_tick}, \texttt{bus\_present} \\
+voice & \file{synth.c} & voice engine at \SI{1}{kHz} (envelopes, LFO, glide, CV laws), bus event handlers
+  \texttt{synth\_bus\_*}, presets and tunes \\
+ & \file{dsp.c} & DAC engines (oscillators, noise, modal), error feedback, $V_n$ queue and block split;
+  \texttt{dsp\_pitch}, \texttt{dsp\_strike}, \texttt{dsp\_commit}, the render callback \texttt{dsp\_fill} \\
+ & \file{tables.h} & generated: presets, CV laws, mode tables, exponential tables \\
+drivers & \file{hw.c} & TIM1 CV PWM and its DMA burst, CV delay line; TIM2 DAC, ring and DMA ch1 with the render
+  interrupt; SYNC EXTI; USART1 RX ring and TX by DMA; ADC capture; LEDs; chip ID \\
+ & \file{board.h} & pin map and timer remaps per board and chip \\
+platform & ch32fun & start-up code, register definitions, \texttt{funPinMode} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Execution contexts.} Table~\ref{tab:sadexec} lists every context with its trigger, level and measured
+cost. The budget rule follows from A3: a buffer half's render time plus the ticks that preempt it must stay below
+65\,536 cycles. The slack, in carrier periods, is what the counters report.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Card execution contexts (V006 at \SI{48}{MHz}; costs from the bench, Section~\ref{sec:cpu}).}\label{tab:sadexec}
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright}p{1.9cm} >{\raggedright}p{2.9cm} >{\raggedright}p{1.3cm} >{\raggedright}X >{\raggedright\arraybackslash}p{3.7cm}@{}}
+\toprule
+Context & Trigger, rate & Level & Work & Worst measured \\
+\midrule
+control tick & SYNC edge, EXTI4 (PD4), \SI{1}{kHz} & high & parse bytes received before the tick, run due
+  events, replies; synth tick; CV commit; $V_n$ commit & 7\,k cycles idle, 9\,k at 71\,B/frame, 19\,k with a reply,
+  27\,k at a modal PATCH\_SELECT \\
+SysTick & only without SYNC (standalone, a missing edge) & high & the same tick & as above \\
+DAC render & DMA1 ch1 half / complete, \SI{732}{Hz} & low & render the half that has just played: 256 periods in
+  blocks of 32, split at $V_n$ boundaries & 8--12\,k (oscillators), 21\,k (modal); with preempting ticks 25\,k of
+  65.5\,k \\
+CV dither & TIM1 CC1 request at each update, \SI{46.875}{kHz} & DMA ch2 & 4-register burst from a 16-halfword table &
+  no CPU \\
+bus RX, TX & USART1 & DMA ch5, ch4 & receive ring of 256 bytes; replies & no CPU \\
+main loop & -- & -- & SWIO console, stack low-water mark & -- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Data flow and the presentation delay.} Figure~\ref{fig:sadflow} follows one NOTE\_ON. It arrives during
+frame $f-1$, the tick of frame $f$ parses it (its execution frame), and the voice engine computes the new state.
+That state is delayed to frame $f + D$: the CVs through a delay line of $D + 1$ entries, the DAC state $V_f$ through a
+queue stamped with $b_f = t_f + D\,\bar P$. The renderer splits its block at the carrier period of $b_f$, so the
+change is exact to one period on every card.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\small\sffamily, >={Stealth[length=2mm]},
+  st/.style={draw, rounded corners=2pt, fill=#1, minimum height=10mm, minimum width=24mm, align=center},
+  st/.default=white, buf/.style={draw, fill=gray!10, minimum height=9mm, minimum width=22mm, align=center},
+  lab/.style={font=\scriptsize}]
+  \node[buf] (ring) at (0,0) {RX ring\\\scriptsize 256 B, DMA ch5};
+  \node[st=yellow!20] (parse) at (3.3,0) {parser\\\scriptsize COBS, CRC, dst};
+  \node[buf] (evq) at (6.6,0) {event queue\\\scriptsize 16 events};
+  \node[st=yellow!20, minimum width=27mm] (synth) at (10.1,0) {\texttt{synth\_bus\_*}\\\texttt{synth\_tick}};
+  \node[buf, minimum width=26mm] (cvl) at (14.5,0) {CV delay line\\\scriptsize $D+1$ entries};
+  \node[st=green!15, minimum width=28mm] (tim1) at (18.8,0) {TIM1 table\\\scriptsize DMA ch2 $\to$ CV PWM};
+  \node[buf, minimum width=26mm] (vq) at (6.6,-2.6) {$V_n$ queue\\\scriptsize stamped with $b_n$};
+  \node[st=orange!18, minimum width=27mm] (rend) at (10.1,-2.6) {renderer\\\scriptsize DMA ch1 IRQ, low};
+  \node[buf, minimum width=25mm] (dring) at (14.5,-2.6) {DAC ring\\\scriptsize $2\times256$ periods};
+  \node[st=green!15, minimum width=28mm] (tim2) at (18.8,-2.6) {TIM2 CH2\\\scriptsize PWM DAC, PC2};
+  \draw[->] (ring) -- (parse); \draw[->] (parse) -- (evq);
+  \draw[->] (evq) -- node[above,lab]{due} (synth);
+  \draw[->] (synth) -- node[above,lab]{\texttt{hw\_cv\_set}} (cvl);
+  \draw[->] (cvl) -- node[above,lab]{tick $f+D$} (tim1);
+  \draw[->] (synth.south) -- ++(0,-0.6) -| node[pos=0.25,above,lab]{\texttt{dsp\_commit}} (vq.north);
+  \draw[->] (vq) -- node[below,lab]{at $b_n$} (rend);
+  \draw[->] (rend) -- (dring);
+  \draw[->] (dring) -- node[below,lab]{DMA} (tim2);
+  \begin{scope}[on background layer]
+    \node[draw=blue!50, dashed, rounded corners, fit=(parse)(evq)(synth), inner sep=2.5mm,
+      label={[lab, blue!60!black]above:control tick of frame $f$ (high level)}] {};
+  \end{scope}
+  \node[lab, anchor=west, align=left] at (-1.1,-4.0) {bytes arrive during frame $f-1$ (sent at $f-L$) $\;\to\;$ run in
+    the tick of frame $f$ $\;\to\;$ heard at frame $f+D$, on every card at the same carrier period};
+\end{tikzpicture}}
+\caption{Card data flow from a received event to the outputs. Buffers are grey; the dashed box runs in the control
+tick, the renderer in the low-level DMA interrupt.}
+\label{fig:sadflow}
+\end{figure}
+
+\paragraph{Bus state machine.} Figure~\ref{fig:sadstate} shows the card's states, as implemented in \file{bus.c}.
+Each state's outputs: in STANDALONE the voice plays from the console or its tunes; in TRIM and LISTEN the receiver is
+being prepared; in SYNCED timed events run; in LOST the VCA is muted until SYNC returns.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[font=\small\sffamily, >={Stealth[length=2mm]}, node distance=8mm and 20mm,
+  s/.style={draw, rounded corners=6pt, fill=#1, minimum height=9mm, minimum width=24mm, align=center},
+  s/.default=white, lab/.style={font=\scriptsize, align=center}]
+  \node[s=gray!12] (sa) {STANDALONE\\\scriptsize SysTick ticks, RX off};
+  \node[s=yellow!20, right=of sa] (tr) {TRIM\\\scriptsize 100 SYNC periods};
+  \node[s=yellow!20, right=of tr] (li) {LISTEN\\\scriptsize RX on};
+  \node[s=green!18, below=16mm of li] (sy) {SYNCED\\\scriptsize timed events run};
+  \node[s=red!12, left=34mm of sy] (lo) {LOST\\\scriptsize VCA muted};
+  \draw[->] ([xshift=-10mm]sa.west) node[left,lab]{reset} -- (sa);
+  \draw[->] (sa) -- node[above,lab]{SYNC edge} (tr);
+  \draw[->] (tr) to[loop above] node[above,lab]{HSITRIM step, measure again; a gap restarts} (tr);
+  \draw[->] (tr) -- node[above,lab]{error $<\frac12$ step} (li);
+  \draw[->] (li) -- node[right,lab]{first FRAME} (sy);
+  \draw[->] ([yshift=2mm]sy.west) -- node[above,lab]{10 ticks without SYNC} ([yshift=2mm]lo.east);
+  \draw[->] ([yshift=-2mm]lo.east) -- node[below,lab]{SYNC edge} ([yshift=-2mm]sy.west);
+\end{tikzpicture}
+\caption{Card bus states (\file{bus.c}). A missing SYNC edge is bridged by a SysTick tick and counted (it
+does not leave SYNCED); an NRST or SWIO reset restarts at STANDALONE.}
+\label{fig:sadstate}
+\end{figure}
+
+\paragraph{Memory.} Table~\ref{tab:sadmem} gives the card build's memory (link map of the current build). The DAC
+ring, the renderer's work area and the console's capture buffer share one buffer (\texttt{hw\_scratch}): captures are
+refused while the DAC runs.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Card build memory (CH32V006, \texttt{make BOARD=card}).}\label{tab:sadmem}
+\begin{tabularx}{\textwidth}{@{}l r X@{}}
+\toprule
+Item & Bytes & Content \\
+\midrule
+flash: code and constants & 53\,228 & of 63\,488; plus the \texttt{.data} image: \SI{55.6}{KB} in all \\
+RAM \texttt{.data} & 2\,416 & initialised data and about \SI{2.3}{KB} of render code run from SRAM \\
+RAM \texttt{.bss} & 4\,608 & \texttt{hw\_scratch} 2560 (DAC ring 512, render work area 256, console capture);
+  modal voices 760; RX ring 256; event queue 128; $V_n$ queue 128; CV delay line 78; packet and reply buffers 128;
+  oscillator state 72; bus, patch and CV burst state 118; the rest small \\
+stack region & 1\,168 & at least 656 bytes never used under bus load and stress, about 340 with the console \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Controller firmware}\label{sad:ctrl}
+
+\paragraph{Modules.} Table~\ref{tab:sadctmod} lists the controller's target modules (from \file{docs/controller.md})
+and what the bench stand-in already provides.
+
+\begingroup\small\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright}p{3.0cm} >{\raggedright}p{7.6cm} >{\raggedright\arraybackslash}p{4.9cm}@{}}
+\caption{Controller firmware modules: target and bench status.}\label{tab:sadctmod}\\
+\toprule
+Module & Responsibility & In \file{bench\_ctrl} \\
+\midrule\endfirsthead
+\toprule
+Module & Responsibility & In \file{bench\_ctrl} \\
+\midrule\endhead
+\bottomrule\endfoot
+frame engine & TIM1 CH1 SYNC; at each edge FRAME, enumeration, queued packets up to 95 bytes, refreshes; one TX DMA
+  transfer & built \\
+bus scheduler & stamps events with $a + L$; two queues (notes, then controllers); coalescing; late accounting &
+  built (no coalescing) \\
+reply handler & RX DMA ring on RETURN; COBS / CRC; HELLO, STATUS, COUNTERS, CAL\_DATA; time-outs & built \\
+slot manager & 595 reset and release, enumeration, chip ID $\to$ slot, supervision and recovery (NRST, SWIO) & one
+  slot, without NRST \\
+USB device & composite USB-MIDI + CDC: USBD driver (backplane), USBFS driver (development board) & built (USBD
+  enumerated by the own host) \\
+USB host & class-compliant MIDI on USBFS, power switch and fault & built (\texttt{USBH=1}, \file{usbhost.c};
+  self-loop tested, no hubs) \\
+MIDI input & per port: running status, real time, SysEx assembly; ports: USB-MIDI, USB host, USART1 (DIN option) &
+  USB-MIDI and the bench command \\
+part router & channel and key range $\to$ part; CC, NRPN and sustain handling; program change; MIDI clock & one
+  poly part, or one part per channel \\
+allocator & voice choice within a slot mask; PATCH\_SELECT and PATCH\_DATA before a NOTE\_ON; unison and kit modes &
+  basic allocator \\
+patch store & 64 programs and setups in flash pages with wear levelling; working copies in SRAM & -- \\
+calibration store & CAL\_DATA by chip ID & -- \\
+CDC commands & text commands of midi.md 6; SysEx dumps & binary bench command set, identity reply \\
+SWIO programmer & WCH one-wire protocol (bit-banged, \SI{125}{ns} resolution) on 8 lines; image from CDC, program and
+  verify & Ardulink bridge for minichlink (one line) \\
+supervision & watchdog; VBUS\_DET and the D+ pull-up; activity LED & -- \\
+options & UAC1 audio from the ADC taps; CLK\_OUT on TIM3 CH4 & -- \\
+\end{longtable}
+\endgroup
+
+\paragraph{Execution contexts.} The frame interrupt (TIM1 update, at the SYNC rising edge) has the highest priority
+and builds each frame's transmission from queues filled by the main loop. Its budget is \SI{40}{\micro s} from the
+edge to the start of the DMA; measured 0--3\,\textmu s with and without USB traffic. The USB interrupt has a lower
+priority, and interrupt nesting is off, so USB can only delay the frame interrupt by its own length (at most
+\SI{3}{\micro s} measured). The main loop serves the command ports, turns USB-MIDI packets into events, runs the
+allocator and, in the target design, the storage and programming tasks. A flash erase or a SWIO programming run must
+not hold up the queues: both run in the main loop between frames, and the frame interrupt keeps sending refreshes.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\small\sffamily, >={Stealth[length=2mm]},
+  st/.style={draw, rounded corners=2pt, fill=#1, minimum height=10mm, minimum width=24mm, align=center},
+  st/.default=white, buf/.style={draw, fill=gray!10, minimum height=9mm, minimum width=21mm, align=center},
+  lab/.style={font=\scriptsize}]
+  \node[st=gray!12] (usbd) at (0,1.5) {USB-MIDI\\\scriptsize USBD};
+  \node[st=gray!12] (host) at (0,0) {USB host\\\scriptsize keyboard};
+  \node[st=gray!12] (cdc) at (0,-1.5) {CDC, SysEx\\\scriptsize editor};
+  \node[st=blue!12] (midi) at (3.6,0) {MIDI input\\\scriptsize per port};
+  \node[st=blue!12, minimum width=27mm] (parts) at (6.9,0) {part router\\\scriptsize CC, NRPN, sustain};
+  \node[st=blue!12] (alloc) at (10.2,0) {allocator\\\scriptsize slot masks};
+  \node[buf] (q1) at (13.4,1.0) {queue 1\\\scriptsize notes};
+  \node[buf] (q2) at (13.4,-1.0) {queue 2\\\scriptsize controllers};
+  \node[st=orange!18, minimum width=26mm] (fe) at (17.0,0) {frame engine\\\scriptsize TIM1 IRQ, 1\,kHz};
+  \node[st=green!15, minimum width=26mm] (tx) at (20.6,0) {USART3 TX\\\scriptsize DMA $\to$ BCAST};
+  \node[st=blue!12, minimum width=27mm] (swio) at (3.6,-3.3) {SWIO programmer\\\scriptsize 8 lines};
+  \node[st=blue!12, minimum width=27mm] (store) at (6.9,-3.3) {patch store\\\scriptsize flash};
+  \node[st=blue!12, minimum width=27mm] (slot) at (13.4,-3.3) {slot manager\\\scriptsize 595, HELLO};
+  \node[st=green!15, minimum width=26mm] (rx) at (20.6,-3.3) {USART3 RX\\\scriptsize RETURN};
+  \draw[->] (usbd.east) -- ++(0.5,0) |- ([yshift=2mm]midi.west);
+  \draw[->] (host.east) -- (midi.west);
+  \draw[->] (cdc.east) -- ++(0.5,0) |- ([yshift=-2mm]midi.west);
+  \draw[->] (midi) -- (parts); \draw[->] (parts) -- (alloc);
+  \draw[->] (alloc.east) -- ++(0.5,0) |- (q1.west);
+  \draw[->] (alloc.east) -- ++(0.5,0) |- (q2.west);
+  \draw[->] (q1.east) -- ++(0.6,0) |- ([yshift=2mm]fe.west);
+  \draw[->] (q2.east) -- ++(0.6,0) |- ([yshift=-2mm]fe.west);
+  \draw[->] (fe) -- (tx);
+  \draw[->] (parts.south) -- node[right,lab]{programs} (store.north);
+  \draw[->] (rx.west) -- node[below,lab]{replies} (slot.east);
+  \draw[->] (slot.north) -- ++(0,0.6) -| node[pos=0.25,above,lab]{enumeration, refreshes} (fe.south);
+  \draw[->] (cdc.south) |- node[pos=0.75,below,lab]{card image} (swio.west);
+\end{tikzpicture}}
+\caption{Controller data flow (target). Blue modules run in the main loop, the frame engine in the frame interrupt.}
+\label{fig:sadctflow}
+\end{figure}
+
+\paragraph{Start-up sequence.} Clocks and USB; shift 0x00 into the 595 and enable its outputs (all cards in reset);
+start SYNC and FRAME; enumerate slot by slot (bus.md 6); send CONFIG and the active patches; then start USB-MIDI
+processing. A controller reset at any point restarts this sequence; the cards run muted in the meantime (A10).
+
+\paragraph{Storage (proposed).} Flash pages for 64 programs of 144 bytes (\SI{9.2}{KB}), 8 setups and the
+calibration copies (8 cards $\times$ about 64 bytes), written by appending to a log with a sequence number and a CRC
+and compacted when full. The working copies in SRAM are what the parts use. A corrupt or empty store falls back to
+built-in defaults.
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Interfaces}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Software interfaces.}\label{tab:sadif}
+\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\toprule
+Interface & Between & Specification and state \\
+\midrule
+voice bus & controller, cards & \file{docs/bus.md} 2--6 (0.2, implemented; card firmware version 3) \\
+patch parameter IDs & controller, cards, editor & \file{docs/midi.md} 4 (proposal; the cards implement a subset) \\
+USB-MIDI & computer, controller & class compliant, one cable each way; \file{docs/controller.md} 5. USB ID 1209:0001
+  is a test ID for development only \\
+CDC & computer, controller & bench: binary commands (\file{bench\_ctrl.c} header); target: text commands
+  (\file{docs/midi.md} 6, to define) \\
+SysEx & computer, controller & ID 0x7D: identity reply implemented; patch and setup dumps to define \\
+SWIO console & computer, card & \file{console.c} commands (\file{firmware/voice/README.md}) \\
+Ardulink & computer, controller & minichlink's Ardulink programmer protocol, for card programming through the
+  controller \\
+generated tables & tools, card firmware & \file{tables.h} from the result files (\file{gen\_tables.py}) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Build variants}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Build variants.}\label{tab:sadbuild}
+\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\toprule
+Firmware & Option & Effect \\
+\midrule
+card & \texttt{BOARD=card} & the voice card's pin map and the bus receiver (default: board~1 with its DCO and MIDI
+  input) \\
+ & \texttt{BUS\_TX\_PP=1} & bench only: the return line driven push-pull during a reply (no \SI{1}{k\ohm} pull-up on
+  the bench) \\
+ & \texttt{BUS\_BAUD=2000000} & \SI{2}{Mbaud} bus (both firmwares must match) \\
+ & \texttt{DAC\_DUAL=1} & dual-PWM DAC (high and low byte, PC1) \\
+ & chip & CH32V006 (card, board~1 with a V006); V003 and V002 builds compile \\
+controller (bench) & \texttt{USB=usbd} & USB on USBD, PA11 / PA12 (the backplane's port; default USBFS on the
+  development board) \\
+ & \texttt{BUS\_BAUD=2000000} & as above \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Verification architecture}
+
+The software is verified at five levels (Table~\ref{tab:sadver}). Each requirement of Section~\ref{sec:srs} names
+the level that covers it; Table~\ref{tab:srssum} summarises their status.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Verification levels.}\label{tab:sadver}
+\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\toprule
+Level & Tool & Covers \\
+\midrule
+model & \file{sim/behav/} (\file{dsp.py}, \file{behav.py}) & algorithms and sound, against the analog model (S9) \\
+host regression & \file{firmware/voice/test/render\_test.py} & the renderer bit-exact against a reference revision,
+  197 scenarios \\
+on target & console \texttt{check}, \texttt{bench} & assembly and compiler (hash), cycle counts per patch \\
+bench integration & \file{tools/bustest.py}, \file{tools/usbtest.py} & protocol, timing, latency, errors, load with 7
+  virtual voices, USB-MIDI and CDC; V203 development board and one V006 \\
+system & stages V2--V4 (Table~\ref{tab:vstages}) & real cards and backplane: NRST, alignment between cards,
+  calibration, 8 cards \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Status of the software requirements (Section~\ref{sec:srs}), 20 October 2026.}\label{tab:srssum}
+\begin{tabular}{@{}l r r r r r@{}}
+\toprule
+Group & Requirements & met & partial & open & design \\
+\midrule
+card firmware (CF) & 23 & 14 & 6 & 3 & 0 \\
+voice bus (BUS) & 8 & 5 & 1 & 0 & 2 \\
+controller firmware (CT) & 22 & 2 & 11 & 8 & 1 \\
+tools, non-functional (TL, NF) & 8 & 8 & 0 & 0 & 0 \\
+\midrule
+all & 61 & 29 & 18 & 11 & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Open architecture questions}\label{sec:sadopen}
+
+\begin{enumerate}
+  \item \textbf{USB stack for the host port.} Extend the own drivers (A8) to a minimal MIDI host, or port TinyUSB
+    for both ports? The host port is fitted now, and a minimal MIDI host on the own drivers works in a self-loop on
+    the development board (Section~\ref{sec:fw}); TinyUSB would add hubs and more device classes.
+  \item \textbf{Parsing location (A4).} Stay with parsing in the tick ($L = 2$), or move it to the main loop now
+    ($L = 3$, one more millisecond of latency) to decouple the bus load from the render for good?
+  \item \textbf{CDC protocol.} Binary (as the bench, machine-friendly, what the tests use) or text (human-friendly,
+    as the board~1 console), or both on one port with a mode switch?
+  \item \textbf{USB identity.} 1209:0001 is the pid.codes test ID. A product ID (pid.codes or another VID) is
+    needed before the instrument leaves the bench.
+  \item \textbf{Controller self-update.} The factory bootloader through BOOT0 (untested on the USB-C port), or an
+    update mode in the firmware over CDC with a small resident loader?
+  \item \textbf{Card firmware compatibility.} With cards updated one by one, should the controller refuse to start
+    cards with a different firmware version (HELLO) or update them automatically?
+\end{enumerate}

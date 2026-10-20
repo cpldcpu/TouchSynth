@@ -97,6 +97,8 @@
 #define T_UIE      0x0001
 #define T_UIF      0x0001
 #define T_UDE      0x0100   /* DMAINTENR: DMA request on update */
+#define T_CC1DE    0x0200   /* DMAINTENR: CC1 DMA request */
+#define T_CCDS     0x0008   /* CTLR2: the CCx DMA requests at the update event */
 #define T_UG       0x0001
 #define T_MOE      0x8000
 #define T_OC_PWM1_LO  0x0068   /* OCxM = 110 (PWM1) + OCxPE, channel 1 / 3 half of CHCTLRx */

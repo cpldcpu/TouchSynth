@@ -38,5 +38,7 @@ void dsp_carrier(uint16_t *arr, uint16_t *half);       /* DAC carrier (TIM2 arr)
 void dsp_fill(uint8_t *dst, int n, uint32_t t);        /* n carrier periods -> n ring entries (hw.h); t = SysTick time
                                                           of the first */
 int dsp_kind(void);                                    /* DSP_MODAL / DSP_OSC, -1 = none */
+void dsp_rest(void);                                   /* [2026-10-20] error feedback and interpolation at rest (the
+                                                          render check, dsp_check.h) */
 
 #endif

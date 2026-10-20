@@ -174,6 +174,8 @@ def pre_routes(board):
         y = PB.gap_y(gap)
         track(board, nn, (x0, y), (PB.SLOT_X[-1] + 1.27, y))
         for k in range(1, 9):
+            if k == D.FX_SLOT and netname == "CLK":
+                continue                              # effects slot: pin 15 through the 0 R / 220 R pair
             px, py = PB.pin_xy(k, pin)
             track(board, nn, (px, y), (px, py))
     if PB.LAYERS == 2:
@@ -203,7 +205,8 @@ def art(board, F):
 
 
 def sync_attrs(board):
-    """DNP and BOM / position-file flags of every footprint from the design (they change without a re-route)"""
+    """DNP and BOM / position-file flags, value and LCSC field of every footprint from the design (they change
+    without a re-route)"""
     n = 0
     for f in board.GetFootprints():
         p = PARTS.get(f.GetReference())
@@ -213,6 +216,12 @@ def sync_attrs(board):
             n += 1
         f.SetDNP(p.dnp)
         f.SetExcludedFromBOM(not p.bom); f.SetExcludedFromPosFiles(not p.bom)
+        if f.GetValue() != p.value:
+            n += 1
+            f.SetValue(p.value)
+        G.set_field(f, "LCSC", p.lcsc or "")
+        if p.note:
+            G.set_field(f, "Note", p.note)
     print(f"footprint attributes from the design: {n} changed")
 
 

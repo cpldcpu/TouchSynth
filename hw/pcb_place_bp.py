@@ -142,6 +142,15 @@ def anchors():
     a[[p.ref for p in D.PARTS if p.note == "VDDA" and p.value == "1µ"][0]] = (MX - 11.4, MY + 5.0, 180)
     for note, x in (("power", 14.0), ("activity", 17.0), ("host port fault", 32.0), ("host port powered", 35.0)):
         a[by(lambda p, n=note: p.lib_id == "Device:LED" and p.note == n)] = (x, 2.0, 270)
+    # effects slot (slot 1 pins 15 / 14): the 0 R / 220 R pairs above the line-out stage, west of socket 1; 0 R
+    # pad 1 (CLK, SWIO_1) north, 220 R pad 1 (MIX_L, MIX_R) south toward the line-out stage
+    for note, (x, y, rot) in (("effects slot: CLK to slot 1 pin 15", (14.5, 53.2, 270)),
+                              ("effects slot: send L to slot 1 pin 15", (12.5, 53.2, 90)),
+                              ("effects slot: SWIO_1 to slot 1 pin 14", (14.5, 49.3, 270)),
+                              ("effects slot: send R to slot 1 pin 14", (12.5, 49.3, 90)),
+                              ("effects slot: return L", (10.4, 49.3, 270)),      # loop-through returns: north of
+                              ("effects slot: return R", (8.4, 49.3, 270))):      # the jack, LO_L / LO_R pad south
+        a[by(lambda p, n=note: p.note and p.note.startswith(n))] = (x, y, rot)
     for k in range(1, 9):
         x = SLOT_X[k - 1]
         a[f"J{9 + k}"] = (x - 1.27, PIN1_Y, 180)

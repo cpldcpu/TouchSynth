@@ -10,6 +10,27 @@ volatile uint32_t hw_busy_cycles;
 
 /* ------------------------------------------------------------------ CV PWM (TIM1) + noise */
 static volatile uint16_t cv_code[4];
+
+#if BOARD_CARD
+/* [2026-10-20] Card: the dithered compare values come by DMA, no interrupt (it took about 8 k cycles of every DAC
+   buffer half). With CCDS the CC1 DMA request (DMA1 channel 2) comes at the update event; it starts a TIM1 burst of
+   four transfers into CH1CVR...CH4CVR (preloads: they load at the next update, as the interrupt's writes did) from
+   cv_dma[phase][channel], a circular 4 x 4 table. 2-bit dither: code = 4 * c10 + f, f of every 4 periods get
+   c10 + 1. The card has no noise output. */
+static uint16_t cv_dma[4][4];
+
+static void cv_load(int ch, uint16_t c)             /* the control tick or the main loop */
+{
+	if (c == cv_code[ch])
+		return;
+	cv_code[ch] = c;
+	uint16_t b = c >> 2, f = c & 3;
+	cv_dma[0][ch] = b + (f > 0);
+	cv_dma[1][ch] = b + (f > 1);
+	cv_dma[2][ch] = b + (f > 2);
+	cv_dma[3][ch] = b;
+}
+#else
 static volatile uint8_t noise_on;
 static uint8_t cv_phase;
 static uint16_t lfsr = 0xACE1;
@@ -34,6 +55,9 @@ void TIM1_UP_IRQHandler(void)
 	}
 }
 
+static void cv_load(int ch, uint16_t c) { cv_code[ch] = c; }
+#endif
+
 /* presentation delay (hw.h): the staged codes of the last CV_DELAY_MAX + 1 ticks */
 #define CV_D0 (BOARD_CARD ? 1 : 0)                  /* first delayed channel (card: CV channel 0 is the trim) */
 static uint16_t cv_next[4];
@@ -49,7 +73,7 @@ void hw_cv_set(int ch, uint16_t code)
 	code = code > 4095 ? 4095 : code;
 	cv_next[ch] = code;
 	if (!cv_d)
-		cv_code[ch] = code;
+		cv_load(ch, code);
 }
 
 uint16_t hw_cv_get(int ch)
@@ -64,7 +88,7 @@ void hw_cv_commit(void)                             /* control tick */
 	uint8_t w = cv_w, r = w >= cv_d ? w - cv_d : w + CV_DELAY_MAX + 1 - cv_d;
 	for (int ch = CV_D0; ch < 4; ch++) {
 		cv_line[w][ch - CV_D0] = cv_next[ch];
-		cv_code[ch] = cv_line[r][ch - CV_D0];
+		cv_load(ch, cv_line[r][ch - CV_D0]);
 	}
 	cv_w = w < CV_DELAY_MAX ? w + 1 : 0;
 }
@@ -92,10 +116,24 @@ static void cv_init(void)
 	TIM1->CCER = T_CC1E | T_CC2E | T_CC3E | T_CC4E; /* main outputs only, never the N outputs */
 	TIM1->BDTR = T_MOE;
 	TIM1->SWEVGR = T_UG;
+#if BOARD_CARD                                      /* cv_dma holds the codes already (cv_load) */
+	RCC->AHBPCENR |= RCC_AHBPeriph_DMA1;
+	TIM1->CTLR2 = T_CCDS;                           /* CC DMA requests at the update event */
+	TIM1->DMACFGR = (3 << 8) | 13;                  /* burst: DBL = 3 (4 transfers) from DBA = 13 (CH1CVR) */
+	DMA1_Channel2->CFGR = 0;
+	DMA1_Channel2->PADDR = (uint32_t)&TIM1->DMAADR;
+	DMA1_Channel2->MADDR = (uint32_t)cv_dma;
+	DMA1_Channel2->CNTR = 16;
+	DMA1_Channel2->CFGR = DMA_DIR_PeripheralDST | DMA_CFGR1_MINC | DMA_CFGR1_CIRC | DMA_CFGR1_PSIZE_0 |
+	                      DMA_CFGR1_MSIZE_0 | DMA_CFGR1_EN;   /* 16 bit, lowest priority */
+	TIM1->DMAINTENR = T_CC1DE;
+	TIM1->CTLR1 = T_ARPE | T_CEN;
+#else
 	TIM1->CTLR1 = T_ARPE | T_CEN;
 	TIM1->INTFR = 0;
 	TIM1->DMAINTENR = T_UIE;
 	NVIC_EnableIRQ(TIM1_UP_IRQn);
+#endif
 }
 
 /* ------------------------------------------------------------------ DCO (TIM2) */
@@ -169,6 +207,7 @@ static uint32_t dac_last;                           /* SysTick at the last rende
 static uint32_t dac_t0;                             /* SysTick time of ring entry 0 of the current DMA pass */
 static void (*dac_fill)(uint8_t *dst, int n, uint32_t t);
 static volatile uint8_t dac_busy;                   /* a render is running */
+static volatile uint8_t dac_gen;                    /* [2026-10-20] counts starts and stops (hw_dac_start / stop) */
 static volatile dac_stats_t dac_st;
 
 static void dac_stats_clear(void)
@@ -197,22 +236,27 @@ void DMA1_Channel1_IRQHandler(void)
 		return;
 	uint16_t lh = dac_len / 2;
 	int h = dac_len - DMA1_Channel1->CNTR < lh;     /* DMA in the first half: render the second */
+	uint8_t gen = dac_gen;
 	dac_busy = 1;
 	uint32_t t0 = SysTick->CNT, dt = t0 - dac_last;
 	if (dt > dac_period + dac_period / 2)
 		dac_st.overruns += (dt + dac_period / 2) / dac_period - 1;
 	dac_last = t0;
-	uint32_t cyc = 2u * dac_on, ring = 2u * dac_half;  /* cycles per carrier period, periods per ring pass */
-	uint32_t a = (t0 - dac_t0) / cyc, pass = a / ring;  /* periods since the pass began (ring entries loaded) */
-	dac_t0 += pass * ring * cyc;                    /* ring entry j of this pass loads at dac_t0 + j cyc */
-	uint32_t j = h * dac_half;                      /* the half to render: entry j, next pass if passed */
-	if (j <= a - pass * ring)
-		j += ring;
-	dac_fill(dac_buf + h * lh, dac_half, dac_t0 + j * cyc);
+	uint32_t x = t0 - dac_t0, pass = 2 * dac_period;   /* cycles since the ring pass began, cycles per pass */
+	while (x >= pass) {                             /* [2026-10-20] no division (RV32EC: about 2 k cycles a half) */
+		dac_t0 += pass;                             /* ring entry j of this pass loads at dac_t0 + j x 2 arr */
+		x -= pass;
+	}
+	uint32_t j = h * dac_period;                    /* the half to render: entry h x half, next pass if it loaded */
+	if (j <= x)                                     /* already (whole periods since dac_t0 >= h x half) */
+		j += pass;
+	dac_fill(dac_buf + h * lh, dac_half, dac_t0 + j);
 	uint32_t c = SysTick->CNT - t0;
 	hw_busy_cycles += c;
 	uint16_t pos = dac_len - DMA1_Channel1->CNTR;
 	dac_busy = 0;
+	if (gen != dac_gen)                             /* [2026-10-20] the tick stopped or restarted the DAC meanwhile */
+		return;                                     /* (a patch change): the DMA position is not this ring's */
 	if ((pos >= lh) == h) {
 		dac_st.overruns++;
 	} else {
@@ -281,6 +325,7 @@ void hw_dac_start(uint16_t arr, uint16_t half, void (*fill)(uint8_t *dst, int n,
 	NVIC_ClearPendingIRQ(DMA1_Channel1_IRQn);
 	NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 	dac_on = arr;
+	dac_gen++;
 	dac_last = SysTick->CNT;                         /* the first half has played one dac_period from now */
 	dac_t0 = SysTick->CNT;                           /* entry j loads at about dac_t0 + j x 2 arr (+ arr / 2) */
 	TIM2->CTLR1 = T_ARPE | T_CMS2 | T_CEN;
@@ -295,6 +340,7 @@ void hw_dac_stop(void)
 	NVIC_DisableIRQ(DMA1_Channel1_IRQn);
 	DMA1->INTFCR = DMA_CGIF1 | DMA_CHTIF1 | DMA_CTCIF1;
 	dac_on = 0;
+	dac_gen++;
 #if DAC_DUAL
 	funPinMode(PIN_SUB, GPIO_Speed_10MHz | GPIO_CNF_OUT_PP);
 #endif
@@ -335,7 +381,7 @@ void hw_dac_stats(dac_stats_t *s, int clear) { (void)clear; if (s) *s = (dac_sta
 void hw_leds_dac(uint16_t leds, uint8_t dac)        /* PLAY LED when any key LED is on; trim on CV channel 0 */
 {
 	funDigitalWrite(PIN_LED_PLAY, leds ? 1 : 0);
-	cv_code[CV_AMP] = (uint16_t)dac << 4;           /* 8-bit trim code on the 12-bit CV (128 = 1.65 V, mid-range) */
+	cv_load(CV_AMP, (uint16_t)dac << 4);            /* 8-bit trim code on the 12-bit CV (128 = 1.65 V, mid-range) */
 }
 
 void hw_led_stat(int on) { funDigitalWrite(PIN_LED_STAT, on ? 1 : 0); }

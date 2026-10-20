@@ -241,7 +241,7 @@ BP_USE = {
     "UART_TX": "USART1 TX (J6)", "UART_RX": "USART1 RX (J6, MIDI)", "USBD_DM": "USB device D$-$",
     "USBD_DP": "USB device D+", "SWDIO": "SWD (J5)", "SWCLK": "SWD (J5)", "FLASH_CS_N": "flash CS (GPIO)",
     "SPI_SCK": "SPI1 SCK: flash, 595", "SPI_MISO": "SPI1 MISO: flash", "SPI_MOSI": "SPI1 MOSI: flash, 595",
-    "USBH_DM": "USB host D$-$ (DNP)", "USBH_DP": "USB host D+ (DNP)", "BOOT0": "boot select (JP2)",
+    "USBH_DM": "USB host D$-$", "USBH_DP": "USB host D+", "BOOT0": "boot select (JP2)",
     "HOST_EN": "host switch enable", "HOST_FLT_N": "host switch fault"}
 
 
@@ -308,14 +308,14 @@ def pins_bp():
 
 def connector():
     j = [p for p in V.PARTS if p.value == "BACKPLANE"][0]
-    s = [p for p in BP.PARTS if p.value == "SLOT 1"][0]
+    s = [p for p in BP.PARTS if p.value == "SLOT 2"][0]          # slot 1: the effects slot (pins 3, 4, 14, 15)
     fn = {"+5V": "supply", "GND": "ground", "AUDIO_L": "audio left (AC coupled, 100\\,k$\\Omega$ bleeder)",
           "AUDIO_R": "audio right", "SYNC": "frame clock 1\\,kHz", "RX": "broadcast in", "TX": "return (open drain)",
           "NRST": "reset / enumeration", "SWIO": "programming", "CLK_IN": "24\\,MHz clock (option)"}
     lines = [r"\begin{tabular}{@{}r l l l@{}}", r"\toprule", r"Pin & Card net (J1) & Backplane net (slot $k$) & "
              r"Function \\", r"\midrule"]
     for n in range(1, 17):
-        cn, bn = j.pins[str(n)], s.pins[str(n)].replace("_1", "_k")
+        cn, bn = j.pins[str(n)], s.pins[str(n)].replace("_2", "_k")
         f = fn.get(cn, "")
         if n == 6:
             f = "audio ground reference (mixer mirror input)"
@@ -379,7 +379,7 @@ def floorplan_bp():
     colors = {"leds": "gray!15", "host": "gray!25", "midi": "gray!20", "flash": "violet!12", "nrst": "violet!20",
               "mcu": "blue!18", "adc": "blue!18", "swio": "violet!12", "bus": "cyan!15", "tps": "gray!10",
               "usbc": "orange!20", "power": "red!15", "lineout": "green!25", "mixc": "green!15", "vref": "green!15"}
-    labels = {"leds": "LEDs", "host": "USB host\\\\(DNP)", "midi": "MIDI in\\\\(DNP)", "flash": "flash",
+    labels = {"leds": "LEDs", "host": "USB host", "midi": "MIDI in\\\\(DNP)", "flash": "flash",
               "nrst": "NRST", "mcu": "MCU passives\\\\ADC taps", "swio": "SWIO\\\\pull-ups", "bus": "bus drivers",
               "tps": "test pads", "usbc": "USB-C", "power": "power entry\\\\LDO, soft start",
               "lineout": "line\\\\out", "mixc": "mixer\\\\common\\\\VREF"}

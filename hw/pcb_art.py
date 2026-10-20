@@ -191,7 +191,7 @@ def place_refs(board):
 # ------------------------------------------------------------------ back side
 BP_PINS = {1: "+5V", 2: "+5V", 3: "GND", 4: "GND", 5: "AUDIO_L", 6: "AUDIO_GND", 7: "AUDIO_R", 8: "GND", 9: "SYNC",
            10: "RX", 11: "TX", 12: "NRST", 13: "GND", 14: "SWIO", 15: "CLK_IN", 16: "GND"}
-URL = "github.com/cpldcpu/TouchSynth"
+URL = "github.com/cpldcpu/TouchSynthPoly"
 
 
 def resonant_saw(n=400, periods=2.0, k=3.6, fc=0.05):
