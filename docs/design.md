@@ -200,7 +200,8 @@ keyboards. Stack: ch32fun USB examples or a TinyUSB port (open).
 - **Backplane:** schematic done and checked (ERC, netlist, mixer against S12); PCB routed (100 ×
   100 mm, 4 layers, DRC clean; backplane.md 0.3). Pending: review and order.
 - **Voice bus:** implemented and tested on the bench with one card and 7 virtual voices (bus.md 9); the controller
-  firmware is still the bench stand-in (`firmware/bench_ctrl`), without USB.
+  firmware is still the bench stand-in (`firmware/bench_ctrl`); *[2026-10-20]* it is a USB-MIDI + CDC device and,
+  in a separate build, a USB-MIDI host (controller.md 5, 6).
 - **Calibration tables for 5 V:** the firmware and the behavioural model still use rev 0.1's measured data;
   new tables come from the first card.
 

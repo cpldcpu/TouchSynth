@@ -2064,7 +2064,8 @@ the diodes and the LEDs.
     BC847BS pairs are matched on one die; to be measured on the first card.
   \item \textbf{Backplane, unverified items:} the 74HC595 speed at \SI{3.3}{V} (written at \SI{9}{MHz}); a push-pull
     reset into a card (NRST is driven with no series resistor; the V006's default option bytes do make PD7 its NRST,
-    verified 2026-10-20, Section~\ref{sec:srsorder}); the internal USB pull-ups; the BY25D16 command set; the
+    verified 2026-10-20, Section~\ref{sec:srsorder}); USBD enumerating against a computer (its internal pull-up
+    has so far only been shown against the V203's own host); the BY25D16 command set; the
     LTV-817S at \SI{31.25}{kbaud} and \SI{3.3}{V}; the card-plane offset and the socket rotation with the chosen
     headers.
   \item \textbf{Inrush and USB limits:} about \SI{1.8}{A} for a few milliseconds at plug-in, and about \SI{115}{mA}

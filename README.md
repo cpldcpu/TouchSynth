@@ -5,15 +5,19 @@ small plug-in card: a CH32V006 generates the oscillators digitally on a PWM DAC 
 controls an analog transistor-ladder filter and VCA. A backplane with a CH32V203 holds the USB interface
 (USB-MIDI), the voice bus, the 5 V supply and the stereo mixer.
 
-**Status (2026-10-19):** both boards are designed, simulated and laid out, nothing of the new hardware is built
-yet: the voice card (50 × 50 mm, 4 layers) and the backplane (100 × 100 mm, 4 layers) are routed and DRC clean. The
-voice bus runs on the bench (a CH32V203 development board as controller, a CH32V006 evaluation board as voice card,
-plus 7 virtual voices for load tests), and the controller is a USB-MIDI + CDC device there. The voice firmware's
-oscillator engine was developed on TouchSynth board 1 (rev 0.1). The design report collects it all:
+**Status (2026-10-20):** both boards are designed, simulated and laid out, nothing of the new hardware is built
+yet: the voice card (50 × 50 mm, 4 layers) and the backplane (100 × 100 mm, 4 layers; USB-C device and USB-A host
+port, slot 1 convertible to an effects slot) are routed and DRC clean. The voice bus runs on the bench (a CH32V203
+development board as controller, a CH32V006 evaluation board as voice card, plus 7 virtual voices for load tests):
+every patch, three oscillators included, plays under 8-voice bus load without a dropout; the controller is a
+USB-MIDI + CDC device there, and a USB-MIDI host for keyboards works in a self-loop. The voice firmware's oscillator
+engine was developed on TouchSynth board 1 (rev 0.1). The design report collects it all, including the software
+requirements and architecture (drafts for review):
 [docs/report/touchsynth_poly_report.pdf](docs/report/touchsynth_poly_report.pdf).
 
 This project is a fork of [TouchSynth](https://github.com/cpldcpu/TouchSynth) (rev 0.1: a monophonic touch synth
-with an analog DCO), whose history is on `master`. The digital oscillators were developed and measured on its
+with an analog DCO), whose history is on `master`; it is to move to its own repository, TouchSynthPoly (the
+name the boards' silkscreen already carries). The digital oscillators were developed and measured on its
 board 1; the analog filter and VCA are its circuits, redesigned for a single 5 V supply.
 
 Design: cpldcpu & Claude Opus 5.5.
@@ -22,7 +26,7 @@ Design: cpldcpu & Claude Opus 5.5.
 
 | Document | Content |
 |---|---|
-| [docs/report/touchsynth_poly_report.pdf](docs/report/touchsynth_poly_report.pdf) | design report (LaTeX, 62 pages): architecture, both boards, simulations, voice bus, firmware, verification, BOM, schematics |
+| [docs/report/touchsynth_poly_report.pdf](docs/report/touchsynth_poly_report.pdf) | design report (LaTeX, 81 pages): architecture, both boards, simulations, voice bus, software requirements and architecture, firmware, verification, BOM, schematics |
 | [docs/design.md](docs/design.md) | requirements, architecture, budgets, verification plan, open points |
 | [docs/backplane.md](docs/backplane.md) | backplane / controller PCB (0.3, drawn in KiCad) |
 | [docs/controller.md](docs/controller.md) | controller plan (hardware, firmware, development path) |
@@ -39,7 +43,7 @@ docs/        specification, devlog, results (CSV), figures, schematics (PDF), th
 sim/         ngspice studies (S8 PWM DAC, S9 oscillators, S10 5 V analog core, S11 reconstruction filter, S12 mixer,
              S13 stereo pan) and the behavioural model
 firmware/    voice/: CH32V006 voice card firmware (bus receiver, voice engine, PWM DAC); bench_ctrl/: CH32V203
-             bench controller (bus master, USB-MIDI + CDC, SWIO programmer); ch32fun (git submodule)
+             bench controller (bus master, USB-MIDI + CDC, USB-MIDI host, SWIO programmer); ch32fun (git submodule)
 hw/          schematic / PCB generators (KiCad 10) of the voice card and the backplane; rev 0.1 for reference
 parts/       JLCPCB Basic / Promotional Extended part lists
 tools/       bench tools: voice bus and USB tests, SWIO console, oscilloscope recording, hardware tests, mixing

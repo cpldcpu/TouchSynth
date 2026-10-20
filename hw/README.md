@@ -6,7 +6,7 @@ boards; `BOARD` selects one (`board.py`):
 | `BOARD` | Design | Output | Status |
 |---|---|---|---|
 | `voice` (default) | `voice.py`: the voice card (docs/spec.md section 3) | `voice/` | schematic generated, hand-laid out (`layouts_voice.py`) and checked; PCB generated and routed (`voice/voice.kicad_pcb`, 50 × 50 mm, 4 layers, DRC clean, stereo pan stage S13 A) |
-| `backplane` | `backplane.py`: the backplane and controller (docs/backplane.md) | `backplane/` | schematic hand-laid out (`layouts_backplane.py`) and checked (mixer against S12 `--bus2`); PCB generated and routed (`gen_pcb_bp.py`, 100 × 100 mm, 4 layers: In1 GND, In2 +3V3 / GND; DRC clean) |
+| `backplane` | `backplane.py`: the backplane and controller (docs/backplane.md) | `backplane/` | schematic hand-laid out (`layouts_backplane.py`) and checked (mixer against S12 `--bus2`); PCB generated and routed (`gen_pcb_bp.py`, 100 × 100 mm, 4 layers: In1 GND, In2 +3V3 / GND; DRC clean); host port fitted, slot 1 convertible to an effects slot (backplane.md 5.1) |
 | `touchsynth` | `design.py`: TouchSynth rev 0.1, for reference | `touchsynth/` (its KiCad project is on `master`) | |
 
 | File | Role |
@@ -22,7 +22,7 @@ boards; `BOARD` selects one (`board.py`):
 | `check_sim.py` | compares the design with its ngspice netlist (nodes and values of every simulated element) |
 | `gen_pcb.py` | voice card PCB (KiCad's Python): places from `pcb_place.py`, adds zones and silkscreen; `--route` adds plane vias, routes with Freerouting (`FREEROUTING_JAR`, else `tools/` or `archive/tools/freerouting-1.9.0.jar`), stitches, rips up and repairs open nets (20–30 min per pass; Freerouting's results vary between runs); `--repair`, `--finish`, `--polish` (re-route the listed analog nets), `--art` (front silk on a routed board), `--corridor` |
 | `pcb_place.py` | floorplan: anchors, blocks, In2 plane polygons, edge routes (SWIO), pre-routes, polish list |
-| `gen_pcb_bp.py`, `pcb_place_bp.py`, `pcb_art_bp.py` | backplane PCB (2 layers): generator with the locked pre-routes (+5 V trunk and rail, bus in the socket field, audio fan-out, summing band on B.Cu), GND as its own net class skipped by Freerouting; floorplan; silkscreen art (`--art` redoes it and the DNP / BOM flags on a routed board) |
+| `gen_pcb_bp.py`, `pcb_place_bp.py`, `pcb_art_bp.py` | backplane PCB (4 layers; `BP_LAYERS=2` routes the same placement on 2 as a check): generator with the locked pre-routes (+5 V trunk and rail, bus in the socket field, audio fan-out, summing band on B.Cu), GND as its own net class skipped by Freerouting; floorplan; silkscreen art (`--art` redoes it and the DNP / BOM flags on a routed board) |
 | `pcb_figures.py` | layer plots and 3D renders of a board into `docs/figures/<board>_pcb/` |
 | `pcb_art.py` | silkscreen, front and back |
 | `pcb_gnd.py`, `pcb_maze.py` | GND island bridging, grid maze router for leftover connections |

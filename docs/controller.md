@@ -10,7 +10,7 @@ Status: plan 0.1 (2026-10-18). The controller is the CH32V203C8T6 on the backpla
 |---|---|
 | MCU | CH32V203C8T6 (LQFP-48, 64 KB flash, 20 KB SRAM, 144 MHz), 8 MHz crystal; XC6206 3.3 V |
 | USB device | USB-C (sink: 5.1 kΩ on CC1 / CC2), ESD protection, USBD on PA11 / PA12. The computer sees a class-compliant USB-MIDI device plus a CDC serial port: the computer plays and edits the synth over MIDI, no separate MIDI connection needed |
-| USB host | USB-A on USBFS (PB6 / PB7) for class-compliant MIDI keyboards; VBUS through a current-limited switch (part to choose from the JLCPCB lists) |
+| USB host | USB-A on USBFS (PB6 / PB7) for class-compliant MIDI keyboards; VBUS through a current-limited switch (part to choose from the JLCPCB lists). *[2026-10-20]* TPS2051C, fitted (backplane.md 4.2); host driver: section 6 |
 | MIDI DIN in (not fitted) | footprint only: 3.5 mm TRS (MIDI type A) or a pin header, optocoupler with its resistors and diode (as rev 0.1's DNP MIDI input), into a free USART RX; for old hardware without USB |
 | Power | USB-C VBUS, or an external 5 V on a 2-pin header (cleaner than a computer's USB 5 V). A 3-pin jumper selects the source (no diode drop: the cards' analog core wants the full 5 V). VBUS goes to a GPIO through a divider (the device enables its USB pull-up only when a computer is connected). Polyfuse and TVS on the 5 V rail. The cards filter their own analog rail (22 Ω + 3 × 100 µF, CJ431: supply rejection 66–77 dB) |
 | Voice bus | USART TX (broadcast), USART RX (return, 1 kΩ pull-up), SYNC (timer output, 1 kHz), 8 × NRST through a 74HC595 on SPI1, 8 × SWIO (GPIOs, each with a 1 kΩ pull-up to 3.3 V: the cards have none), 24 MHz from TIM3 CH4 to CLK_IN (option; MCO cannot give 24 MHz) |
