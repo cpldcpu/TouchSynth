@@ -6,7 +6,7 @@
 \bottomrule\endfoot
 J4 & EXT 5V & header 1$\times$2 & hand-soldered & {\footnotesize external 5 V, $>$= 1 A adapter (hand-soldered)}\\
 JP1 & SUPPLY & header 1$\times$3 & hand-soldered & {\footnotesize 1-2: USB-C, 2-3: external 5 V (no diode drop)}\\
-F1 & 0.75A & 1206 & hand-soldered & {\footnotesize PTC, I\_hold 0.75 A, I\_trip 1.5 A (e.g. Bourns MF-MSMF075), hand-soldered: not on the lists}\\
+F1 & 0.75A & 1206 & hand-soldered & {\footnotesize PTC, I\_hold 0.75 A, I\_trip 1.5 A (1206: e.g. Littelfuse 1206L075THYR, C99563), hand-soldered: not on the lists}\\
 Q1 & AO3401A & SOT-23 & not fitted & {\footnotesize P-channel soft start, about 40 ms ramp (hand estimate; simulate first: S14)}\\
 R3 & 1M & 0603 & not fitted & {\footnotesize soft start R\_GS}\\
 R4 & 220k & 0603 & not fitted & {\footnotesize soft start R\_G}\\
@@ -17,7 +17,6 @@ U4 & TPS2051C & SOT-23-5 & hand-soldered & {\footnotesize 0.5 A current-limited 
 J2 & USB-A & USB-A & hand-soldered & {\footnotesize right-angle THT receptacle, hand-soldered}\\
 R16 & 15k & 0603 & not fitted & {\footnotesize host pull-down option (USBFS pull-downs expected inside)}\\
 R17 & 15k & 0603 & not fitted & {\footnotesize host pull-down option}\\
-U1 & CH32V203C8T6 & LQFP-48 & hand-soldered & {\footnotesize own stock, hand-soldered; SPI1 remap 1 (PA15/PB3/PB4/PB5); TIM3 CH4 (PB1) = 24 MHz CLK option}\\
 J5 & SWD & header 1$\times$4 & hand-soldered & {\footnotesize WCH-LinkE: 3V3, SWDIO, SWCLK, GND}\\
 JP2 & BOOT0 & header 1$\times$3 & hand-soldered & {\footnotesize 1-2: system bootloader (USART1 / USB), open or 2-3: run from flash}\\
 J6 & UART & header 1$\times$3 & hand-soldered & {\footnotesize USART1: GND, TX (PA9), RX (PA10); 5 V adapters are fine (FT)}\\

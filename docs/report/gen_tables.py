@@ -33,7 +33,10 @@ import backplane as BP                       # noqa: E402  hw/backplane.py
 PARTS = {r["lcsc"]: r for r in csv.DictReader(open(os.path.join(ROOT, "parts",
                                                                 "jlcpcb_basic_and_promotional_parts.csv"),
                                                    encoding="utf-8"))}
-LIB = {"basic": "Basic", "promotional_extended": "Promo"}
+LIB = {"basic": "Basic", "promotional_extended": "Promo", "extended": "Ext."}
+# [2026-10-20] assembled parts outside the Basic / Promotional lists (JLCPCB API, 2026-10-20; price at quantity 1)
+PARTS["C3001172"] = {"lcsc": "C3001172", "library": "extended", "mfr_part": "CH32V203C8T6", "price_usd": "0.8808",
+                     "package": "LQFP-48(7x7)"}   # the backplane MCU, from the user's JLCPCB personal stock
 STATS = {}                                   # macro name -> value (generated/stats.tex)
 
 

@@ -149,7 +149,7 @@ HDR("J4", 2, "EXT 5V", ("+5V_EXT", "GND"), note="external 5 V, >= 1 A adapter (h
 add("JP", "Jumper:Jumper_3_Open", "SUPPLY", FP["HDR3"], {1: "VBUS_C", 2: "+5V_SEL", 3: "+5V_EXT"}, ref="JP1",
     bom=False, note="1-2: USB-C, 2-3: external 5 V (no diode drop)")
 add("F", "Device:Polyfuse", "0.75A", FP["FUSE"], {1: "+5V_SEL", 2: "+5V_IN"}, ref="F1", bom=False,
-    note="PTC, I_hold 0.75 A, I_trip 1.5 A (e.g. Bourns MF-MSMF075), hand-soldered: not on the lists")
+    note="PTC, I_hold 0.75 A, I_trip 1.5 A (1206: e.g. Littelfuse 1206L075THYR, C99563), hand-soldered: not on the lists")
 add("D", "Device:D_Zener", "SMAJ5.0A", FP["SMA"], {1: "+5V_IN", 2: "GND"}, ref="D1", lcsc="C2925443",
     note="unidirectional TVS: overvoltage or a reversed supply makes F1 trip")
 C(None, "10u", "+5V_IN", "GND", 5, note="+5V_IN bulk")
@@ -211,7 +211,7 @@ R(None, "15k", "USBH_DP", "GND", dnp=True, note="host pull-down option")
 
 # =========================================================================== controller
 sheet("mcu")
-group("CH32V203C8T6 (hand-soldered), decoupling, reset")
+group("CH32V203C8T6 (assembled), decoupling, reset")
 MCU = {1: "+3V3", 2: "SR_LATCH", 3: "SR_OE_N", 4: "PC15", 5: "OSC_IN", 6: "OSC_OUT", 7: "MCU_NRST", 8: "GND",
        9: "VDDA", 10: "ADC_L", 11: "ADC_R", 18: "PB0", 19: "CLK_O", 20: "LED_ACT", 21: "BCAST_O", 22: "RETURN",
        23: "GND", 24: "+3V3", 27: "PB14", 28: "VBUS_DET", 29: "SYNC_O", 30: "UART_TX", 31: "UART_RX",
@@ -220,8 +220,8 @@ MCU = {1: "+3V3", 2: "SR_LATCH", 3: "SR_OE_N", 4: "PC15", 5: "OSC_IN", 6: "OSC_O
        46: "HOST_FLT_N", 47: "GND", 48: "+3V3"}
 SWIO_PIN = {1: 12, 2: 13, 3: 14, 4: 15, 5: 16, 6: 17, 7: 25, 8: 26}     # PA2 ... PA7, PB12, PB13
 MCU.update({pin: f"SWIO_{k}" for k, pin in SWIO_PIN.items()})
-add("U", "MCU_WCH_RiscV:CH32V203CxTx", "CH32V203C8T6", FP["LQFP48"], MCU, ref="U1", bom=False,
-    note="own stock, hand-soldered; SPI1 remap 1 (PA15/PB3/PB4/PB5); TIM3 CH4 (PB1) = 24 MHz CLK option")
+add("U", "MCU_WCH_RiscV:CH32V203CxTx", "CH32V203C8T6", FP["LQFP48"], MCU, ref="U1", lcsc="C3001172",
+    note="assembled by JLCPCB (C3001172, Extended; from the user's JLCPCB personal stock); SPI1 remap 1 (PA15/PB3/PB4/PB5); TIM3 CH4 (PB1) = 24 MHz CLK option")
 for pin in (24, 36, 48):
     C(None, "100n", "+3V3", "GND", 3.3, note=f"MCU decoupling VDD pin {pin}")
 C(None, "100n", "+3V3", "GND", 3.3, note="MCU decoupling VBAT")

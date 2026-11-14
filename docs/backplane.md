@@ -25,7 +25,7 @@ Statements marked **unverified** still need a source or a bench test.
 |---|---|---|
 | Slots | 8 voice cards, 50 × 50 mm, at 10 mm pitch; any slot may be empty | design C4, F1 |
 | PCB | 4 layers (0.3; planned as 2), **100 × 100 mm** (fixed) | design C4, user decisions |
-| Controller | CH32V203C8T6 (LQFP-48), 8 MHz crystal, PLL × 18 = 144 MHz; hand-soldered from own stock | design C3, 7.3 |
+| Controller | CH32V203C8T6 (LQFP-48), 8 MHz crystal, PLL × 18 = 144 MHz; *[2026-10-20]* assembled by JLCPCB (C3001172, Extended, from the user's JLCPCB personal stock; before: hand-soldered from own stock) | design C3, 7.3 |
 | USB device | USB-C, full speed, on USBD (PA11/PA12): MIDI + CDC (+ UAC1 later); sink with 5.1 kΩ on CC1/CC2 | design 5.4 |
 | USB host | USB-A on USBFS (PB6/PB7) for class-compliant MIDI keyboards, VBUS through a current-limited switch | design F3 |
 | Power | USB-C VBUS or an external 5 V header, chosen by a 3-pin jumper (no diode drop); polyfuse, TVS, bulk; 3.3 V LDO for the controller; soft start as an unpopulated option; total within 500 mA | design C1, controller.md |
@@ -35,7 +35,7 @@ Statements marked **unverified** still need a source or a bench test.
 | MIDI DIN in | footprint only (optocoupler circuit), not fitted | controller.md |
 | Programming | SWD header (WCH-LinkE), BOOT0 jumper (factory bootloader over USART1 or USB) | controller.md |
 | Indicators | status LEDs | controller.md |
-| Parts | JLCPCB Basic and Promotional Extended for assembly; MCU, connectors, headers and parts missing from the lists hand-soldered | design C2 |
+| Parts | JLCPCB Basic and Promotional Extended for assembly, plus the MCU (Extended, personal stock, 2026-10-20); connectors, headers and parts missing from the lists hand-soldered | design C2 |
 
 ### 1.1 Bench results carried over
 
@@ -331,7 +331,7 @@ output (about 25 mA short-circuit at 3.3 V) and the card pin survive it, and the
 | R | 22k / 33k (C31850 / C4216) | VBUS_C → PB15 (VBUS_DET): enables the D+ pull-up only with a computer present |
 | J4 | 2-pin 2.54 mm header, external 5 V (≥ 1 A adapter), hand-soldered | |
 | JP1 | 1×3 header + jumper: 1 = VBUS_C, 2 = +5V_SEL, 3 = +5V_EXT | no diode: the cards get the full 5 V; with EXT selected, VBUS only feeds VBUS_DET (self-powered) |
-| F1 | PTC, 1206 or 1812, I_hold 0.75 A, I_trip 1.5 A (e.g. Bourns MF-MSMF075), hand-soldered | not on the lists |
+| F1 | PTC, **1206** (the footprint), I_hold 0.75 A, I_trip 1.5 A (*[2026-10-20]* Littelfuse 1206L075THYR, C99563, 16 V; the 1812 MF-MSMF075 named before does not fit), hand-soldered | not on the lists |
 | D1 | SMAJ5.0A (C2925443) | after F1: an overvoltage or a reversed external supply makes D1 conduct and F1 trip |
 | C | 10 µF (C19702) on +5V_IN | |
 | U2 | XC6206P332MR (C5446), 1 µF in and out (C15849), 10 µF on +3V3 | fed from +5V_IN; 200 mA, load about 30 mA |
@@ -781,7 +781,7 @@ MCU); USB and power in the east; the MCU in between. Digital parts keep at least
 ## 8. BOM
 
 Prices are the unit prices in `parts/jlcpcb_basic_and_promotional_parts.csv`; P = Promotional Extended, B = Basic,
-H = hand-soldered, DNP = not fitted.
+E = Extended, H = hand-soldered, DNP = not fitted.
 
 ### 8.1 Assembled (JLCPCB)
 
@@ -825,23 +825,23 @@ H = hand-soldered, DNP = not fitted.
 | | 330 pF C0G (ADC), 10 µF (C_OUT × 2, C_REF × 2) | C1664, C19702 | B | 2 + 4 |
 | | 10k × 2, 27k (VREF), 47 Ω, 22 µF 0805, 100 nF | C25804, C22967, C23182, C45783, C14663 | B | 6 |
 | | MCP6002T-I/SN | C7377 | P | 1 |
+| MCU | CH32V203C8T6 (U1), *[2026-10-20]* from the user's JLCPCB personal stock | C3001172 | E | 1 |
 | MIDI | 220 Ω, 1N4148W, LTV-817S, 1 kΩ; JP3 0 Ω or 2-pin jumper | C22962, C81598, C109227, C21190, C21189 | B | DNP (5) |
 
-**Totals (as drawn, 0.3; host port and effects slot 2026-10-20):** 152 assembled SMD parts (85 of them the mixer: 56 per slot + 29 common, i.e. section
-5's 30 without the hand-soldered jack; ADC dividers included), 36 distinct LCSC numbers, all Basic except four
-Promotional Extended (C7377, C2925443, C7420376, the
-yellow LED C89811), so no extended-part fees. Parts cost at the list prices: **about US$ 5.3 per board** (mixer
-2.7; the host port 0.7). Not fitted at first: the soft start, MIDI in, the flash, the USB pull-up / pull-down options. The
+**Totals (as drawn, 0.3; host port, effects slot and the assembled MCU 2026-10-20):** 153 assembled SMD parts (85
+of them the mixer: 56 per slot + 29 common, i.e. section 5's 30 without the hand-soldered jack; ADC dividers
+included), 37 distinct LCSC numbers, all Basic except four Promotional Extended (C7377, C2925443, C7420376, the
+yellow LED C89811) and one Extended, the MCU (C3001172, E; JLCPCB may charge its loading fee even from personal
+stock). Parts cost at the list prices: **about US$ 6.2 per board** (mixer 2.7; the host port 0.7; the MCU 0.88). Not fitted at first: the soft start, MIDI in, the flash, the USB pull-up / pull-down options. The
 flash adds US$ 2.55 when a W25Q128JVSIQ is fitted (the BY25D16ASTIG is own stock).
 
 ### 8.2 Hand-soldered
 
 | Ref | Part | Note | Rough price (**unverified**) |
 |---|---|---|---|
-| U1 | CH32V203C8T6 | own stock | – |
 | U4 | TPS2051C (DBV, SOT-23-5) | not on the lists; fitted since 2026-10-20 | 0.3–1.0 |
 | U7 | BY25D16ASTIG (own stock) or W25Q128JVSIQ | not fitted at first; SOIC-8 208 mil (`SOIC-8_5.3x5.3mm_P1.27mm`) | – / 2.55 |
-| F1 | PTC 0.75 A, 1206/1812 | not on the lists | 0.1–0.2 |
+| F1 | PTC 0.75 A, 1206 (1206L075THYR) | not on the lists | 0.1–0.2 |
 | J1 | USB-C 16-pin | | 0.3–0.6 |
 | J2 | USB-A, THT | | 0.2–0.4 |
 | J3 | 3.5 mm stereo jack | | 0.2–0.5 |

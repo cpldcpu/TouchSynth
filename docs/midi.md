@@ -176,6 +176,14 @@ part settings, card status (bus statistics, calibration, clock error), calibrati
 (an image streamed over CDC, programmed through each slot's SWIO line), and a bridge to one card's console.
 Command set to be detailed with the controller firmware.
 
+*[2026-10-20]* Split decided with the host software (a browser app, design report section "Host software"):
+everything musical goes over MIDI so that any MIDI host reaches it: live parameter changes as NRPN (section 3),
+patches, banks, setups, parts, card status and calibration start as SysEx (ID 0x7D, each with a request and a reply).
+CDC carries only maintenance: firmware images (cards over SWIO, the controller), the bridge to one card's console,
+bulk diagnostics. The parameter table of section 4 becomes one machine-readable file (JSON) from which the app, the
+controller firmware's tables and this table are generated. SysEx message set and maintenance commands: still to
+specify, with the controller firmware.
+
 ## 7. Open points
 
 - MPE / polyphonic aftertouch per voice (the bus already addresses single voices).

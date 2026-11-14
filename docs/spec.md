@@ -11,7 +11,8 @@ of TouchSynth rev 0.1. A backplane holds the USB controller, the voice bus, powe
 Single 5 V supply (USB-C). Voice cards can be programmed, run and debugged on their own.
 
 Constraints as before: JLCPCB Basic and Promotional Extended parts only; MCUs (own stock), headers and
-connectors hand-soldered.
+connectors hand-soldered. *[2026-10-20]* Exception: the backplane's CH32V203C8T6 is assembled from the user's JLCPCB
+personal stock (C3001172).
 
 ### Decisions so far
 

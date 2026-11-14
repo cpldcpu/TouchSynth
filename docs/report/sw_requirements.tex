@@ -30,6 +30,8 @@ split between what the cards do and what the controller does.}
     on a development board. It implements the frame engine, the bus, USB-MIDI and CDC, and the SWIO bridge, but not
     the parts, the storage or the 74HC595.
   \item \textbf{Voice bus (BUS):} the protocol between the two firmwares. Its requirements bind both sides.
+  \item \textbf{Host software (HS):} a browser app on the computer to edit, store and play the instrument and to
+    maintain it (user decision, 2026-10-20). Not written yet.
   \item \textbf{Tools (TL):} the host-side generators, tests and bench scripts (\file{tools/},
     \file{firmware/voice/test/}, \file{firmware/voice/gen\_tables.py}, \file{sim/behav/}).
 \end{itemize}
@@ -202,7 +204,7 @@ CT1 & SYNC at \SI{1}{kHz} from the \SI{8}{MHz} crystal on TIM1 CH1 (PA8). At eac
   \SI{40}{\micro s} of the edge. SYNC jitter stays unchanged by USB traffic. & P1, P10, bus.md 3 & B (\texttt{usbtest.py jitter}: 0.6--0.9\,ns) & \stmet \\
 CT2 & At start-up: all slots held in reset through the 74HC595, then released slot by slot. ASSIGN and HELLO each
   slot; a slot without HELLO within \SI{300}{ms} is empty. CONFIG and the patches go to all. The chip ID is mapped
-  to its slot. & F1, P9, backplane.md 3.5 & T \texttt{reset}; H (V3) & \stpart{} (one slot without NRST; the 595
+  to its slot. & F1, P9, back\-plane.md 3.5 & T \texttt{reset}; H (V3) & \stpart{} (one slot without NRST; the 595
   path is not written) \\
 CT3 & Supervision: the controller polls STATUS. A card that disappears or resets is found and enumerated again;
   a card that hangs is reset through NRST, or over SWIO if that fails. & bus.md 6 & T \texttt{reset} & \stpart{}
@@ -234,9 +236,10 @@ CT11 & Kit mode: notes map to (patch, pitch), using up to 4 patches preloaded in
 CT12 & Patch library of 64 programs (144 bytes each) and the setups, in the V203's flash with wear-levelled pages;
   working copies in SRAM; an empty or corrupt store falls back to the built-in default. & F6, midi.md 1 & T (to
   write) & \stopen \\
-CT13 & CDC command interface (text, one command per line): patches, setups, parts, card status, calibration,
-  firmware update, a bridge to one card's console. SysEx (ID 0x7D) offers the same patch and setup dumps; the
-  universal identity request is answered. & F4, midi.md 6 & T (to write) & \stpart{} (binary bench commands;
+CT13 & Protocol split (Section~\ref{sec:srshs}): everything musical over MIDI, so a MIDI-only host can use it:
+  live parameters as NRPN, and SysEx (ID 0x7D) for patch and setup dumps and requests, program store, parts, card
+  status and calibration start; the universal identity request is answered. Maintenance over CDC: firmware images,
+  a bridge to one card's console, bulk diagnostics. & F4, midi.md 6 & T (to write) & \stpart{} (binary bench commands;
   identity reply) \\
 CT14 & Card firmware update: an image is received over CDC and programmed into one card or all over that slot's SWIO
   line (8 lines, PA2--PA7, PB12, PB13), then verified; the card is enumerated again. & F4 & B (Ardulink bridge on
@@ -253,7 +256,7 @@ CT19 & The USB D+ pull-up is enabled only while VBUS\_DET (PB15) sees a host. & 
 CT20 & Resources: \SI{64}{KB} flash and \SI{20}{KB} SRAM, USB stacks included; at least \SI{2}{KB} of stack never
   used (\emph{proposed}). & C3 & I (link map), B & \stmet{} for the bench build (\SI{20.5}{KB}, \SI{8.0}{KB}) \\
 CT21 & Robustness: a watchdog. After any controller reset the cards keep running muted until they are reset and
-  enumerated again; nothing depends on the cards staying in reset while the controller boots. & backplane.md 3.5 &
+  enumerated again; nothing depends on the cards staying in reset while the controller boots. & back\-plane.md 3.5 &
   B; H & \stdes \\
 CT22 & Effects slot: an effects card in slot~1 is recognised at enumeration (HELLO capability bit), excluded from
   voice allocation, and receives its parameters as timed messages; MIDI CC~91 sets the reverb level. &
@@ -294,6 +297,55 @@ NF3 & Every timing-critical path has a measured budget and a counter visible ove
   \stmet \\
 NF4 & Forward compatibility: HELLO carries the firmware version and capabilities; unknown message types and PARAM IDs
   are ignored and counted, never fatal. & bus.md 4 & T \texttt{ctrl} & \stmet \\
+\end{longtable}
+\endgroup
+
+% ---------------------------------------------------------------------------------------------------------------------
+\subsection{Host software}\label{sec:srshs}
+
+A browser app on the computer edits, stores and plays the instrument and maintains it (user decision, 2026-10-20;
+the architecture is in Section~\ref{sec:sadhs}). A first version exists (\file{app/}, 2026-10-20) with a built-in
+emulator of the instrument, which implements the draft SysEx set of \file{docs/sysex.md}; the controller firmware does
+not implement it yet. It talks to the controller only, never to a card directly, and
+needs no driver: the instrument is a class-compliant USB-MIDI device with a CDC serial port.
+
+\begingroup\small\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright}p{0.9cm} >{\raggedright}p{7.5cm} >{\raggedright}p{1.5cm}
+  >{\raggedright}p{2.7cm} >{\raggedright\arraybackslash}p{2.6cm}@{}}
+\caption{Host software requirements.}\label{tab:srshs}\\
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endfirsthead
+\toprule
+ID & Requirement & Source & Verification & Status \\
+\midrule\endhead
+\bottomrule\endfoot
+HS1 & Runs in a Chromium-based browser (Chrome, Edge) on Windows, Linux and macOS without installation, from static
+  files in the repository (opened locally or served as a page); MIDI through Web MIDI, maintenance through Web
+  Serial. & F2, F4 & I; T (bench) & \stpart{} (\file{app/}, runs from disk in Edge; real instrument untested) \\
+HS2 & Finds the instrument by its USB-MIDI port name and, for maintenance only, its CDC port. Every musical function
+  works with MIDI alone, so the app also works where only MIDI is available. & CT13 & T (bench) & \stpart{} (emulator; the controller has no SysEx yet) \\
+HS3 & Patch editor: all parameters of midi.md 4 with their ranges and units; a change is sent at once as NRPN; on
+  connect the app reads the active patch back (SysEx dump request) and shows what the instrument plays. & F6,
+  midi.md 3, 4 & T (bench) & \stpart{} (all 57 parameters, NRPN round trip tested; emulator) \\
+HS4 & Librarian: lists the 64 programs, selects one, stores an edited patch into a program, and exports and imports
+  patches and banks as SysEx files (\texttt{.syx}), which DAW librarians read too. & F6, midi.md 1 & T & \stpart{} (programs, store, \texttt{.syx} export and import; emulator) \\
+HS5 & Setup: edits the 8 parts (channel, key range, slot mask, mode, patch, volume, transpose, pan) and the global
+  settings, and stores setups. & F6, F7 & T & \stpart{} (8 parts; emulator) \\
+HS6 & Instrument view: per slot the card present (chip ID, firmware version, capabilities, including an effects
+  card), its state (synced, clock error, CPU load, error counters, calibration), refreshed while visible; starts a
+  calibration per card. & F1, F9, F11 & B (with cards) & \stpart{} (cards view, calibration; emulator) \\
+HS7 & Maintenance over CDC: updates the firmware of one card or all cards and of the controller, with progress and
+  verification; a terminal on one card's console through the controller. Nothing else is sent while an update
+  runs. & F4 & B & \stpart{} (CDC console; updates open) \\
+HS8 & Play and test: an on-screen keyboard with velocity, a MIDI monitor of both directions, and an all-notes-off
+  (panic) button. & F2 & T & \stpart{} (keyboard, monitor, panic; emulator) \\
+HS9 & One machine-readable parameter table (IDs, names, ranges, units, CC map) is the single source for the app, the
+  controller firmware's tables and the parameter list in the docs, so they cannot drift apart. & midi.md 4 & I &
+  \stpart{} (\file{docs/params.json}, \file{tools/gen\_params.py} for the app; firmware and docs open) \\
+HS10 & Works offline: no network access at runtime, no account; nothing leaves the computer. & -- & I & \stmet{} (no network access, no account) \\
+HS11 & Survives a reset or re-plug of the instrument: reconnects and reads the state again without reloading the
+  page. & -- & T (bench: \texttt{u} re-plug) & \stopen \\
 \end{longtable}
 \endgroup
 
@@ -363,8 +415,9 @@ production configuration on the bench (open drain with \SI{1}{k\ohm}; NRST drive
     in a per-voice PARAM. The alternative is to let the controller compute both and send raw values.
   \item \textbf{Parameter coverage for the first build.} Is the full patch set of midi.md 4 needed (CF15), or the
     subset of the built-in presets plus the most used IDs, with PATCH\_PRESET kept?
-  \item \textbf{CDC format.} CT13 asks for text commands (as the board~1 console). The bench uses binary commands,
-    which the test suite relies on. Keep both?
+  \item \textbf{CDC format.} Decided in part (2026-10-20): musical functions over MIDI (NRPN, SysEx), maintenance
+    over CDC (CT13, HS2). Open: the maintenance commands as text (readable in a terminal) or binary (as the bench,
+    which the test suite relies on).
   \item \textbf{Storage.} CT12 uses the V203's internal flash (about \SI{12}{KB} of 64). The SPI flash footprint (not
     fitted) would hold more patches or samples later.
   \item \textbf{Controller updates.} If the factory bootloader does not run on the USB-C port (CT16), is USART1 (J6)

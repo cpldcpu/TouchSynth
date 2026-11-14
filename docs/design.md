@@ -57,7 +57,7 @@ the design, to be confirmed on hardware).
 | ID | Constraint |
 |---|---|
 | C1 | Single 5 V supply from USB-C; total within 500 mA with a keyboard on the host port (the synth alone about 110 mA) |
-| C2 | Parts from the JLCPCB Basic and Promotional Extended lists; MCUs, headers and connectors hand-soldered |
+| C2 | Parts from the JLCPCB Basic and Promotional Extended lists; MCUs, headers and connectors hand-soldered. *[2026-10-20]* Exception: the backplane's CH32V203C8T6 is assembled (Extended, from the user's JLCPCB personal stock) |
 | C3 | Voice MCU CH32V006F8P7 (TSSOP-20, 48 MHz HSI, 8 KB RAM, 62 KB flash); controller CH32V203C8T6 (LQFP-48) |
 | C4 | Backplane within 100 × 100 mm, 4 layers (planned as 2; changed 2026-10-19, backplane.md 7.1); voice cards at most 50 × 50 mm, 4 layers (fallback 2 layers, about 50 × 60 mm), at 10 mm pitch (parts on one side, at most about 6 mm high); backplane connector on the bottom edge, LEDs and debug connectors on the top edge |
 | C6 | No controls on the instrument: played and edited only over USB |
@@ -210,7 +210,7 @@ keyboards. Stack: ch32fun USB examples or a TinyUSB port (open).
 | Topic | Question | Proposal |
 |---|---|---|
 | Card holding | header only, card guides, or an enclosure with slots | header only for the first build |
-| CH32V203 assembly | own stock, hand-soldered, or JLCPCB assembly | own stock, hand-soldered (as the voice MCUs) |
+| CH32V203 assembly | own stock, hand-soldered, or JLCPCB assembly | *[2026-10-20]* decided: JLCPCB assembly from the user's personal stock (C3001172, Extended) |
 
 Decided (2026-10-18): cards 50 × 50 mm with 4 layers (first proposal about 60 × 45 mm), 10 mm slot pitch, backplane
 within

@@ -33,6 +33,8 @@ Design: cpldcpu & Claude Opus 5.5.
 | [docs/midi.md](docs/midi.md) | MIDI implementation, parts and patches (proposal) |
 | [docs/bus.md](docs/bus.md) | voice bus protocol, as built and measured on the bench (section 9) |
 | [docs/spec.md](docs/spec.md) | architecture: voice card, backplane, voice bus, clock synchronisation, decisions, open points |
+| [app/](app/README.md) | browser app: editor, librarian, setup, card status, console; with an emulator of the instrument |
+| [docs/sysex.md](docs/sysex.md) | SysEx and NRPN protocol of the host software (draft) |
 | [docs/devlog.md](docs/devlog.md) | development log since the fork |
 | [docs/README.md](docs/README.md) | index of the documents, schematics, results, figures and audio |
 
@@ -44,10 +46,11 @@ sim/         ngspice studies (S8 PWM DAC, S9 oscillators, S10 5 V analog core, S
              S13 stereo pan) and the behavioural model
 firmware/    voice/: CH32V006 voice card firmware (bus receiver, voice engine, PWM DAC); bench_ctrl/: CH32V203
              bench controller (bus master, USB-MIDI + CDC, USB-MIDI host, SWIO programmer); ch32fun (git submodule)
+app/         browser app (editor, librarian, console) with an emulator of the instrument
 hw/          schematic / PCB generators (KiCad 10) of the voice card and the backplane; rev 0.1 for reference
 parts/       JLCPCB Basic / Promotional Extended part lists
 tools/       bench tools: voice bus and USB tests, SWIO console, oscilloscope recording, hardware tests, mixing
 ```
 
-Constraints: JLCPCB Basic and Promotional Extended parts only; MCUs (own stock), headers and connectors
-hand-soldered.
+Constraints: JLCPCB Basic and Promotional Extended parts only, except the backplane's CH32V203 (assembled from a
+JLCPCB personal stock); the voice MCUs (own stock), headers and connectors hand-soldered.

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TouchSynth Poly</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><strong>TouchSynth Poly</strong><span class="muted">editor · librarian · console</span></div>
+  <div class="conn">
+    <select id="conn" aria-label="Instrument"><option value="emulator">Emulator</option></select>
+    <button id="scan" title="List the MIDI ports (the browser asks for MIDI permission)">Find MIDI</button>
+    <button id="connect" class="primary">Connect</button>
+    <span id="conn-state" class="pill">offline</span>
+  </div>
+  <div class="tools">
+    <select id="part" aria-label="Part to edit"></select>
+    <button id="sound" title="Emulator only: hear it in the browser">Sound: off</button>
+    <canvas id="scope" aria-label="Emulator output"></canvas>
+  </div>
+</header>
+<nav>
+  <button data-tab="patch">Patch</button>
+  <button data-tab="library">Library</button>
+  <button data-tab="setup">Setup</button>
+  <button data-tab="instrument">Instrument</button>
+  <button data-tab="monitor">MIDI monitor</button>
+  <button data-tab="maint">Maintenance</button>
+</nav>
+<main>
+  <section class="view" id="view-patch" hidden>
+    <div class="bar-row">
+      <input id="patch-name" maxlength="16" aria-label="Patch name" placeholder="patch name">
+      <button id="reload" title="Read the part's patch from the instrument">Reload</button>
+      <button id="send-patch" title="Send the whole patch (name included) to the part">Send patch</button>
+      <span class="spacer"></span>
+      <select id="store-to" aria-label="Store to program"></select>
+      <button id="store" class="primary">Store</button>
+    </div>
+    <p class="hint muted">Changes go out at once as NRPN on the part's MIDI channel; Store keeps them in a program.
+      Double-click a slider for its default.</p>
+    <div id="editor" class="groups"></div>
+  </section>
+
+  <section class="view" id="view-library" hidden>
+    <div class="bar-row">
+      <span class="muted">Click a program to play it on the selected part.</span>
+      <span class="spacer"></span>
+      <button id="export-patch">Export patch</button>
+      <button id="export-bank">Export bank</button>
+      <label class="file">Import .syx<input id="import" type="file" accept=".syx"></label>
+    </div>
+    <div id="library" class="progs"></div>
+  </section>
+
+  <section class="view" id="view-setup" hidden>
+    <div class="bar-row">
+      <span class="muted">Up to 8 parts: each on a MIDI channel, a key range and a set of slots (voices).</span>
+      <span class="spacer"></span>
+      <button id="setup-reload">Reload</button>
+    </div>
+    <div class="scroll">
+    <table id="setup">
+      <thead><tr><th>Part</th><th>Channel</th><th>Keys</th><th>Slots</th><th>Mode</th><th>Program</th>
+        <th>Volume</th><th>Transpose</th><th>Pan</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section class="view" id="view-instrument" hidden>
+    <div class="bar-row">
+      <span class="muted">The cards found at start-up, refreshed every second.</span>
+      <span class="spacer"></span>
+      <button id="cal-all">Calibrate all</button>
+    </div>
+    <div id="cards" class="cards"></div>
+  </section>
+
+  <section class="view" id="view-monitor" hidden>
+    <div class="bar-row">
+      <label><input id="mon-nrpn" type="checkbox"> show NRPN address bytes</label>
+      <span class="spacer"></span>
+      <button id="mon-pause">Pause</button>
+      <button id="mon-clear">Clear</button>
+    </div>
+    <pre id="mon-log" class="log"></pre>
+  </section>
+
+  <section class="view" id="view-maint" hidden>
+    <h2>Console (CDC)</h2>
+    <p class="muted">The instrument's USB serial port: the controller's commands and a bridge to one card's console.
+      Firmware updates of the cards and the controller come here with the controller firmware (docs/sysex.md 5).
+      Not emulated.</p>
+    <div class="bar-row"><button id="serial">Connect serial port…</button></div>
+    <pre id="term" class="log"></pre>
+    <input id="term-in" class="term-in" placeholder="command, Enter to send" disabled>
+  </section>
+</main>
+<footer>
+  <div class="kbd-tools">
+    <button id="oct-dn" aria-label="Octave down">◀</button><span id="oct">C4</span><button id="oct-up" aria-label="Octave up">▶</button>
+    <label>vel <input id="vel" type="range" min="1" max="127" value="100"></label>
+    <button id="panic">Panic</button>
+    <span class="muted keyhint">keys A W S E D … K, Z / X octave</span>
+  </div>
+  <div id="keys" class="keys"></div>
+  <div id="status" role="status"></div>
+</footer>
+<script src="js/params.js"></script>
+<script src="js/protocol.js"></script>
+<script src="js/synth.js"></script>
+<script src="js/emulator.js"></script>
+<script src="js/links.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

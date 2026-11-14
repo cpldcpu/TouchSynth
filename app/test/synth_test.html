@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>synth test</title></head>
+<body><pre id="out">running</pre>
+<script src="../js/params.js"></script>
+<script src="../js/protocol.js"></script>
+<script src="../js/synth.js"></script>
+<script src="../js/emulator.js"></script>
+<script>
+/* Offline render of the emulator's voice engine (headless: msedge --headless --dump-dom synth_test.html): level and
+   pitch of a few programs, so the sound path is checked without speakers. */
+(async function () {
+  var lines = [], pr = TSP.proto, emu = new TSP.Emulator(function () {}), fs = 48000;
+  var progs = [[0, "Moog Lead"], [3, "Acid Bass"], [10, "Wind"], [15, "Kettle"], [18, "Bell"], [19, "Kick"]];
+  for (var k = 0; k < progs.length; k++) {
+    var ctx = new OfflineAudioContext(2, fs * 1.5, fs);
+    var sy = new TSP.Synth(ctx), vals = emu.state.programs[progs[k][0]].values;
+    sy.noteOn(0, 57, 110, vals, { pan: 0 });                  /* A3 = 220 Hz */
+    setTimeout(function () {}, 0);
+    var buf = await ctx.startRendering(), d = buf.getChannelData(0);
+    var a = Math.floor(0.3 * fs), b = Math.floor(0.8 * fs), s = 0, zc = 0, peak = 0;
+    for (var i = a; i < b; i++) { s += d[i] * d[i]; peak = Math.max(peak, Math.abs(d[i])); if (d[i - 1] < 0 && d[i] >= 0) zc++; }
+    var rms = Math.sqrt(s / (b - a)), f0 = zc / ((b - a) / fs), s0 = 0, e0 = Math.floor(0.12 * fs);
+    for (var j = 0; j < e0; j++) s0 += d[j] * d[j];
+    var rms0 = Math.sqrt(s0 / e0);
+    lines.push(progs[k][1].padEnd(10) + " rms 0-0.12 s " + rms0.toFixed(4) + ", 0.3-0.8 s " + rms.toFixed(4) + "  peak " + peak.toFixed(3) + "  zero crossings " + f0.toFixed(0) + " /s");
+  }
+  emu.close();
+  document.getElementById("out").textContent = "DONE\n" + lines.join("\n");
+})().catch(function (e) { document.getElementById("out").textContent = "ERROR " + e.message + "\n" + e.stack; });
+</script>
+</body></html>

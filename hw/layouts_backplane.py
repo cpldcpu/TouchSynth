@@ -299,7 +299,7 @@ def sheet_mcu(sh):
     W = 405
     part = PART["U1"]
     xm, ym = 205.74, 137.16
-    sh.heading("CH32V203C8T6 (hand-soldered), decoupling, reset", 140, 30, 275)
+    sh.heading("CH32V203C8T6 (assembled), decoupling, reset", 140, 30, 275)
     sh.place("U1", xm, ym, fields=(5.08, 46.99))
     special = {"7", "44", "5", "6", "30", "31", "34", "37", "1", "9", "24", "36", "48", "8", "23", "35", "47"}
     for num, net in part.pins.items():

@@ -177,7 +177,7 @@ GROUP_BLOCK = {
     "Slot rail: soft start (option, not fitted) bridged by 0 R": "power",
     "USB-C device port (USBD: MIDI, CDC)": "usbc",
     "USB-A host port (USBFS: class-compliant MIDI keyboards), 0.5 A switch": "host",
-    "CH32V203C8T6 (hand-soldered), decoupling, reset": "mcu",
+    "CH32V203C8T6 (assembled), decoupling, reset": "mcu",
     "8 MHz crystal (PLL x 18 = 144 MHz)": "mcu",
     "Programming: SWD (WCH-LinkE), BOOT0, USART1 (bootloader, debug)": "mcu",
     "MIDI DIN in (option, not fitted): opto into PA10 through JP3": "midi",

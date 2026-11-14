@@ -122,8 +122,9 @@ rev 0.1 served as the test bed for the oscillator engine, the DAC and the clock 
 
 \subsection{Constraints}
 \begin{itemize}
-  \item \textbf{Parts:} only JLCPCB \emph{Basic} and \emph{Promotional Extended} parts are assembled; the MCUs (own
-    stock), connectors, headers and the few parts missing from the lists are hand-soldered.
+  \item \textbf{Parts:} JLCPCB \emph{Basic} and \emph{Promotional Extended} parts are assembled, plus one Extended
+    part, the backplane's CH32V203C8T6 (C3001172, from the user's JLCPCB personal stock; user decision 2026-10-20);
+    the voice MCUs (own stock), connectors, headers and the few parts missing from the lists are hand-soldered.
   \item \textbf{MCUs:} CH32V006F8P7 (TSSOP-20, \SI{48}{MHz} from the internal HSI, \SI{8}{KB} RAM, \SI{62}{KB} flash)
     on the cards; CH32V203C8T6 (LQFP-48, \SI{144}{MHz} from an \SI{8}{MHz} crystal) on the backplane.
   \item \textbf{Supply:} a single \SI{5}{V} supply from USB-C or an external adapter, within \SI{500}{mA}.
@@ -1979,9 +1980,11 @@ Both boards are assembled by JLCPCB from the \emph{Basic} and \emph{Promotional 
 extended-part fees arise. The part lists were taken from the JLCPCB parts API
 (\file{parts/jlcpcb\_basic\_and\_promotional\_parts.csv}); \file{hw/lcsc.py} picks passives from it (Basic first, then
 by stock), with voltage ratings of at least twice the working voltage and C0G wherever a capacitor is in the audio
-path. Hand-soldered: the MCUs (own stock), connectors and headers, and parts missing from the lists (the polyfuse, the
-host-port switch). The SPI flash is not fitted at first (own stock if fitted later). Table~\ref{tab:promo} lists
-the Promotional Extended lines; on the voice card most of them are 0402 resistor values that are not Basic.
+path. The backplane's CH32V203C8T6 is the one Extended part (C3001172, about USD 0.88), assembled from the user's
+JLCPCB personal stock; JLCPCB may still charge its loading fee for an Extended part. Hand-soldered: the voice MCUs
+(own stock), connectors and headers, and parts missing from the lists (the polyfuse, the host-port switch). The SPI
+flash is not fitted at first (own stock if fitted later). Table~\ref{tab:promo} lists the lines that are not Basic;
+on the voice card most of them are 0402 resistor values.
 
 \textbf{Stock check (2026-10-20, live JLCPCB data for every BOM line of both boards):} all parts in stock in
 quantity (the lowest, the SMAJ5.0A, at about 54\,000) except the SRV05-4A ESD array, which was down to 3; the design
@@ -1993,7 +1996,8 @@ parts (ICs, the TVS diode, the LEDs) are to be checked in JLCPCB's placement pre
 
 \begin{table}[htbp]
 \centering\footnotesize
-\caption{Promotional Extended lines (generated).}\label{tab:promo}
+\caption{Lines that are not Basic parts (generated): all Promotional Extended except C3001172 (CH32V203C8T6,
+Extended, from the personal stock).}\label{tab:promo}
 \input{generated/promo.tex}
 \end{table}
 
@@ -2001,7 +2005,8 @@ parts (ICs, the TVS diode, the LEDs) are to be checked in JLCPCB's placement pre
 \begin{table}[htbp]
 \centering\small
 \caption{BOM summary (generated from \file{hw/voice.py}, \file{hw/backplane.py} and the parts list). Cost: assembled
-parts at the list unit prices, without PCB, assembly fees, MCUs and hand-soldered parts.}\label{tab:bomsum}
+parts at the list unit prices (the backplane's assembled MCU included), without PCB, assembly fees, the voice MCUs and
+hand-soldered parts.}\label{tab:bomsum}
 \begin{tabular}{@{}l r r@{}}
 \toprule
 & Voice card & Backplane \\
@@ -2017,8 +2022,9 @@ Assembled parts cost (USD) & \statVoiceCost & \statBpCost \\
 \end{tabular}
 \end{table}
 The assembled parts of 8 cards and one backplane cost about USD \statSystemCost\ at list prices. To this come the
-hand-soldered parts (on the backplane about USD 3--6 without the MCU and the flash: sockets, USB connectors, jack,
-headers, polyfuse; on each card the 2$\times$8 right-angle header and two 1$\times$3 headers), the MCUs from own stock,
+hand-soldered parts (on the backplane about USD 3--6 without the flash: sockets, USB connectors, jack, headers,
+polyfuse, the host switch; on each card the 2$\times$8 right-angle header and two 1$\times$3 headers), the voice MCUs
+from own stock,
 the PCBs (both boards are in JLCPCB's smallest price class) and the order-level assembly fees, which dominate at small
 quantities. The full BOMs are in Appendix~\ref{app:bom}.
 
@@ -2072,7 +2078,8 @@ the diodes and the LEDs.
   \item \textbf{Summing band:} the one long break in the bottom ground pour; the alternative is a top-layer band with
     bridging resistors.
   \item \textbf{Mechanics:} card guides or an enclosure; the bulk capacitor height on the card (\SI{6}{mm} limit).
-  \item \textbf{Assembly:} hand-soldered TSSOP-20 and LQFP-48; check for bridges (board~1 had one on PD4/PD5).
+  \item \textbf{Assembly:} the voice MCU's TSSOP-20 is hand-soldered; check for bridges (board~1 had one on
+    PD4/PD5). The backplane's LQFP-48 is assembled.
 \end{itemize}
 
 % =====================================================================================================================

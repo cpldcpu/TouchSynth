@@ -127,6 +127,11 @@ A10 & NRST through the 74HC595 without pull-downs; cards run freely while the co
   (reset all, enumerate). \\
 A11 & Each card trims its HSI to SYNC and scales its pitch by the measured frame period & a shared \SI{24}{MHz} clock &
   No clock distribution. The HSI's short-term wander (0.35\,cent rms) remains; CLK\_IN stays as an option. \\
+A12 & The host software is a browser app (Web MIDI, Web Serial), static files without a build step & a Python
+  desktop app; a DAW plugin (VST3, CLAP) & No installation on any system, works offline; the Python tools stay for
+  automated tests. Needs a Chromium-based browser (Web Serial). \\
+A13 & One parameter table (JSON) generates the app's parameter list, the controller firmware's tables and the docs'
+  table & hand-kept copies & The app, the firmware and midi.md cannot drift apart. \\
 \end{longtable}
 \endgroup
 
@@ -379,6 +384,47 @@ and compacted when full. The working copies in SRAM are what the parts use. A co
 built-in defaults.
 
 % ---------------------------------------------------------------------------------------------------------------------
+\subsection{Host software}\label{sec:sadhs}
+
+The browser app (requirements in Section~\ref{sec:srshs}) is a set of static files in the repository (\file{app/};
+first version 2026-10-20): plain HTML and JavaScript without a build step and without modules (Chromium blocks
+module scripts from \texttt{file://}), so it opens from disk or from any static web server and works offline (A12).
+An emulated instrument (programs, parts, six voice cards, voice allocation, Web Audio sound) stands in for the
+hardware; the tests run in Node (protocol and emulator) and in headless Edge (an offline render of the sound). Its
+layers:
+
+\begin{table}[htbp]
+\centering\small
+\caption{Host software modules (\file{app/js/}).}\label{tab:sadhs}
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+\toprule
+Module & Responsibility \\
+\midrule
+MIDI link & Web MIDI: find the instrument's ports, send NRPN and SysEx, receive replies and incoming notes; SysEx
+  framing and checksums \\
+serial link & Web Serial on the CDC port: the maintenance commands, firmware image transfer, the console bridge \\
+instrument model & the state mirrored from the instrument: active patch, programs, parts, cards and their status;
+  every view reads and changes it, the links keep it in sync \\
+parameter table & generated from the shared JSON (A13): IDs, names, ranges, units, CC numbers, grouping for the
+  editor \\
+views & patch editor, librarian, setup (parts), instrument view, maintenance, keyboard and MIDI monitor \\
+files & import and export of \texttt{.syx} patches and banks, firmware images chosen by the user \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Protocol split.} Everything musical goes over MIDI, so a DAW or any MIDI host reaches the same functions
+(CT13): live parameter changes as NRPN (midi.md 3), patches, banks, setups, parts, card status and calibration as
+SysEx messages with the non-commercial ID 0x7D, each with a request and a reply. Maintenance goes over the CDC port:
+firmware images for the cards (programmed by the controller over SWIO) and for the controller, the console bridge
+to one card, bulk diagnostics. The SysEx message set is drafted in \file{docs/sysex.md} (implemented by the
+emulator); the maintenance commands are to be specified with the controller firmware.
+
+\paragraph{Development path.} The app can be written and tested against the bench controller before the backplane
+exists: it already is a USB-MIDI and CDC device, and the browser on the lab PC reaches both. The SysEx and NRPN
+handling then moves with the controller firmware from the bench to the backplane unchanged.
+
+% ---------------------------------------------------------------------------------------------------------------------
 \subsection{Interfaces}
 
 \begin{table}[htbp]
@@ -394,7 +440,10 @@ USB-MIDI & computer, controller & class compliant, one cable each way; \file{doc
   is a test ID for development only \\
 CDC & computer, controller & bench: binary commands (\file{bench\_ctrl.c} header); target: text commands
   (\file{docs/midi.md} 6, to define) \\
-SysEx & computer, controller & ID 0x7D: identity reply implemented; patch and setup dumps to define \\
+SysEx & computer, controller & ID 0x7D: identity reply implemented; patches, banks, setups, parts, card status
+  and calibration to define (Section~\ref{sec:sadhs}) \\
+NRPN & computer, controller & live parameter changes, IDs of midi.md 4 (from the shared parameter table, A13) \\
+Web MIDI, Web Serial & browser app, computer & the app's access to the instrument's MIDI and CDC ports \\
 SWIO console & computer, card & \file{console.c} commands (\file{firmware/voice/README.md}) \\
 Ardulink & computer, controller & minichlink's Ardulink programmer protocol, for card programming through the
   controller \\
@@ -463,8 +512,9 @@ card firmware (CF) & 23 & 16 & 4 & 3 & 0 \\
 voice bus (BUS) & 8 & 5 & 1 & 0 & 2 \\
 controller firmware (CT) & 22 & 2 & 11 & 8 & 1 \\
 tools, non-functional (TL, NF) & 8 & 8 & 0 & 0 & 0 \\
+host software (HS) & 11 & 1 & 9 & 1 & 0 \\
 \midrule
-all & 61 & 31 & 16 & 11 & 3 \\
+all & 72 & 32 & 25 & 12 & 3 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -478,8 +528,8 @@ all & 61 & 31 & 16 & 11 & 3 \\
     the development board (Section~\ref{sec:fw}); TinyUSB would add hubs and more device classes.
   \item \textbf{Parsing location (A4).} Stay with parsing in the tick ($L = 2$), or move it to the main loop now
     ($L = 3$, one more millisecond of latency) to decouple the bus load from the render for good?
-  \item \textbf{CDC protocol.} Binary (as the bench, machine-friendly, what the tests use) or text (human-friendly,
-    as the board~1 console), or both on one port with a mode switch?
+  \item \textbf{CDC protocol.} Musical functions go over MIDI and maintenance over CDC (decided, 2026-10-20). Open:
+    the maintenance commands as text or binary, and whether the bench's binary command set stays for the tests.
   \item \textbf{USB identity.} 1209:0001 is the pid.codes test ID. A product ID (pid.codes or another VID) is
     needed before the instrument leaves the bench.
   \item \textbf{Controller self-update.} The factory bootloader through BOOT0 (untested on the USB-C port), or an

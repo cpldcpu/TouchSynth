@@ -273,3 +273,22 @@ The rev 0.1 tree (report, S1–S7, KiCad project, tools for the report) is kept 
   replies with 0 CRC errors. A reset through NRST driven push-pull, as the 74HC595 does (new bench command `N` on
   PB12, `bustest.py nrst`): 3 of 3 resets re-enumerated in 0.5–0.7 s. The first try did nothing: on the bench EVT's
   QFN-32 V006 the reset pin is PA7, not PD7 (only the TSSOP-20 card has it on PD7).
+- **Backplane MCU assembled [2026-10-20]:** user decision: the CH32V203C8T6 (U1) is assembled by JLCPCB from the
+  user's personal stock there (C3001172, Extended part, about US$ 0.88; the first part outside the Basic /
+  Promotional lists, so the loading fee may apply). BOM 37 lines, 153 placements; schematic, PCB fields, fab data and
+  the report updated.
+- **Shopping list [2026-10-20]:** the boards are ordered; docs/build_parts.md lists the hand-soldered parts per board
+  with LCSC numbers. On the way: the polyfuse named in the notes (Bourns MF-MSMF075) is an 1812 part, the footprint
+  is 1206: now Littelfuse 1206L075THYR (C99563, 16 V).
+- **Host software planned [2026-10-20]:** user decision: a browser app (Web MIDI + Web Serial, static files without a
+  build step, offline) to edit, store, play and maintain the instrument. Added to the software requirements (HS1-HS11)
+  and the architecture (decisions A12, A13; modules; protocol split: musical over MIDI with NRPN and SysEx 0x7D,
+  maintenance over CDC; one shared JSON parameter table). Not written yet; it can be developed against the bench
+  controller.
+- **Browser app, first version [2026-10-20]:** `app/` (plain HTML / JavaScript, no build step, opens from disk):
+  patch editor over all 57 parameters (NRPN), library (64 programs, store, .syx export / import), setup (8 parts),
+  instrument view (cards, status, calibration), MIDI monitor, CDC console, on-screen keyboard. Linked to an emulator
+  of the instrument that implements the draft SysEx set (docs/sysex.md) with six voice cards, voice allocation over
+  the parts' slot masks and a Web Audio sound. The parameter table is now docs/params.json (tools/gen_params.py
+  generates the app's copy). Tests: 5359 protocol and emulator checks in Node, an offline render of the sound in
+  headless Edge.
