@@ -1,5 +1,9 @@
 # TouchSynth
 
+**[Blog article](https://cpldcpu.github.io/2026/11/14/touchsynth/)** · **[Audio samples](https://cpldcpu.github.io/TouchSynth/)**
+
+---
+
 A small MCU-controlled analog monophonic synthesizer on a 100 × 100 mm, 4-layer PCB. It has no
 potentiometers and no mechanical switches: 13 capacitive touch keys plus SHIFT / − / + play and edit it, and
 16 LEDs show the settings. A CH32V003 (or CH32V002 / V006) generates the oscillator timing and four
