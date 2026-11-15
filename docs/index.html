@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TouchSynth: an analog mono synth on a 100 mm PCB</title>
+<meta name="description" content="TouchSynth is a small MCU-controlled analog monophonic synthesizer with capacitive touch keys. Listen to recordings from the first board and to the model that predicted them.">
+<meta property="og:title" content="TouchSynth: an analog mono synth on a 100 mm PCB">
+<meta property="og:description" content="A CH32V microcontroller, a transistor ladder filter and 13 touch keys. Recordings, sound tour and design report.">
+<meta property="og:image" content="figures/pcb/render_top.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%275%27 fill=%27%2322422F%27/%3E%3Cpath d=%27M4 23L12 9v14l8-14v14l8-14%27 fill=%27none%27 stroke=%27%23F2C230%27 stroke-width=%272.5%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=JetBrains+Mono:wght@500;600&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F3F5F2;--surface:#FFFFFF;--ink:#1B2420;--muted:#5B6A62;--line:#D5DDD8;
+  --accent:#1E6B47;--accent-ink:#FFFFFF;--copper:#A8601F;--chip:#E7EDE9;--gold:#F2C230;
+  --head:"Barlow Semi Condensed","Arial Narrow",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0F1412;--surface:#161D1A;--ink:#E4EAE6;--muted:#97A69E;--line:#2A3530;
+  --accent:#5CC08E;--accent-ink:#0B1410;--copper:#D9955A;--chip:#202A26;
+  color-scheme:dark;
+}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 "Source Sans 3",system-ui,sans-serif;
+  -webkit-text-size-adjust:100%;padding-bottom:110px}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+h1,h2,h3{font-family:var(--head);font-weight:600;line-height:1.12;margin:0;text-wrap:balance}
+h1{font-size:clamp(46px,9vw,84px);letter-spacing:.3px}
+h2{font-size:clamp(28px,4.5vw,38px)}
+h3{font-size:21px}
+p{margin:0;max-width:66ch}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:20px}
+.eyebrow{font:600 12px var(--mono);letter-spacing:1.5px;text-transform:uppercase;color:var(--copper)}
+.muted{color:var(--muted)}
+.small{font-size:15px}
+
+/* nav */
+nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:6px 20px;min-height:48px;flex-wrap:wrap;padding-block:6px}
+nav .brand{font:600 20px var(--head);color:var(--ink);text-decoration:none;margin-right:auto}
+nav a.l{font:500 12.5px var(--mono);color:var(--muted);text-decoration:none;letter-spacing:.3px}
+nav a.l:hover{color:var(--accent)}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;align-items:center;padding-block:56px 64px}
+.hero .txt{display:grid;gap:20px;justify-items:start}
+.hero .lede{font-size:20px;line-height:1.5}
+.cta{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:9px;font:600 16px var(--head);letter-spacing:.4px;
+  padding:10px 18px;border-radius:5px;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  text-decoration:none;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn svg{width:14px;height:14px;fill:currentColor}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font:500 12.5px var(--mono);background:var(--chip);border-radius:4px;padding:3px 8px;white-space:nowrap}
+
+.board{margin:0}
+.pcb{position:relative;aspect-ratio:1;overflow:hidden;border-radius:10px;background:#22422F;
+  box-shadow:0 18px 50px -18px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.25);user-select:none;-webkit-user-select:none}
+.pcb img{position:absolute;width:103.2%;height:103.2%;max-width:none;left:-1.6%;top:-1.6%;pointer-events:none}
+.key{position:absolute;top:61.43%;border:0;padding:0;background:transparent;cursor:pointer;border-radius:6px;
+  touch-action:none;-webkit-tap-highlight-color:transparent}
+.key.w{height:29.49%;width:10.51%}
+.key.b{height:11.11%;width:7.48%;z-index:2}
+.key:hover{background:rgba(242,194,48,.14)}
+.key.on{background:rgba(242,194,48,.5);box-shadow:0 0 22px rgba(242,194,48,.7)}
+.board figcaption{font-size:14.5px;color:var(--muted);margin-top:12px}
+kbd{font:500 12px var(--mono);background:var(--chip);border-radius:3px;padding:1px 5px}
+
+section{padding-block:56px;border-top:1px solid var(--line)}
+.sec-head{display:grid;gap:10px;margin-bottom:28px}
+
+/* track lists */
+.list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.group-title{font:600 12px var(--mono);letter-spacing:1.3px;text-transform:uppercase;color:var(--muted);margin:30px 0 10px}
+.track{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:6px 16px;align-items:center;
+  background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 16px 12px 12px;position:relative;overflow:hidden}
+.track.cur{border-color:var(--copper)}
+.track .bar{position:absolute;left:0;bottom:0;height:3px;background:var(--copper);width:0}
+.play{width:44px;height:44px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);
+  display:grid;place-items:center;cursor:pointer;flex:none}
+.play:hover{filter:brightness(1.1)}
+.play svg{width:16px;height:16px;fill:currentColor}
+.play .i-pause,.playing .play .i-play{display:none}
+.playing .play .i-pause{display:block}
+.track .t{font:600 19px var(--head);line-height:1.2}
+.track .d{font-size:14.5px;color:var(--muted);line-height:1.4}
+.dur{font:500 12.5px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.ab{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.ab button{font:600 12px var(--mono);padding:7px 10px;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.ab button[aria-pressed="true"]{background:var(--chip);color:var(--ink)}
+.ab button+button{border-left:1px solid var(--line)}
+.dl{font:500 12px var(--mono);color:var(--muted)}
+@media (max-width:640px){
+  .track{grid-template-columns:auto minmax(0,1fr) auto}
+  .track .ab{grid-column:2/-1;justify-self:start}
+}
+
+/* tour */
+.tour{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
+.clip{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;display:grid;
+  grid-template-rows:auto 1fr;position:relative}
+.clip.cur{border-color:var(--copper)}
+.clip img{display:block;width:100%;height:auto;background:#fff;border-bottom:1px solid var(--line)}
+.clip .body{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;padding:12px 14px 16px;align-content:start}
+.clip .play{width:40px;height:40px;grid-row:span 2;align-self:start}
+.clip h3{font-size:18px;align-self:center}
+.clip p{font-size:14.5px;color:var(--muted);line-height:1.45;grid-column:2}
+.clip .bar{position:absolute;left:0;bottom:0;height:3px;background:var(--copper);width:0}
+
+/* how it works */
+.chain-scroll{overflow-x:auto;margin-bottom:28px}
+.chain{display:grid;grid-template-columns:repeat(4,minmax(128px,1fr));gap:0 22px;min-width:600px;font:500 12.5px var(--mono)}
+.blk{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px;position:relative;display:grid;gap:4px;align-content:start}
+.blk b{font:600 20px var(--head);color:var(--accent)}
+.blk span{color:var(--muted);line-height:1.4}
+.blk:not(.last)::after{content:"";position:absolute;right:-23px;top:50%;width:22px;border-top:2px solid var(--copper)}
+.cv{text-align:center;color:var(--copper);padding:8px 0 6px;line-height:1.3}
+.cv::before{content:"▲";display:block;font-size:9px}
+.mcu{grid-column:1/-1;background:var(--chip);border-radius:6px;padding:12px;text-align:left;color:var(--ink);line-height:1.5}
+.mcu b{font:600 18px var(--head)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px 32px}
+.cols h3{margin-bottom:6px}
+.cols p{font-size:16px}
+
+/* numbers */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;margin-bottom:28px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.stat b{display:block;font:600 27px var(--head);color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.15}
+.stat span{font-size:14.5px;color:var(--muted);line-height:1.4;display:block;margin-top:2px}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:14px}
+figure.fig{margin:0;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+figure.fig img{display:block;width:100%;height:auto}
+figure.fig figcaption{flex:1;background:var(--surface);color:var(--muted);font-size:14.5px;line-height:1.45;padding:10px 14px;border-top:1px solid var(--line)}
+.layers{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:22px}
+.layers figure{margin:0}
+.layers img{display:block;width:100%;height:auto;border-radius:5px;border:1px solid var(--line)}
+.layers figcaption{font:500 12px var(--mono);color:var(--muted);margin-top:5px}
+@media (max-width:640px){.layers{grid-template-columns:repeat(2,1fr)}}
+.flow{font:500 13.5px/1.9 var(--mono);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;margin:20px 0;overflow-x:auto;white-space:nowrap}
+.flow i{color:var(--copper);font-style:normal;padding:0 4px}
+.docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-top:22px}
+.doc{display:block;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;text-decoration:none;color:var(--ink)}
+.doc:hover{border-color:var(--accent)}
+.doc b{font:600 19px var(--head);color:var(--accent);display:block}
+.doc span{font-size:14.5px;color:var(--muted);line-height:1.4;display:block}
+footer{border-top:1px solid var(--line);padding-block:24px;font-size:14.5px;color:var(--muted)}
+
+/* player bar */
+#bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);
+  box-shadow:0 -8px 30px -12px rgba(0,0,0,.35);transform:translateY(110%);transition:transform .25s}
+#bar.show{transform:none}
+@media (prefers-reduced-motion:reduce){#bar{transition:none}}
+#bar .wrap{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:4px 14px;align-items:center;padding-block:10px}
+#bar .ctl{display:flex;align-items:center;gap:6px}
+#bar .skip{width:36px;height:36px;border-radius:50%;border:0;background:transparent;color:var(--ink);cursor:pointer;display:grid;place-items:center}
+#bar .skip:hover{background:var(--chip)}
+#bar .skip svg{width:14px;height:14px;fill:currentColor}
+#bar .now{min-width:0}
+#bar .now b{font:600 17px var(--head);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bar .now span{font:500 11.5px var(--mono);color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bar .time{font:500 12.5px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+#bar .vol{display:flex;align-items:center;gap:4px}
+#vol{width:96px;margin:0;accent-color:var(--accent);height:18px;cursor:pointer}
+#mute .i-off,#mute.off .i-on{display:none}
+#mute.off .i-off{display:block}
+#bar #mute svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:640px){#vol{display:none}}
+#seek{grid-column:1/-1;width:100%;margin:0;accent-color:var(--copper);height:18px;cursor:pointer}
+
+@media (max-width:860px){
+  .hero{grid-template-columns:1fr;gap:32px;padding-block:36px 44px}
+  .board{max-width:520px}
+}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="#top">TouchSynth</a>
+  <a class="l" href="#listen">Listen</a>
+  <a class="l" href="#how">How it works</a>
+  <a class="l" href="#tour">Sound tour</a>
+  <a class="l" href="#board">Board 1</a>
+  <a class="l" href="#docs">Docs</a>
+  <a class="l" href="https://github.com/cpldcpu/TouchSynth">GitHub</a>
+</div></nav>
+
+<header class="wrap hero" id="top">
+  <div class="txt">
+    <span class="eyebrow">Analog mono synth · rev 0.1</span>
+    <h1>TouchSynth</h1>
+    <p class="lede">A small analog synthesizer on a 100&nbsp;×&nbsp;100&nbsp;mm circuit board. It has no knobs and no
+    switches: you play and edit it on 13 capacitive touch keys, and a small RISC-V microcontroller steers a discrete
+    oscillator, a transistor ladder filter and a VCA.</p>
+    <div class="cta">
+      <button class="btn primary" id="hero-play" type="button">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v13l11-6.5z"/></svg>Play the demo</button>
+      <a class="btn" href="report/touchsynth_report.pdf">Design report (PDF)</a>
+      <a class="btn" href="https://github.com/cpldcpu/TouchSynth">Source</a>
+    </div>
+    <div class="chips">
+      <span class="chip">CH32V003 / V002 / V006</span><span class="chip">24 dB/oct ladder</span>
+      <span class="chip">4-layer PCB</span><span class="chip">about USD 3.65 of parts</span>
+    </div>
+    <p class="small muted">Everything you hear on this page comes either from the first assembled board or from the
+    model that was used to design it. Each recording says which.</p>
+  </div>
+  <figure class="board">
+    <div class="pcb" id="pcb">
+      <img src="figures/pcb/render_top.png" alt="Top side of the TouchSynth PCB: analog circuit blocks in the upper half, a one-octave touch keyboard with SHIFT, minus and plus pads in the lower half." width="1992" height="1992">
+    </div>
+    <figcaption>Render of the board. The keys work: click or tap them, or use
+    <kbd>A</kbd>&nbsp;<kbd>W</kbd>&nbsp;<kbd>S</kbd>&nbsp;<kbd>E</kbd>&nbsp;<kbd>D</kbd>&nbsp;… on your keyboard. That sound is a
+    rough sketch made by your browser (a saw through a low-pass), not the circuit.</figcaption>
+  </figure>
+</header>
+
+<main>
+<section id="listen"><div class="wrap">
+  <div class="sec-head">
+    <span class="eyebrow">Listen</span>
+    <h2>Recorded from the first board</h2>
+    <p>The synth plays one note at a time, so each piece was recorded from the line output one part per take and
+    then mixed. Every piece also exists as a render of the behavioural model. Switch between
+    <b>Board&nbsp;1</b> and <b>Model</b> while it plays to compare the two.</p>
+  </div>
+  <div id="tracks"></div>
+  <noscript><p>The player needs JavaScript. All audio files are in
+  <a href="https://github.com/cpldcpu/TouchSynth/tree/master/docs/audio">docs/audio</a> on GitHub.</p></noscript>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <div class="sec-head">
+    <span class="eyebrow">How it works</span>
+    <h2>A digital brain, an analog voice</h2>
+    <p>The microcontroller produces no audio. It sets the timing of the oscillator and sends four control
+    voltages; the sound itself is made by op-amps and transistors.</p>
+  </div>
+  <div class="chain-scroll"><div class="chain" role="img" aria-label="Signal chain: oscillator, ladder filter, VCA and line out, each controlled by the microcontroller.">
+    <div class="blk"><b>DCO</b><span>saw, pulse, sub, noise</span></div>
+    <div class="blk"><b>VCF</b><span>4-pole transistor ladder</span></div>
+    <div class="blk"><b>VCA</b><span>differential pair + trim DAC</span></div>
+    <div class="blk last"><b>Line out</b><span>about 1.2 Vpp</span></div>
+    <div class="cv">reset pulse<br>amplitude CV</div>
+    <div class="cv">cutoff CV<br>resonance CV</div>
+    <div class="cv">level CV<br>8-bit trim</div>
+    <div class="cv">audio loopback<br>to the ADC</div>
+    <div class="mcu"><b>CH32V microcontroller</b><br>48 MHz timer for pitch · 4 × 12-bit PWM control voltages ·
+    envelopes, LFO, glide, arpeggiator at 1 kHz · 16 touch pads · 16 LEDs</div>
+  </div></div>
+  <div class="cols">
+    <div><h3>Oscillator</h3><p>An op-amp integrator ramps up and the MCU timer resets it once per period, so the
+    pitch is as exact as the timer. The charging current follows the pitch, which keeps the saw the same size
+    from C1 to C8.</p></div>
+    <div><h3>Filter</h3><p>A 24&nbsp;dB/oct ladder of matched transistor pairs with an exponential converter. The
+    resonance goes up to self-oscillation, where the filter sings a sine wave of its own.</p></div>
+    <div><h3>Amplifier</h3><p>A differential-pair VCA. Such a circuit lets a little of the control voltage through
+    as a thump on every note; a small R-2R DAC trims that away, and the firmware can find the setting
+    itself.</p></div>
+    <div><h3>Touch keys</h3><p>Thirteen keys from C to C′ plus SHIFT, − and +, all plain copper pads on the board.
+    SHIFT and a key select what − and + edit; the 16 LEDs show the value.</p></div>
+  </div>
+</div></section>
+
+<section id="tour"><div class="wrap">
+  <div class="sec-head">
+    <span class="eyebrow">Sound tour</span>
+    <h2>One clip per feature</h2>
+    <p>Nineteen short clips that take the voice apart: the waveforms, the filter, the envelopes and the modulation.
+    These are renders of the behavioural model, each shown with its waveform and spectrogram. Clips play one after
+    the other.</p>
+  </div>
+  <div id="tourlist"></div>
+</div></section>
+
+<section id="board"><div class="wrap">
+  <div class="sec-head">
+    <span class="eyebrow">Board 1</span>
+    <h2>Simulated first, then measured</h2>
+    <p>Every block was simulated in ngspice before layout, and the board carries a loopback from its output into
+    the MCU's ADC, so it can test itself from a PC. The first board passed all the functional tests that were run
+    (two, touch scan rate and MIDI, were not). One result is marginal: the broadband noise is about −55&nbsp;dB
+    against a −60&nbsp;dB target.</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><b>±0.3 cent</b><span>pitch error at 11 notes from C2 to C7, relative to the MCU clock</span></div>
+    <div class="stat"><b>2.01 oct/V</b><span>filter tracking from 89 Hz to 12.1 kHz (simulated: 2.05)</span></div>
+    <div class="stat"><b>0 ± 2 mV</b><span>VCA thump after trimming, down from −33 mV</span></div>
+    <div class="stat"><b>−0.9 / +1.2 %</b><span>saw amplitude over five octaves, uncalibrated</span></div>
+    <div class="stat"><b>25 mA</b><span>supply current at 9 V, MCU running, LEDs off</span></div>
+    <div class="stat"><b>40 / 196</b><span>BOM lines and machine-placed parts, all JLCPCB Basic or Promotional Extended</span></div>
+  </div>
+  <div class="figs">
+    <figure class="fig"><img src="figures/hw_board1_vcf.png" loading="lazy" width="1208" height="385"
+      alt="Three plots: filter frequency against cutoff voltage, output level against resonance voltage, harmonic levels against a four-pole fit.">
+      <figcaption>The filter on board 1 against the simulation: tracking, the onset of self-oscillation, and the
+      low-pass slope.</figcaption></figure>
+    <figure class="fig"><img src="figures/hw_board1_dco.png" loading="lazy" width="1189" height="364"
+      alt="Plots of oscillator pitch error and saw amplitude over the note range on board 1.">
+      <figcaption>The oscillator on board 1: pitch and saw amplitude over the keyboard range.</figcaption></figure>
+  </div>
+</div></section>
+
+<section id="made"><div class="wrap">
+  <div class="sec-head">
+    <span class="eyebrow">How it was made</span>
+    <h2>Generated from one Python file</h2>
+    <p>The whole design lives in one file of parts, values and nets. Scripts turn it into the simulation netlists,
+    the KiCad schematic, the placed and routed PCB and the fabrication data, so the simulated circuit and the built
+    circuit cannot drift apart. The design was done by cpldcpu together with Claude; the
+    <a href="https://github.com/cpldcpu/TouchSynth/blob/master/docs/devlog.md">development log</a> records every
+    prompt of those sessions.</p>
+  </div>
+  <div class="flow">design.py<i>→</i>ngspice<i>→</i>behavioural model<i>→</i>KiCad schematic<i>→</i>placement + routing<i>→</i>JLCPCB<i>→</i>firmware<i>→</i>bench tests</div>
+  <div class="layers">
+    <figure><img src="figures/pcb/layer_F.png" loading="lazy" width="788" height="788" alt="Front copper layer"><figcaption>F.Cu · signal</figcaption></figure>
+    <figure><img src="figures/pcb/layer_In1.png" loading="lazy" width="788" height="788" alt="Inner layer 1, ground plane"><figcaption>In1.Cu · GND</figcaption></figure>
+    <figure><img src="figures/pcb/layer_In2.png" loading="lazy" width="788" height="788" alt="Inner layer 2, split power plane"><figcaption>In2.Cu · power</figcaption></figure>
+    <figure><img src="figures/pcb/layer_B.png" loading="lazy" width="788" height="788" alt="Back copper layer"><figcaption>B.Cu · signal</figcaption></figure>
+  </div>
+</div></section>
+
+<section id="docs"><div class="wrap">
+  <div class="sec-head">
+    <span class="eyebrow">Documents</span>
+    <h2>Read the details</h2>
+  </div>
+  <div class="docs">
+    <a class="doc" href="report/touchsynth_report.pdf"><b>Design report</b><span>About 40 pages: requirements, circuits, simulations, PCB, firmware, instruments and the board 1 results. PDF.</span></a>
+    <a class="doc" href="touchsynth_schematic.pdf"><b>Schematic</b><span>Seven sheets, exported from KiCad. PDF.</span></a>
+    <a class="doc" href="https://github.com/cpldcpu/TouchSynth/blob/master/docs/sim_report.md"><b>Simulation report</b><span>The ngspice results block by block, and the behavioural model.</span></a>
+    <a class="doc" href="https://github.com/cpldcpu/TouchSynth/blob/master/docs/verification_plan.md"><b>Verification plan</b><span>Bring-up steps, functional tests and their limits.</span></a>
+    <a class="doc" href="https://github.com/cpldcpu/TouchSynth/blob/master/firmware/touchsynth/README.md"><b>Firmware</b><span>Building it, playing the synth, and the test console.</span></a>
+    <a class="doc" href="https://github.com/cpldcpu/TouchSynth"><b>Repository</b><span>Design scripts, KiCad project, simulations, firmware and tools.</span></a>
+  </div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  TouchSynth by cpldcpu &amp; Claude. Bach, Beethoven and Purcell are in the public domain; the other pieces are
+  original. Board status as of October 2026: rev 0.1, one board built.
+</div></footer>
+
+<div id="bar" role="region" aria-label="Audio player"><div class="wrap">
+  <div class="ctl">
+    <button class="skip" id="prev" type="button" aria-label="Previous track"><svg viewBox="0 0 16 16"><path d="M2 2h2v12H2zM14 2v12L5 8z"/></svg></button>
+    <button class="play" id="toggle" type="button" aria-label="Play or pause">
+      <svg class="i-play" viewBox="0 0 16 16"><path d="M3 1.5v13l11-6.5z"/></svg>
+      <svg class="i-pause" viewBox="0 0 16 16"><path d="M3 2h3.5v12H3zM9.5 2H13v12H9.5z"/></svg></button>
+    <button class="skip" id="next" type="button" aria-label="Next track"><svg viewBox="0 0 16 16"><path d="M12 2h2v12h-2zM2 2v12l9-6z"/></svg></button>
+  </div>
+  <div class="now"><b id="now-t"></b><span id="now-s"></span></div>
+  <div class="time"><span id="cur">0:00</span> / <span id="tot">0:00</span></div>
+  <div class="vol">
+    <button class="skip" id="mute" type="button" aria-label="Mute" aria-pressed="false">
+      <svg class="i-on" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 7h3l4-3.5v11L5 11H2z" fill="currentColor"/><path d="M12 6.5a3.5 3.5 0 0 1 0 5M14 4a7 7 0 0 1 0 10"/></svg>
+      <svg class="i-off" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 7h3l4-3.5v11L5 11H2z" fill="currentColor"/><path d="M12 6.5l4 5M16 6.5l-4 5"/></svg></button>
+    <input id="vol" type="range" min="0" max="100" value="100" step="1" aria-label="Volume">
+  </div>
+  <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Position">
+</div></div>
+
+<script>
+(function(){
+"use strict";
+var A='audio/';
+
+/* ---------- content ---------- */
+var GROUPS=[
+ {title:'Multitrack pieces',tracks:[
+  {id:'demo',t:'TouchSynth Demo',d:'Original. Seven parts: kick, snare, hat, acid bass, arp, lead and pad.',
+   hw:[A+'demo/touchsynth_demo_hw.mp3',145],model:[A+'demo/touchsynth_demo_model.mp3',141]},
+  {id:'march',t:'Queen Mary’s March',d:'Purcell. Four trumpets and bass on the analog voice; the timpani are a digital drum model played through the same filter.',
+   hw:[A+'pieces/march_hw.mp3',161],model:[A+'pieces/march_model.mp3',154]},
+  {id:'toccata',t:'Toccata in D minor, bars 1–30',d:'Bach, BWV 565. Nine organ voices, one take each.',
+   hw:[A+'pieces/toccata_hw.mp3',122],model:[A+'pieces/toccata_model.mp3',121]},
+  {id:'aero',t:'Aerosphere',d:'Original, in the style of 1970s space-synth music. Wind, pads, sequence, bass, lead and drums.',
+   hw:[A+'pieces/aero_hw.mp3',173],model:[A+'pieces/aero_model.mp3',169]},
+  {id:'suite',t:'Suite',d:'The Aerosphere intro dissolving into the Toccata.',
+   hw:[A+'pieces/suite_hw.mp3',138],model:[A+'pieces/suite_model.mp3',137]}
+ ]},
+ {title:'The three tunes stored in the chip',tracks:[
+  {id:'acid',t:'Acid',d:'Original acid bass line: high resonance, accents and slides. 480 bytes of flash.',
+   hw:[A+'hw_board1/tune_acid.mp3',20],model:[A+'features/tune_acid.mp3',19]},
+  {id:'prelude',t:'Prelude in C',d:'Bach, BWV 846, bars 1–19, as an arpeggio with a slowly moving pulse width.',
+   hw:[A+'hw_board1/tune_prelude.mp3',49],model:[A+'features/tune_prelude.mp3',49]},
+  {id:'ode',t:'Ode to Joy',d:'Beethoven. A lead sound with sub-oscillator, glide and vibrato.',
+   hw:[A+'hw_board1/tune_ode.mp3',36],model:[A+'features/tune_ode.mp3',36]}
+ ]},
+ {title:'More from the board',tracks:[
+  {id:'waves',t:'Waveform tour',d:'The raw oscillator waveforms, straight from the line output.',hw:[A+'hw_board1/waveforms.mp3',18]},
+  {id:'selfosc',t:'A scale on the filter alone',d:'Oscillator silent, resonance past the threshold: the filter is the instrument.',hw:[A+'hw_board1/selfosc_scale.mp3',29]}
+ ]},
+ {title:'Percussion and the circuit simulation',tracks:[
+  {id:'drumkit',t:'Drum kit',d:'A short beat on the kick, snare and hat presets.',model:[A+'demo/drumkit_model.mp3',8]},
+  {id:'kettle',t:'Kettle',d:'A timpani from 17 digital resonators, sent through the pulse output and the analog filter. A triad, then the March pattern.',model:[A+'pieces/kettle_model.mp3',20]},
+  {id:'timpani',t:'Analog timpani',d:'The earlier timpani preset, made with the analog voice only.',model:[A+'pieces/timpani_model.mp3',20]},
+  {id:'s6',t:'The voice in ngspice',d:'Four seconds of the complete circuit as a transistor-level simulation, before any hardware existed.',sim:[A+'s6_voice.wav',4]}
+ ]}
+];
+var VLABEL={hw:'Board 1',model:'Model',sim:'ngspice'};
+
+var TOUR=[
+ ['Oscillator',[
+  ['01_saw','Sawtooth','The analog integrator saw with the filter fully open. The pitch comes from the 48 MHz timer, so it is exactly in tune.',3.0],
+  ['02_pulse','Square wave','A timer output mixed into the filter at 50 % duty: hollow, odd harmonics only.',3.0],
+  ['03_pw_sweep','Pulse-width sweep','The pulse width moves from 50 % to 5 % and back: the tone gets thinner and nasal.',3.5],
+  ['04_pwm_lfo','Pulse width by LFO','A slow triangle LFO moves the pulse width: the classic chorus-like string sound.',3.6],
+  ['05_sub','Sub-oscillator','Saw alone, then a square one octave lower joins at 1.5 s: more weight in the bass.',3.2],
+  ['06_noise','Noise','Shift-register noise through a slow, resonant filter sweep: wind.',4.0],
+  ['07_mix_drive','Everything at once','Saw, pulse and sub together push the ladder into soft saturation. Compare with the clean saw.',3.3]]],
+ ['Filter',[
+  ['08_cutoff','Cutoff sweep','A 65 Hz saw, cutoff swept from 40 Hz to 16 kHz and back, no resonance.',4.1],
+  ['09_resonance','Resonance','Fixed cutoff, resonance raised to just past the threshold. The peak grows, the bass thins, then a sine starts to sing.',4.1],
+  ['10_res_sweep','Resonant sweep','High resonance and a cutoff sweep: the squelchy, vocal classic.',4.1],
+  ['11_self_osc','Self-oscillation','Oscillator silent, resonance above the threshold: the filter itself plays the notes.',3.2],
+  ['12_filter_env','Filter envelope','The same pluck with an envelope depth of 0, 2, 4 and 6 octaves: from dull to “wow”.',3.3],
+  ['13_keytrack','Key tracking','A scale with a fixed cutoff, where high notes get dull, then with the cutoff following the note.',4.2]]],
+ ['Envelopes and VCA',[
+  ['14_amp_env','Envelope shapes','Pluck, organ and pad. Only the amplitude envelope changes.',4.5],
+  ['15_vca_trim','VCA thump','Short bass notes. First half untrimmed, with a thump on every note; second half after the trim calibration.',3.7]]],
+ ['Modulation',[
+  ['16_glide','Glide','The pitch slides from note to note.',3.1],
+  ['17_vibrato','Vibrato','A 5.5 Hz LFO moves the pitch by ±25 cent.',3.1],
+  ['18_wah','Wah','A 3 Hz LFO sweeps the cutoff by ±2 octaves.',3.5],
+  ['19_arp','Arpeggiator','Hold a chord and the firmware plays its notes up and down in 16ths at 140 bpm.',4.1]]]
+];
+
+/* ---------- helpers ---------- */
+function el(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
+function fmt(s){s=Math.max(0,Math.round(s||0));return Math.floor(s/60)+':'+('0'+s%60).slice(-2);}
+var ICONS='<svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1.5v13l11-6.5z"/></svg>'+
+          '<svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h3.5v12H3zM9.5 2H13v12H9.5z"/></svg>';
+function playBtn(label){var b=el('button','play');b.type='button';b.innerHTML=ICONS;b.setAttribute('aria-label','Play '+label);return b;}
+
+/* ---------- build ---------- */
+var audio=new Audio();audio.preload='none';
+var items=[];           // flat playlist
+var cur=null;
+
+function addItem(it){it.idx=items.length;items.push(it);return it;}
+
+var tracksBox=document.getElementById('tracks');
+GROUPS.forEach(function(g){
+  tracksBox.appendChild(el('h3','group-title',g.title));
+  var ul=el('ul','list');tracksBox.appendChild(ul);
+  g.tracks.forEach(function(tr){
+    var variants=['hw','model','sim'].filter(function(v){return tr[v];});
+    var it=addItem({id:tr.id,title:tr.t,src:{},dur:{},variant:variants[0],list:'main'});
+    variants.forEach(function(v){it.src[v]=tr[v][0];it.dur[v]=tr[v][1];});
+    var li=el('li','track');it.node=li;
+    var b=playBtn(tr.t);b.onclick=function(){toggle(it);};
+    var mid=el('div');mid.appendChild(el('div','t',tr.t));mid.appendChild(el('div','d',tr.d));
+    it.durEl=el('span','dur',fmt(it.dur[it.variant]));
+    li.appendChild(b);li.appendChild(mid);
+    var ab=el('div','ab');
+    if(variants.length>1){
+      ab.setAttribute('role','group');ab.setAttribute('aria-label','Version of '+tr.t);
+      it.abBtns={};
+      variants.forEach(function(v){
+        var vb=el('button',null,VLABEL[v]);vb.type='button';vb.setAttribute('aria-pressed',v===it.variant);
+        vb.onclick=function(){setVariant(it,v);};it.abBtns[v]=vb;ab.appendChild(vb);
+      });
+    }else{
+      ab.className='dl';ab.textContent=VLABEL[variants[0]];
+    }
+    li.appendChild(ab);li.appendChild(it.durEl);
+    it.bar=el('div','bar');li.appendChild(it.bar);
+    ul.appendChild(li);
+  });
+});
+
+var tourBox=document.getElementById('tourlist');
+TOUR.forEach(function(g){
+  tourBox.appendChild(el('h3','group-title',g[0]));
+  var grid=el('div','tour');tourBox.appendChild(grid);
+  g[1].forEach(function(c){
+    var it=addItem({id:c[0],title:c[1],src:{model:A+'features/'+c[0]+'.mp3'},dur:{model:c[3]},variant:'model',list:'tour'});
+    var card=el('article','clip');it.node=card;
+    var img=el('img');img.src='figures/audio/'+c[0]+'.png';img.loading='lazy';img.width=666;img.height=229;
+    img.alt='Waveform and spectrogram of the clip “'+c[1]+'”';
+    var body=el('div','body');
+    var b=playBtn(c[1]);b.onclick=function(){toggle(it);};
+    body.appendChild(b);body.appendChild(el('h3',null,c[1]));body.appendChild(el('p',null,c[2]));
+    it.bar=el('div','bar');
+    card.appendChild(img);card.appendChild(body);card.appendChild(it.bar);
+    grid.appendChild(card);
+  });
+});
+
+/* ---------- player ---------- */
+var bar=document.getElementById('bar'),seek=document.getElementById('seek'),
+    nowT=document.getElementById('now-t'),nowS=document.getElementById('now-s'),
+    curEl=document.getElementById('cur'),totEl=document.getElementById('tot'),
+    toggleBtn=document.getElementById('toggle');
+var seeking=false;
+
+function duration(){return isFinite(audio.duration)&&audio.duration>0?audio.duration:(cur?cur.dur[cur.variant]:0);}
+
+function load(it,at){
+  if(cur&&cur!==it){cur.node.classList.remove('cur','playing');cur.bar.style.width='0';}
+  cur=it;
+  audio.src=it.src[it.variant];
+  if(at>0){
+    var once=function(){audio.removeEventListener('loadedmetadata',once);
+      try{audio.currentTime=Math.min(at,Math.max(0,audio.duration-0.5));}catch(e){}};
+    audio.addEventListener('loadedmetadata',once);
+  }
+  it.node.classList.add('cur');
+  nowT.textContent=it.title;
+  nowS.textContent=VLABEL[it.variant]+(it.list==='tour'?' · sound tour':'');
+  totEl.textContent=fmt(it.dur[it.variant]);curEl.textContent=fmt(at||0);
+  bar.classList.add('show');
+  if('mediaSession' in navigator&&window.MediaMetadata){
+    navigator.mediaSession.metadata=new MediaMetadata({title:it.title,artist:'TouchSynth · '+VLABEL[it.variant]});
+  }
+}
+function play(){var p=audio.play();if(p&&p.catch)p.catch(function(){});}
+function toggle(it){
+  if(cur===it){if(audio.paused)play();else audio.pause();return;}
+  load(it,0);play();
+}
+function setVariant(it,v){
+  if(it.variant===v)return;
+  var wasCur=cur===it,was=wasCur&&!audio.paused,at=wasCur?audio.currentTime:0;
+  it.variant=v;
+  for(var k in it.abBtns)it.abBtns[k].setAttribute('aria-pressed',k===v);
+  it.durEl.textContent=fmt(it.dur[v]);
+  if(wasCur){load(it,at);if(was)play();}
+}
+function step(d,auto){
+  if(!cur)return;
+  var n=items[cur.idx+d];
+  if(!n||(auto&&n.list!==cur.list)){if(auto){audio.pause();}return;}
+  load(n,0);play();
+}
+function sync(){
+  var playing=!audio.paused&&!audio.ended;
+  if(cur)cur.node.classList.toggle('playing',playing);
+  bar.classList.toggle('playing',playing);
+}
+audio.addEventListener('play',sync);audio.addEventListener('pause',sync);
+audio.addEventListener('ended',function(){sync();if(cur)cur.bar.style.width='0';step(1,true);});
+audio.addEventListener('timeupdate',function(){
+  if(!cur)return;var d=duration(),f=d?audio.currentTime/d:0;
+  cur.bar.style.width=(f*100).toFixed(2)+'%';
+  if(!seeking){seek.value=Math.round(f*1000);curEl.textContent=fmt(audio.currentTime);}
+});
+audio.addEventListener('durationchange',function(){totEl.textContent=fmt(duration());});
+audio.addEventListener('error',function(){if(cur)nowS.textContent='Could not load this file';});
+seek.addEventListener('input',function(){seeking=true;curEl.textContent=fmt(seek.value/1000*duration());});
+seek.addEventListener('change',function(){
+  var t=seek.value/1000*duration();seeking=false;
+  if(audio.readyState>0){audio.currentTime=t;}
+  else if(cur){load(cur,t);play();}
+});
+toggleBtn.onclick=function(){if(cur){if(audio.paused)play();else audio.pause();}};
+document.getElementById('prev').onclick=function(){step(-1);};
+document.getElementById('next').onclick=function(){step(1);};
+document.getElementById('hero-play').onclick=function(){
+  var it=items[0];if(cur!==it||audio.paused)toggle(it);
+  it.node.scrollIntoView({block:'center'});
+};
+/* ---------- volume ---------- */
+var volEl=document.getElementById('vol'),muteBtn=document.getElementById('mute'),vol=1,muted=false;
+try{var sv=JSON.parse(localStorage.getItem('ts-vol'));if(sv&&sv.v>=0&&sv.v<=1){vol=sv.v;muted=!!sv.m;}}catch(e){}
+function level(){return muted?0:vol*vol;}   // squared: closer to how loudness is heard
+function applyVol(save){
+  audio.volume=vol*vol;audio.muted=muted;volEl.value=Math.round(vol*100);
+  var off=muted||vol===0;muteBtn.classList.toggle('off',off);
+  muteBtn.setAttribute('aria-pressed',off);muteBtn.setAttribute('aria-label',off?'Unmute':'Mute');
+  if(typeof ctx!=='undefined'&&ctx&&held.length)voice.amp.gain.setTargetAtTime(0.16*level(),ctx.currentTime,0.01);
+  if(save){try{localStorage.setItem('ts-vol',JSON.stringify({v:vol,m:muted}));}catch(e){}}
+}
+volEl.addEventListener('input',function(){vol=volEl.value/100;muted=false;applyVol(true);});
+muteBtn.onclick=function(){if(vol===0){vol=0.6;muted=false;}else muted=!muted;applyVol(true);};
+applyVol(false);
+
+if('mediaSession' in navigator){
+  try{navigator.mediaSession.setActionHandler('previoustrack',function(){step(-1);});
+      navigator.mediaSession.setActionHandler('nexttrack',function(){step(1);});}catch(e){}
+}
+
+/* ---------- playable board (browser sketch, not the circuit) ---------- */
+var pcb=document.getElementById('pcb');
+var WHITE=[0,2,4,5,7,9,11,12],NAMES=['C','C sharp','D','D sharp','E','F','F sharp','G','G sharp','A','A sharp','B','high C'];
+var BLACK={1:9.72,3:20.19,6:41.19,8:51.71,10:62.18};
+var KEYMAP={a:0,w:1,s:2,e:3,d:4,f:5,t:6,g:7,y:8,h:9,u:10,j:11,k:12};
+var keys={},ctx=null,voice=null,held=[];
+
+function ensureCtx(){
+  if(!ctx){
+    var C=window.AudioContext||window.webkitAudioContext;if(!C)return false;
+    ctx=new C();
+    var osc=ctx.createOscillator(),f1=ctx.createBiquadFilter(),f2=ctx.createBiquadFilter(),amp=ctx.createGain();
+    osc.type='sawtooth';f1.type=f2.type='lowpass';f1.Q.value=0.6;f2.Q.value=5;amp.gain.value=0;
+    osc.connect(f1);f1.connect(f2);f2.connect(amp);amp.connect(ctx.destination);osc.start();
+    voice={osc:osc,f1:f1,f2:f2,amp:amp};
+  }
+  if(ctx.state==='suspended')ctx.resume();
+  return true;
+}
+function noteOn(n){
+  if(!ensureCtx())return;
+  var t=ctx.currentTime,hz=261.63*Math.pow(2,n/12);
+  voice.osc.frequency.setTargetAtTime(hz,t,0.004);
+  [voice.f1,voice.f2].forEach(function(f){
+    f.frequency.cancelScheduledValues(t);f.frequency.setValueAtTime(hz*10,t);
+    f.frequency.setTargetAtTime(hz*2.5,t,0.18);
+  });
+  voice.amp.gain.cancelScheduledValues(t);voice.amp.gain.setTargetAtTime(0.16*level(),t,0.005);
+}
+function noteOff(){
+  if(!ctx)return;var t=ctx.currentTime;
+  voice.amp.gain.cancelScheduledValues(t);voice.amp.gain.setTargetAtTime(0,t,0.06);
+}
+function press(n){
+  if(held.indexOf(n)>=0)return;
+  held.push(n);keys[n].classList.add('on');noteOn(n);
+}
+function release(n){
+  var i=held.indexOf(n);if(i<0)return;
+  held.splice(i,1);keys[n].classList.remove('on');
+  if(held.length)noteOn(held[held.length-1]);else noteOff();   // monophonic, last note wins
+}
+for(var n=0;n<13;n++){(function(n){
+  var k=el('button','key '+(BLACK[n]!=null?'b':'w'));k.type='button';
+  k.setAttribute('aria-label','Play '+NAMES[n]);
+  k.style.left=(BLACK[n]!=null?BLACK[n]:2.99+10.51*WHITE.indexOf(n))+'%';
+  k.addEventListener('pointerdown',function(e){e.preventDefault();try{k.setPointerCapture(e.pointerId);}catch(x){}press(n);});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(function(ev){k.addEventListener(ev,function(){release(n);});});
+  k.addEventListener('keydown',function(e){if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();press(n);}});
+  k.addEventListener('keyup',function(e){if(e.key===' '||e.key==='Enter')release(n);});
+  k.addEventListener('blur',function(){release(n);});
+  keys[n]=k;pcb.appendChild(k);
+})(n);}
+function typing(e){var t=e.target;return e.ctrlKey||e.metaKey||e.altKey||(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));}
+document.addEventListener('keydown',function(e){
+  if(e.repeat||typing(e))return;var n=KEYMAP[e.key.toLowerCase()];if(n!=null)press(n);
+});
+document.addEventListener('keyup',function(e){var n=KEYMAP[e.key.toLowerCase()];if(n!=null)release(n);});
+window.addEventListener('blur',function(){held.slice().forEach(release);});
+})();
+</script>
+</body>
+</html>
