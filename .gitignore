@@ -58,3 +58,8 @@ docs/report/*.toc
 temp/
 # Local arrangements of copyrighted music and their renders (not for publication)
 private/
+
+archive/
+
+hw/backplane/
+hw/voice/
